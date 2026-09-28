@@ -3324,23 +3324,24 @@ window.addEventListener("cloudsync:status", (event) => {
             // mode, keep the original compact four-column layout.
             const top5HeadRow = document.querySelector('#summary-top5-downtime-body')?.closest('table')?.querySelector('thead tr');
             if (top5HeadRow) {
+                const thead = top5HeadRow.parentNode;
+                const oldDynamicSub = thead.querySelector('tr.summary-top5-compare-subhead');
+                if (oldDynamicSub) oldDynamicSub.remove();
                 if (isCompare) {
                     top5HeadRow.innerHTML = `
                         <th class="py-1.5 px-2">Line Category</th>
                         <th colspan="3" class="py-1.5 px-2 text-center text-amber-300 border-l border-slate-700/60">${escapeHtml(top5PLabel)}</th>
                         <th colspan="3" class="py-1.5 px-2 text-center text-blue-300 border-l border-slate-700/60">${escapeHtml(top5CLabel)}</th>`;
                     const subRow = document.createElement('tr');
-                    subRow.className = 'bg-slate-900/70 text-slate-500 text-[9px] uppercase';
+                    subRow.className = 'summary-top5-compare-subhead bg-slate-900/70 text-slate-500 text-[9px] uppercase';
                     subRow.innerHTML = `<th class="py-1 px-2"></th><th class="py-1 px-2 border-l border-slate-700/60">Equipment</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th><th class="py-1 px-2 border-l border-slate-700/60">Equipment</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th>`;
-                    top5HeadRow.parentNode.appendChild(subRow);
+                    thead.appendChild(subRow);
                 } else {
                     top5HeadRow.innerHTML = `
                         <th class="py-1.5 px-2">Line Category</th>
                         <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Equipment</th>
                         <th id="summary-top5-primary-failure-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Failure Category</th>
                         <th id="summary-top5-primary-time-head" class="py-2.5 px-3 text-center">${escapeHtml(top5PLabel)} — Downtime</th>`;
-                    const oldSub = top5HeadRow.parentNode.querySelector('tr:nth-child(2)');
-                    if (oldSub) oldSub.remove();
                 }
             }
 
@@ -3361,7 +3362,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         if (kind === 'category') return `<td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>`;
                         return `<td class="py-2 px-2 text-slate-200">${escapeHtml(item.equipment || '—')}</td>`;
                     };
-                    tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${escapeHtml(line)}</td>${cell(a,'equipment')}${cell(a,'category')}${cell(a,'time')}${cell(b,'equipment').replace('<td ', '<td class="border-l border-slate-700/40 py-2 px-2 text-slate-200" ')}${cell(b,'category')}${cell(b,'time')}`;
+                    const bEquipment = b ? `<td class="py-2 px-2 text-slate-200 border-l border-slate-700/40">${escapeHtml(b.equipment || '—')}</td>` : `<td class="py-2 px-2 text-slate-600 border-l border-slate-700/40">—</td>`;
+                    tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${escapeHtml(line)}</td>${cell(a,'equipment')}${cell(a,'category')}${cell(a,'time')}${bEquipment}${cell(b,'category')}${cell(b,'time')}`;
                     top5Body.appendChild(tr);
                 });
             } else {
@@ -3475,30 +3477,31 @@ window.addEventListener("cloudsync:status", (event) => {
             if(chartSummaryCalib) chartSummaryCalib.destroy();
             chartSummaryCalib=new Chart(calibCanvas.getContext('2d'),{type:isCompare?'bar':'doughnut',data:isCompare?{labels:[paretoComparison.primaryLabel,paretoComparison.compareLabel],datasets:[{label:'Completed',data:[cDone,Number(window._summaryCompareCalib||0)],backgroundColor:'#22c55e'}]}:{labels:['DONE','REMAINING'],datasets:[{data:[cDone,cRemaining],backgroundColor:['#22c55e','#334155'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label||ctx.label}: ${ctx.raw}`}}},scales:isCompare?{x:{ticks:{font:{size:11},color:'#cbd5e1'}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'}}}:undefined}});
 
-            // PROJECT STATUS & PROGRESS — overall project summary. The main plant filter
-            // is already applied before this function, so these totals respect the selected plant.
+            // PROJECT STATUS & PROGRESS — OVERALL SUMMARY as a pie chart.
+            // The main plant filter is already applied before this function, so these totals
+            // represent only the selected plant/area. When comparing periods, the two period
+            // totals are combined into one comparison pie so every project status remains visible.
             if(chartSummaryProjects) chartSummaryProjects.destroy();
             const statusLabels=['In Progress','Planning','On Hold','Completed'];
             const primaryProjectValues=statusLabels.map(k=>Number(projectOverallPrimary?.[k]||0));
             const compareProjectValues=isCompare?statusLabels.map(k=>Number(projectOverallCompare?.[k]||0)):[];
+            const projectPieLabels=isCompare
+                ? statusLabels.flatMap((label,i)=>[`${paretoComparison.primaryLabel} — ${label}`, `${paretoComparison.compareLabel} — ${label}`])
+                : statusLabels;
+            const projectPieValues=isCompare
+                ? statusLabels.flatMap((_,i)=>[primaryProjectValues[i], compareProjectValues[i]])
+                : primaryProjectValues;
+            const projectPieColors=isCompare
+                ? statusLabels.flatMap((_,i)=>[['#3b82f6','#60a5fa'],['#eab308','#facc15'],['#ef4444','#f87171'],['#22c55e','#4ade80']][i])
+                : ['#3b82f6','#eab308','#ef4444','#22c55e'];
             chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{
-                type:'bar',
-                data:{
-                    labels:isCompare?[paretoComparison.primaryLabel,paretoComparison.compareLabel]:['Overall'],
-                    datasets:statusLabels.map((label,i)=>({
-                        label,
-                        data:isCompare?[primaryProjectValues[i],compareProjectValues[i]]:[primaryProjectValues[i]],
-                        backgroundColor:['#3b82f6','#eab308','#ef4444','#22c55e'][i],
-                        borderRadius:4,
-                        maxBarThickness:34
-                    }))
-                },
+                type:'pie',
+                data:{labels:projectPieLabels,datasets:[{data:projectPieValues,backgroundColor:projectPieColors,borderColor:'#1e293b',borderWidth:2}]},
                 options:{
                     responsive:true,maintainAspectRatio:false,
-                    plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:7,font:{size:9},color:'#cbd5e1'}},tooltip:{mode:'index',intersect:false}},
-                    scales:{
-                        x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'}},
-                        y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1}}
+                    plugins:{
+                        legend:{position:'bottom',labels:{boxWidth:10,padding:6,font:{size:8},color:'#cbd5e1'}},
+                        tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}`}}
                     }
                 }
             });
