@@ -19,6 +19,7 @@
    SECURITY: Never place a Supabase Secret Key, service_role key, or
    database password in this file.
    ============================================================ */
+// SECURITY HARDENED: authentication is cloud-only; no local password fallback.
 window.CLOUD_CONFIG = {
     // Set true after you replace the publishable-key placeholder below.
     enabled: true,
@@ -46,7 +47,7 @@ window.CloudAuth = (() => {
         client = window.supabase.createClient(
             window.CLOUD_CONFIG.projectUrl,
             window.CLOUD_CONFIG.publishableKey,
-            { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } }
+            { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false } }
         );
         return true;
     }
@@ -367,7 +368,7 @@ window.CloudSync = (() => {
 
     function readArray(key) {
         try {
-            const raw = localStorage.getItem(key);
+            const raw = sessionStorage.getItem(key);
             const parsed = raw ? JSON.parse(raw) : [];
             return Array.isArray(parsed) ? parsed : [];
         } catch {
@@ -376,7 +377,7 @@ window.CloudSync = (() => {
     }
 
     function writeArray(key, value) {
-        localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+        sessionStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
     }
 
     function rowId(value, index) {
@@ -672,15 +673,15 @@ window.CloudSync = (() => {
             ...Object.values(CATEGORIES)
         ]);
 
-        const originalSet = localStorage.setItem.bind(localStorage);
-        const originalRemove = localStorage.removeItem.bind(localStorage);
+        const originalSet = sessionStorage.setItem.bind(sessionStorage);
+        const originalRemove = sessionStorage.removeItem.bind(sessionStorage);
 
-        localStorage.setItem = function(key, value) {
+        sessionStorage.setItem = function(key, value) {
             originalSet(key, value);
             if (watched.has(key)) schedulePush();
         };
 
-        localStorage.removeItem = function(key) {
+        sessionStorage.removeItem = function(key) {
             originalRemove(key);
             if (watched.has(key)) schedulePush();
         };
@@ -692,8 +693,8 @@ window.CloudSync = (() => {
         // In cloud mode, browser localStorage must never be allowed to become
         // the source of truth. Remove the old browser cache before pulling
         // the authoritative dataset from Supabase.
-        Object.values(DATASETS).forEach(cfg => localStorage.removeItem(cfg.key));
-        Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
+        Object.values(DATASETS).forEach(cfg => sessionStorage.removeItem(cfg.key));
+        Object.values(CATEGORIES).forEach(key => sessionStorage.removeItem(key));
 
         // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
         // the pull itself can trigger a save of stale/partial browser data.
@@ -705,8 +706,19 @@ window.CloudSync = (() => {
         return result;
     }
 
+    function clearClientCache() {
+        Object.values(DATASETS).forEach(cfg => sessionStorage.removeItem(cfg.key));
+        Object.values(CATEGORIES).forEach(key => sessionStorage.removeItem(key));
+        Object.keys(lastSynced).forEach(key => {
+            if (Array.isArray(lastSynced[key])) lastSynced[key] = [];
+            else lastSynced[key] = {};
+        });
+        ready = false;
+    }
+
     return {
         start,
+        clearClientCache,
         pull,
         push,
         refresh: refreshIfClean,
@@ -1766,25 +1778,15 @@ window.addEventListener("cloudsync:status", (event) => {
                 <button onclick="closeUserManagementModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
 
-            <!-- CHANGE PASSWORD SECTION (Main Account Only) -->
-            <div id="main-account-password-section" class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
-                <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-key text-amber-400 mr-1.5"></i> Change Main Account Password</h4>
-                <div id="pass-update-msg" class="hidden text-xs p-2.5 rounded-lg text-center font-medium"></div>
-                <div class="space-y-2 text-xs">
-                    <div>
-                        <label class="block text-slate-300 font-semibold mb-1">New Password</label>
-                        <input type="password" id="new-main-password" placeholder="Enter new password" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                    </div>
-                    <button type="button" onclick="updateMainPassword()" class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-4 rounded-xl transition shadow-md">
-                        Update Password
-                    </button>
-                </div>
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-2">
+                <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-shield-halved text-emerald-400 mr-1.5"></i> Secure Authentication</h4>
+                <p class="text-[11px] text-slate-400">Passwords are managed by Supabase Auth / the approved administrator process. PASDASHBOARD does not store passwords in the browser, localStorage, or dashboard database.</p>
             </div>
 
             <!-- ADD / MANAGE SUB-USERS SECTION (Main Account Authority) -->
             <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
                 <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-user-plus text-emerald-400 mr-1.5"></i> Authorized Operators / Users</h4>
-                <p class="text-[11px] text-slate-400">Create additional accounts using a username and password only. The Main Account continues to use its email address.</p>
+                <p class="text-[11px] text-slate-400">Additional accounts are created through the secure Supabase Auth service. Passwords are never stored by this dashboard.</p>
 
                 <form onsubmit="handleAddUserSubmit(event)" class="space-y-3 text-xs pt-1">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1807,7 +1809,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                     <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
                         <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
-                        <p class="text-[10px] text-slate-500">The Main Account selects which pages this user can open. Role controls whether the user can edit records.</p>
+                        <p class="text-[10px] text-slate-500">The Main Account selects which pages this user can open. Role controls whether the user can edit records. Database RLS independently enforces these permissions.</p>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="summary" checked> Executive Summary</label>
                             <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="calibration"> Calibration Tracker</label>
@@ -1861,7 +1863,7 @@ window.addEventListener("cloudsync:status", (event) => {
             </div>
             <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
-                <p class="text-[10px] text-slate-500">The Main Account selects which pages this account can open. Role controls whether the user can edit records.</p>
+                <p class="text-[10px] text-slate-500">The Main Account selects which pages this account can open. Role controls whether the user can edit records. Database RLS independently enforces these permissions.</p>
                 <div class="grid grid-cols-2 gap-2 text-xs">
                     <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="summary"> Executive Summary</label>
                     <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="calibration"> Calibration Tracker</label>
@@ -2047,9 +2049,6 @@ window.addEventListener("cloudsync:status", (event) => {
     </div>
 
     <script>
-        let AUTH_USER = "PAS";
-        let AUTH_PASS = "PASPASPAS";
-        let additionalUsers = [];
         let CURRENT_ROLE = "admin";
         let CURRENT_IS_MAIN = false;
         let CURRENT_ACCESS_PAGES = ["summary", "calibration", "uptime", "calendar", "projects"];
@@ -2141,12 +2140,18 @@ window.addEventListener("cloudsync:status", (event) => {
         async function checkAuth() {
             const isAuth = sessionStorage.getItem("authenticated") === "true";
             const loggedUser = sessionStorage.getItem("logged_user");
-            const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
+            const loggedRole = sessionStorage.getItem("logged_role") || "viewer";
             const loggedIsMain = sessionStorage.getItem("logged_is_main") === "true";
             try { CURRENT_ACCESS_PAGES = JSON.parse(sessionStorage.getItem("logged_access_pages") || "[]"); } catch (_) { CURRENT_ACCESS_PAGES = []; }
             if (!Array.isArray(CURRENT_ACCESS_PAGES) || !CURRENT_ACCESS_PAGES.length) CURRENT_ACCESS_PAGES = ["summary", "projects"];
 
             if (isAuth) {
+                if (!window.CLOUD_CONFIG?.enabled || !window.CloudAuth?.getClient?.()) {
+                    sessionStorage.clear();
+                    document.getElementById("login-screen").classList.remove("hidden");
+                    document.getElementById("app-content").classList.add("hidden");
+                    return;
+                }
                 CURRENT_ROLE = loggedRole;
                 CURRENT_IS_MAIN = loggedIsMain;
                 document.getElementById("login-screen").classList.add("hidden");
@@ -2215,30 +2220,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            loadSavedUsers();
-            let isValid = false;
-            let role = "viewer";
-            if (u === AUTH_USER && p === AUTH_PASS) { isValid = true; role = "admin"; }
-            else {
-                const foundSub = additionalUsers.find(sub => sub.username === u && sub.password === p);
-                if (foundSub) { isValid = true; role = foundSub.role || "viewer"; }
-            }
-            if (isValid) {
-                sessionStorage.setItem("authenticated", "true");
-                sessionStorage.setItem("logged_user", u);
-                sessionStorage.setItem("logged_role", role);
-                sessionStorage.setItem("logged_is_main", u === AUTH_USER ? "true" : "false");
-                const localPages = role === "admin" ? ["summary", "calibration", "uptime", "calendar", "projects"] : (foundSub?.access_pages || ["summary", "projects"]);
-                sessionStorage.setItem("logged_access_pages", JSON.stringify(localPages));
-                CURRENT_ACCESS_PAGES = localPages;
-                CURRENT_ROLE = role;
-                CURRENT_IS_MAIN = u === AUTH_USER;
-                err.classList.add("hidden");
-                await checkAuth();
-            } else {
-                err.textContent = "Invalid username or password!";
-                err.classList.remove("hidden");
-            }
+            err.textContent = "Secure cloud authentication is unavailable. Please contact the dashboard administrator.";
+            err.classList.remove("hidden");
         }
 
         async function handleLogout() {
@@ -2248,27 +2231,12 @@ window.addEventListener("cloudsync:status", (event) => {
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
             sessionStorage.removeItem("logged_access_pages");
+            (window.CloudSync?.clearClientCache?.());
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
             document.getElementById("login-username").value = "";
             document.getElementById("login-password").value = "";
             checkAuth();
-        }
-
-        function loadSavedUsers() {
-            const savedMainPass = localStorage.getItem("suite_main_password");
-            const savedSubUsers = localStorage.getItem("suite_sub_users");
-            if (savedMainPass) AUTH_PASS = savedMainPass;
-            if (savedSubUsers) {
-                try {
-                    additionalUsers = JSON.parse(savedSubUsers).map(u => ({
-                        ...u,
-                        role: u.role === "admin" ? "admin" : "viewer"
-                    }));
-                } catch (e) {
-                    additionalUsers = [];
-                }
-            }
         }
 
         async function openUserManagementModal() {
@@ -2279,8 +2247,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const loggedUser = sessionStorage.getItem("logged_user") || "";
             const mainPassSection = document.getElementById("main-account-password-section");
             if (mainPassSection) {
-                const cloudMode = !!window.CLOUD_CONFIG?.enabled;
-                mainPassSection.classList.toggle("hidden", cloudMode || loggedUser !== AUTH_USER);
+                mainPassSection.classList.add("hidden");
             }
 
             await renderSubUsersList();
@@ -2306,21 +2273,7 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function updateMainPassword() {
-            if (!isAdminUser() || (sessionStorage.getItem("logged_user") || "") !== AUTH_USER) return;
-            const newPass = document.getElementById("new-main-password").value.trim();
-            const msg = document.getElementById("pass-update-msg");
-            if (!newPass) {
-                msg.className = "text-xs p-2.5 rounded-lg text-center font-medium bg-red-500/10 border border-red-500/20 text-red-400";
-                msg.innerText = "Please enter a valid password!";
-                msg.classList.remove("hidden");
-                return;
-            }
-            AUTH_PASS = newPass;
-            localStorage.setItem("suite_main_password", AUTH_PASS);
-            msg.className = "text-xs p-2.5 rounded-lg text-center font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400";
-            msg.innerText = "Main account password updated successfully!";
-            msg.classList.remove("hidden");
-            document.getElementById("new-main-password").value = "";
+            alert("Main Account password changes are handled by Supabase Auth / the approved administrator process. The dashboard never stores passwords.");
         }
 
         async function handleAddUserSubmit(e) {
@@ -2347,15 +2300,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            if (username === AUTH_USER || additionalUsers.some(u => u.username === username)) {
-                alert("Username already exists or is reserved."); return;
-            }
-            additionalUsers.push({ username, password: upass, role });
-            localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
-            document.getElementById("new-user-name").value = "";
-            document.getElementById("new-user-pass").value = "";
-            if (roleEl) roleEl.value = "viewer";
-            renderSubUsersList();
+            alert("Secure cloud authentication is unavailable. No local account will be created.");
         }
 
         async function renderSubUsersList() {
@@ -2397,18 +2342,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            if (additionalUsers.length === 0) {
-                container.innerHTML = `<p class="text-[11px] text-slate-500 italic">No custom user accounts added yet.</p>`;
-                return;
-            }
-            additionalUsers.forEach((usr, idx) => {
-                if (!usr || usr.username === AUTH_USER) return;
-                const isFull = (usr.role || "viewer") === "admin";
-                const item = document.createElement("div");
-                item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2 rounded-xl text-xs gap-2";
-                item.innerHTML = `<div class="min-w-0"><div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username)}</div><div class="text-[9px] ${isFull ? "text-emerald-400" : "text-amber-400"} ml-5 font-bold">${isFull ? "Full Access" : "View Only"}</div></div><div class="flex items-center gap-1"><button type="button" onclick="toggleSubUserRole(${idx})" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5" title="Change access"><i class="fa-solid fa-user-shield"></i></button><button type="button" onclick="deleteSubUser(${idx})" class="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5" title="Remove access"><i class="fa-solid fa-trash"></i></button></div>`;
-                container.appendChild(item);
-            });
+            container.innerHTML = `<p class="text-[11px] text-slate-500 italic">User management is available only through secure cloud authentication.</p>`;
         }
 
         async function openEditCloudUser(userId) {
@@ -2480,22 +2414,6 @@ window.addEventListener("cloudsync:status", (event) => {
             const result = await window.CloudAuth.setRole(userId, next);
             if (!result.ok) alert(result.error || "Unable to change role.");
             await renderSubUsersList();
-        }
-
-        function toggleSubUserRole(idx) {
-            if (!isAdminUser() || !additionalUsers[idx]) return;
-            additionalUsers[idx].role = (additionalUsers[idx].role || "viewer") === "admin" ? "viewer" : "admin";
-            localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
-            renderSubUsersList();
-        }
-
-        function deleteSubUser(idx) {
-            if (CURRENT_ROLE !== "admin") return;
-            if (confirm("Are you sure you want to remove access for this user?")) {
-                additionalUsers.splice(idx, 1);
-                localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
-                renderSubUsersList();
-            }
         }
 
         let currentPlant = "ALL";
@@ -2578,9 +2496,9 @@ window.addEventListener("cloudsync:status", (event) => {
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
             sessionStorage.removeItem("logged_access_pages");
+            window.CloudSync?.clearClientCache?.();
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
-            loadSavedUsers();
             checkAuth();
         };
 
@@ -2598,13 +2516,13 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function loadSavedStorage() {
-            const savedEq = localStorage.getItem("suite_equipment_data");
-            const savedDt = localStorage.getItem("suite_downtime_data");
-            const savedPr = localStorage.getItem("suite_projects_data");
-            const savedCats = localStorage.getItem("suite_equipment_categories");
-            const savedDtCats = localStorage.getItem("suite_downtime_categories");
-            const savedUptimeEqCats = localStorage.getItem("suite_uptime_equipment_categories");
-            const savedLineCats = localStorage.getItem("suite_line_categories");
+            const savedEq = sessionStorage.getItem("suite_equipment_data");
+            const savedDt = sessionStorage.getItem("suite_downtime_data");
+            const savedPr = sessionStorage.getItem("suite_projects_data");
+            const savedCats = sessionStorage.getItem("suite_equipment_categories");
+            const savedDtCats = sessionStorage.getItem("suite_downtime_categories");
+            const savedUptimeEqCats = sessionStorage.getItem("suite_uptime_equipment_categories");
+            const savedLineCats = sessionStorage.getItem("suite_line_categories");
 
             if (savedEq) equipmentList = JSON.parse(savedEq);
             if (savedDt) downtimeLogs = JSON.parse(savedDt);
@@ -2616,13 +2534,13 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function saveStorage() {
-            localStorage.setItem("suite_equipment_data", JSON.stringify(equipmentList));
-            localStorage.setItem("suite_downtime_data", JSON.stringify(downtimeLogs));
-            localStorage.setItem("suite_projects_data", JSON.stringify(projectsList));
-            localStorage.setItem("suite_equipment_categories", JSON.stringify(equipmentCategories));
-            localStorage.setItem("suite_downtime_categories", JSON.stringify(downtimeCategories));
-            localStorage.setItem("suite_uptime_equipment_categories", JSON.stringify(uptimeEquipmentCategories));
-            localStorage.setItem("suite_line_categories", JSON.stringify(lineCategories));
+            sessionStorage.setItem("suite_equipment_data", JSON.stringify(equipmentList));
+            sessionStorage.setItem("suite_downtime_data", JSON.stringify(downtimeLogs));
+            sessionStorage.setItem("suite_projects_data", JSON.stringify(projectsList));
+            sessionStorage.setItem("suite_equipment_categories", JSON.stringify(equipmentCategories));
+            sessionStorage.setItem("suite_downtime_categories", JSON.stringify(downtimeCategories));
+            sessionStorage.setItem("suite_uptime_equipment_categories", JSON.stringify(uptimeEquipmentCategories));
+            sessionStorage.setItem("suite_line_categories", JSON.stringify(lineCategories));
         }
 
         function escapeHtml(str) {
