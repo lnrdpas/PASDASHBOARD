@@ -3495,8 +3495,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 ? statusLabels.flatMap((_,i)=>[['#3b82f6','#60a5fa'],['#eab308','#facc15'],['#ef4444','#f87171'],['#22c55e','#4ade80']][i])
                 : ['#3b82f6','#eab308','#ef4444','#22c55e'];
             chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{
-                type:'pie',
-                data:{labels:projectPieLabels,datasets:[{data:projectPieValues,backgroundColor:projectPieColors,borderColor:'#1e293b',borderWidth:2}]},
+                type:'doughnut',
+                data:{labels:projectPieLabels,datasets:[{data:projectPieValues,backgroundColor:projectPieColors,borderColor:'#1e293b',borderWidth:2,hoverOffset:4}]},
                 options:{
                     responsive:true,maintainAspectRatio:false,
                     plugins:{
