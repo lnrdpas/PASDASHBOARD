@@ -1190,6 +1190,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                     <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
 
                                 </div>
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
                                 <div class="overflow-x-auto rounded-xl border border-slate-700/50">
                                     <table class="w-full text-left text-xs text-slate-300">
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
@@ -1202,6 +1203,20 @@ window.addEventListener("cloudsync:status", (event) => {
                                         </thead>
                                         <tbody id="summary-top5-downtime-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
                                     </table>
+                                </div>
+                                <div id="summary-top5-compare-wrap" class="hidden overflow-x-auto rounded-xl border border-slate-700/50">
+                                    <table class="w-full text-left text-xs text-slate-300">
+                                        <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
+                                            <tr>
+                                                <th class="py-1.5 px-2">Line Category</th>
+                                                <th id="summary-top5-compare-equipment-head" class="py-2.5 px-3">Equipment</th>
+                                                <th id="summary-top5-compare-failure-head" class="py-2.5 px-3">Failure Category</th>
+                                                <th id="summary-top5-compare-time-head" class="py-2.5 px-3 text-center">Downtime</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="summary-top5-compare-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
+                                    </table>
+                                </div>
                                 </div>
                             </div>
                         </div>
@@ -1306,6 +1321,26 @@ window.addEventListener("cloudsync:status", (event) => {
                 <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-3 controls-bar">
                         <div class="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                            <div class="flex flex-wrap items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs">
+                                <i class="fa-solid fa-calendar-days text-blue-400"></i>
+                                <span class="text-slate-300 font-semibold">Filter Date:</span>
+                                <select id="calib-date-filter-type" onchange="onCalibDateFilterChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
+                                    <option value="ALL">All Dates</option>
+                                    <option value="YEAR">By Year</option>
+                                    <option value="MONTH">By Month</option>
+                                    <option value="RANGE">Custom Range</option>
+                                    <option value="COMPARE_YEAR">Year vs Year</option>
+                                    <option value="COMPARE_MONTH">Month vs Month</option>
+                                </select>
+                                <select id="calib-year-1" onchange="renderCalibModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1"></select>
+                                <input type="month" id="calib-month-1" onchange="renderCalibModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
+                                <input type="date" id="calib-date-from" onchange="renderCalibModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
+                                <span id="calib-date-to-label" class="hidden text-slate-500">to</span>
+                                <input type="date" id="calib-date-to" onchange="renderCalibModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
+                                <span id="calib-compare-label" class="hidden text-slate-500 font-bold">vs</span>
+                                <select id="calib-year-2" onchange="renderCalibModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1"></select>
+                                <input type="month" id="calib-month-2" onchange="renderCalibModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
+                            </div>
                             <div class="relative flex-1 min-w-[180px]">
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                                 <input type="text" id="calib-search" oninput="renderCalibTable()" placeholder="Search Equipment Code, Category, Calibrator..." class="w-full bg-slate-900 border border-slate-700 text-xs rounded-xl pl-9 pr-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -1319,16 +1354,17 @@ window.addEventListener("cloudsync:status", (event) => {
                                 <option value="STSOK">STSOK (&gt;3 mos)</option>
                                 <option value="NO CALIB SCHED">NO CALIB SCHED</option>
                             </select>
-                            <div class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-2 py-1.5 text-[11px]">
-                                <span class="text-slate-400 font-semibold">Compare:</span>
-                                <select id="calib-compare-type" onchange="onCalibCompareChange()" class="bg-transparent text-white font-semibold focus:outline-none">
-                                    <option value="ALL">Single Period</option><option value="YEAR">Year vs Year</option><option value="MONTH">Month vs Month</option>
-                                </select>
-                                <input id="calib-period-1" type="number" min="2000" max="2100" placeholder="YYYY" onchange="renderCalibModule()" class="hidden w-16 bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
-                                <input id="calib-period-2" type="number" min="2000" max="2100" placeholder="YYYY" onchange="renderCalibModule()" class="hidden w-16 bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
-                                <input id="calib-month-1" type="month" onchange="renderCalibModule()" class="hidden bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
-                                <input id="calib-month-2" type="month" onchange="renderCalibModule()" class="hidden bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
-                            </div>
+                        </div>
+                    </div>
+
+                    <div id="calib-overall-comparison" class="hidden bg-slate-900/60 border border-cyan-500/20 rounded-xl p-3 mb-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-code-compare text-cyan-400 mr-1.5"></i> Calibration Overall Comparison</h4>
+                            <span id="calib-comparison-label" class="text-[10px] text-slate-400"></span>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                            <div id="calib-comparison-primary" class="bg-slate-800/70 border border-amber-500/20 rounded-xl p-2"></div>
+                            <div id="calib-comparison-secondary" class="bg-slate-800/70 border border-blue-500/20 rounded-xl p-2"></div>
                         </div>
                     </div>
 
@@ -1586,20 +1622,17 @@ window.addEventListener("cloudsync:status", (event) => {
                         </div>
 
                         <div class="flex items-center gap-3 flex-wrap">
+                            <div class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs no-print">
+                                <i class="fa-solid fa-filter text-blue-400"></i>
+                                <span class="text-slate-300 font-semibold">Filter Date:</span>
+                                <input type="month" id="calendar-filter-month" onchange="setCalendarFilterMonth()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
+                            </div>
                             <div class="flex flex-wrap items-center gap-3 text-[11px] font-medium">
                                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> DONE</span>
                                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span> OVERDUE, DONE</span>
                                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> OVERDUE</span>
                                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> PENDING</span>
                                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> STSOK</span>
-                            </div>
-                            <div class="flex items-center gap-2 no-print bg-slate-900 border border-slate-700 rounded-xl px-2 py-1.5 text-[11px]">
-                                <span class="text-slate-400 font-semibold">Compare:</span>
-                                <select id="calendar-compare-type" onchange="onCalendarCompareChange()" class="bg-transparent text-white font-semibold focus:outline-none">
-                                    <option value="ALL">Single Month</option><option value="MONTH">Month vs Month</option>
-                                </select>
-                                <input id="calendar-period-1" type="month" onchange="renderCalendarModule()" class="hidden bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
-                                <input id="calendar-period-2" type="month" onchange="renderCalendarModule()" class="hidden bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
                             </div>
                             <div class="flex items-center gap-2 no-print">
                                 <button onclick="downloadModuleExcel('calendar')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/20">
@@ -1619,7 +1652,6 @@ window.addEventListener("cloudsync:status", (event) => {
                             </div>
                             <div id="calendar-days-grid" class="grid calendar-grid gap-1 mt-1"></div>
                         </div>
-                        <div id="calendar-comparison-panel" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3"></div>
                     </div>
                 </div>
             </section>
@@ -1646,13 +1678,22 @@ window.addEventListener("cloudsync:status", (event) => {
                             <input type="date" id="projects-date-from" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
                             <span id="projects-date-to-label" class="text-slate-500 hidden">to</span>
                             <input type="date" id="projects-date-to" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
-                            <select id="projects-compare-type" onchange="onProjectsCompareChange()" class="bg-transparent text-white font-semibold focus:outline-none">
-                                <option value="ALL">Single Period</option><option value="YEAR">Year vs Year</option><option value="MONTH">Month vs Month</option>
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs flex-wrap">
+                            <i class="fa-solid fa-code-compare text-cyan-400"></i>
+                            <span class="text-slate-300 font-semibold">Overall Comparison:</span>
+                            <select id="projects-compare-type" onchange="onProjectsCompareChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
+                                <option value="NONE">Off</option>
+                                <option value="YEAR">Year vs Year</option>
+                                <option value="MONTH">Month vs Month</option>
+                                <option value="DATE">Date vs Date</option>
                             </select>
-                            <input id="projects-compare-1" type="number" min="2000" max="2100" placeholder="YYYY" onchange="renderProjectsModule()" class="hidden w-16 bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
-                            <input id="projects-compare-2" type="number" min="2000" max="2100" placeholder="YYYY" onchange="renderProjectsModule()" class="hidden w-16 bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
-                            <input id="projects-compare-month-1" type="month" onchange="renderProjectsModule()" class="hidden bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
-                            <input id="projects-compare-month-2" type="month" onchange="renderProjectsModule()" class="hidden bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-white">
+                            <select id="projects-compare-year-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1"></select>
+                            <select id="projects-compare-year-2" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1"></select>
+                            <input type="month" id="projects-compare-month-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
+                            <input type="month" id="projects-compare-month-2" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
+                            <input type="date" id="projects-compare-date-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
+                            <input type="date" id="projects-compare-date-2" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
                         </div>
                         <button onclick="downloadModuleExcel('projects')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/20">
                             <i class="fa-solid fa-file-excel"></i> Excel (.xlsx)
@@ -1680,7 +1721,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>
 
                 <div id="projects-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
-                <div id="projects-comparison-panel" class="hidden mt-4 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl"></div>
             </section>
         </main>
     </div>
@@ -2605,6 +2645,8 @@ window.addEventListener("cloudsync:status", (event) => {
             populateDowntimeCategoryDropdowns();
             populateUptimeEquipCategoryDropdowns();
             populateLineCategoryDropdowns();
+            onCalibDateFilterChange();
+            onProjectsCompareChange();
             renderSummaryModule();
             renderCalibModule();
             renderDowntimeModule();
@@ -3359,6 +3401,22 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
+            const compareTopWrap = document.getElementById('summary-top5-compare-wrap');
+            const compareTopBody = document.getElementById('summary-top5-compare-body');
+            const compareTopEquipmentHead = document.getElementById('summary-top5-compare-equipment-head');
+            const compareTopFailureHead = document.getElementById('summary-top5-compare-failure-head');
+            const compareTopTimeHead = document.getElementById('summary-top5-compare-time-head');
+            if (compareTopWrap && compareTopBody) {
+                compareTopWrap.classList.toggle('hidden', !isCompare);
+                if (isCompare) {
+                    const compareTopByLine = buildTopEquipmentByLine(comparisonDt);
+                    if (compareTopEquipmentHead) compareTopEquipmentHead.textContent = `${compareValue || 'Date 2'} — Equipment`;
+                    if (compareTopFailureHead) compareTopFailureHead.textContent = `${compareValue || 'Date 2'} — Failure Category`;
+                    if (compareTopTimeHead) compareTopTimeHead.textContent = `${compareValue || 'Date 2'} — Downtime`;
+                    compareTopBody.innerHTML = compareTopByLine.length ? compareTopByLine.map(item => `<tr class="hover:bg-slate-800/50 transition align-top"><td class="py-2 px-2 font-semibold text-white">${escapeHtml(item.line)}</td><td class="py-2 px-3 text-slate-200">${escapeHtml(item.equipment || '—')}</td><td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td><td class="py-2 px-3 text-center text-cyan-300 font-bold">${item.duration.toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration).toFixed(1)} hrs</div></td></tr>`).join('') : `<tr><td colspan="4" class="text-center py-4 text-slate-500 italic">No downtime records found for ${escapeHtml(compareValue || 'Date 2')}.</td></tr>`;
+                } else compareTopBody.innerHTML='';
+            }
+
             // Supporting details: one row per plant, always visible. The main plant filter
             // controls which rows are shown; calibration totals external + internal schedules.
             const allSummaryPlants = ["Plant 1", "Plant 2", "PreMix"];
@@ -3439,10 +3497,10 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Render summary charts. Project chart receives per-plant counts so the main plant filter
             // can show only the selected plant.
-            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant, paretoComparison);
+            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, compareProjectByPlant, sortedLinePareto, currentPlant, paretoComparison);
         }
 
-        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison) {
+        function renderSummaryCharts(cDone, cRemaining, projectByPlant, compareProjectByPlant, sortedLinePareto, selectedPlant, paretoComparison) {
             const calibCanvas=document.getElementById('chart-summary-calib'), projCanvas=document.getElementById('chart-summary-projects'), paretoCanvas=document.getElementById('chart-summary-pareto');
             if(!calibCanvas||!projCanvas||!paretoCanvas||typeof Chart==='undefined') return;
             const isCompare=paretoComparison && paretoComparison.mode!=='single';
@@ -3451,7 +3509,19 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const allPlants=['Plant 1','Plant 2','PreMix']; const chartPlants=selectedPlant&&selectedPlant!=='ALL'?allPlants.filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)):allPlants;
             if(chartSummaryProjects) chartSummaryProjects.destroy();
-            chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{type:'bar',data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets:[{label:'In Progress',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.['In Progress']||0)),backgroundColor:'#3b82f6'},{label:'Planning',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.Planning||0)),backgroundColor:'#eab308'},{label:'On Hold',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.['On Hold']||0)),backgroundColor:'#ef4444'},{label:'Completed',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.Completed||0)),backgroundColor:'#22c55e'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:7,font:{size:9},color:'#cbd5e1'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1}}}}});
+            const projectCompareMode = !!(paretoComparison && paretoComparison.mode !== 'single');
+            const projectStatuses = ['In Progress','Planning','On Hold','Completed'];
+            const projectColors = ['#3b82f6','#eab308','#ef4444','#22c55e'];
+            const projectDatasets = [];
+            if(projectCompareMode){
+                projectStatuses.forEach((st,idx)=>{
+                    projectDatasets.push({label:`${st} — ${paretoComparison.primaryLabel}`,data:chartPlants.map(p=>Number(projectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx],stack:'primary'});
+                    projectDatasets.push({label:`${st} — ${paretoComparison.compareLabel}`,data:chartPlants.map(p=>Number(compareProjectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx],stack:'compare',borderWidth:1,borderColor:'#0f172a'});
+                });
+            } else {
+                projectStatuses.forEach((st,idx)=>projectDatasets.push({label:st,data:chartPlants.map(p=>Number(projectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx]}));
+            }
+            chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{type:'bar',data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets:projectDatasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:5,font:{size:8},color:'#cbd5e1'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1}}}}});
 
             if(chartSummaryPareto) chartSummaryPareto.destroy();
             const p=paretoComparison.primary||[], c=paretoComparison.compare||[];
@@ -3468,13 +3538,72 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 1: CALIBRATION TRACKER ---
+        function getCalibDateState() {
+            const type = document.getElementById('calib-date-filter-type')?.value || 'ALL';
+            const y1 = document.getElementById('calib-year-1')?.value || '';
+            const y2 = document.getElementById('calib-year-2')?.value || '';
+            const m1 = document.getElementById('calib-month-1')?.value || '';
+            const m2 = document.getElementById('calib-month-2')?.value || '';
+            const from = document.getElementById('calib-date-from')?.value || '';
+            const to = document.getElementById('calib-date-to')?.value || '';
+            const isCompare = type === 'COMPARE_YEAR' || type === 'COMPARE_MONTH';
+            const matchDate = (d, periodType, value) => {
+                if (!value) return false;
+                const ds = String(d || '').slice(0,10);
+                if (!ds) return false;
+                if (periodType === 'YEAR') return ds.startsWith(String(value));
+                if (periodType === 'MONTH') return ds.startsWith(String(value));
+                if (periodType === 'DATE') return ds === String(value);
+                return false;
+            };
+            const eqMatches = (eq, periodType, value) => {
+                if (!value) return true;
+                return [eq.extSched,eq.extCalib,eq.intSched,eq.intCalib].some(d => matchDate(d,periodType,value));
+            };
+            return {type,y1,y2,m1,m2,from,to,isCompare,matchDate,eqMatches};
+        }
+
+        function populateCalibDateSelectors() {
+            const years = [...new Set(equipmentList.flatMap(eq => [eq.extSched,eq.extCalib,eq.intSched,eq.intCalib]).map(d => String(d||'').slice(0,4)).filter(y => /^\d{4}$/.test(y)))].sort();
+            const now = new Date(), currentYear=String(now.getFullYear()), currentMonth=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+            ['calib-year-1','calib-year-2'].forEach((id,i)=>{ const el=document.getElementById(id); if(!el)return; const prev=el.value; el.innerHTML=years.map(y=>`<option value="${y}">${y}</option>`).join(''); el.value=years.includes(prev)?prev:(years.includes(currentYear)?currentYear:(years[0]||currentYear)); });
+            ['calib-month-1','calib-month-2'].forEach(id=>{ const el=document.getElementById(id); if(el && !el.value) el.value=currentMonth; });
+        }
+
+        function onCalibDateFilterChange() {
+            populateCalibDateSelectors();
+            const type=document.getElementById('calib-date-filter-type')?.value || 'ALL';
+            const ids=['calib-year-1','calib-month-1','calib-date-from','calib-date-to','calib-date-to-label','calib-compare-label','calib-year-2','calib-month-2'];
+            ids.forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+            if(type==='YEAR') document.getElementById('calib-year-1')?.classList.remove('hidden');
+            if(type==='MONTH') document.getElementById('calib-month-1')?.classList.remove('hidden');
+            if(type==='RANGE'){ document.getElementById('calib-date-from')?.classList.remove('hidden'); document.getElementById('calib-date-to')?.classList.remove('hidden'); document.getElementById('calib-date-to-label')?.classList.remove('hidden'); }
+            if(type==='COMPARE_YEAR'){ document.getElementById('calib-year-1')?.classList.remove('hidden'); document.getElementById('calib-year-2')?.classList.remove('hidden'); document.getElementById('calib-compare-label')?.classList.remove('hidden'); }
+            if(type==='COMPARE_MONTH'){ document.getElementById('calib-month-1')?.classList.remove('hidden'); document.getElementById('calib-month-2')?.classList.remove('hidden'); document.getElementById('calib-compare-label')?.classList.remove('hidden'); }
+            renderCalibModule();
+        }
+
+        function getFilteredCalibration(periodType='ALL', value='') {
+            const st=getCalibDateState();
+            return equipmentList.filter(eq=>{
+                if(currentPlant!=="ALL" && normalizePlant(eq.plant)!==normalizePlant(currentPlant)) return false;
+                if(periodType==='ALL') return true;
+                if(periodType==='RANGE') return [eq.extSched,eq.extCalib,eq.intSched,eq.intCalib].some(d=>{const x=String(d||'').slice(0,10);return x && (!st.from||x>=st.from) && (!st.to||x<=st.to);});
+                return st.eqMatches(eq,periodType,value);
+            });
+        }
+
         function renderCalibModule() {
+            populateCalibDateSelectors();
             renderCalibGauges();
             renderCalibTable();
         }
 
         function renderCalibGauges() {
-            const filtered = equipmentList.filter(eq => currentPlant === "ALL" || eq.plant === currentPlant);
+            const st=getCalibDateState();
+            const periodType=st.type==='YEAR'?'YEAR':st.type==='MONTH'?'MONTH':st.type==='RANGE'?'RANGE':st.type==='COMPARE_YEAR'?'YEAR':st.type==='COMPARE_MONTH'?'MONTH':'ALL';
+            const primaryValue=periodType==='YEAR'?st.y1:periodType==='MONTH'?st.m1:'';
+            const filtered=getFilteredCalibration(periodType,primaryValue);
 
             let extActive = 0, extDone = 0;
             let intActive = 0, intDone = 0;
@@ -3542,9 +3671,14 @@ window.addEventListener("cloudsync:status", (event) => {
         function renderCalibTable() {
             const search = document.getElementById("calib-search").value.toLowerCase();
             const statusFilter = document.getElementById("calib-filter-status").value;
+            const st = getCalibDateState();
+            const filterType = st.type==='YEAR'||st.type==='COMPARE_YEAR'?'YEAR':st.type==='MONTH'||st.type==='COMPARE_MONTH'?'MONTH':st.type==='RANGE'?'RANGE':'ALL';
+            const primaryValue = filterType==='YEAR'?st.y1:filterType==='MONTH'?st.m1:'';
 
             const filtered = equipmentList.filter(eq => {
                 if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
+                if(filterType==='RANGE' && !getFilteredCalibration('RANGE','').some(x=>x.id===eq.id)) return false;
+                if(filterType==='YEAR' || filterType==='MONTH') { if(!st.eqMatches(eq,filterType,primaryValue)) return false; }
                 const status = getCalibStatus(eq);
                 const extStatus = getSubCalibStatus(eq.extSched, eq.extCalib);
                 const intStatus = getSubCalibStatus(eq.intSched, eq.intCalib);
@@ -3585,6 +3719,26 @@ window.addEventListener("cloudsync:status", (event) => {
             const statusOrder = [['DONE','text-emerald-400'],['OVERDUE, DONE','text-orange-400'],['OVERDUE','text-red-400'],['PENDING','text-amber-400'],['STSOK','text-blue-400'],['NA','text-slate-400']];
             document.getElementById('calib-external-breakdown').innerHTML = statusOrder.map(([k,c]) => statusCard(k, ext[k] || 0, c)).join('');
             document.getElementById('calib-internal-breakdown').innerHTML = statusOrder.map(([k,c]) => statusCard(k, int[k] || 0, c)).join('');
+
+            const cmpBox=document.getElementById('calib-overall-comparison');
+            const cmpLabel=document.getElementById('calib-comparison-label');
+            const cmpPrimary=document.getElementById('calib-comparison-primary');
+            const cmpSecondary=document.getElementById('calib-comparison-secondary');
+            if(cmpBox){
+                const compareType=st.type==='COMPARE_YEAR'?'YEAR':st.type==='COMPARE_MONTH'?'MONTH':'';
+                const primaryValue=compareType==='YEAR'?st.y1:compareType==='MONTH'?st.m1:'';
+                const compareValue=compareType==='YEAR'?st.y2:compareType==='MONTH'?st.m2:'';
+                cmpBox.classList.toggle('hidden',!st.isCompare);
+                if(st.isCompare){
+                    const makeStats=(list)=>{let total=0,done=0,od=0,ov=0,pending=0,stsok=0;list.forEach(eq=>{const a=getSubCalibStatus(eq.extSched,eq.extCalib),b=getSubCalibStatus(eq.intSched,eq.intCalib);[a,b].forEach(x=>{if(x==='NA')return;total++;if(x==='DONE'||x==='OVERDUE, DONE')done++;if(x==='OVERDUE, DONE')od++;else if(x==='OVERDUE')ov++;else if(x==='PENDING')pending++;else if(x==='STSOK')stsok++;});});return {total,done,od,ov,pending,stsok,pct:total?Math.round(done/total*100):0};};
+                    const a=makeStats(getFilteredCalibration(compareType,primaryValue));
+                    const b=makeStats(getFilteredCalibration(compareType,compareValue));
+                    cmpLabel.textContent=`${primaryValue||'Date 1'} vs ${compareValue||'Date 2'}`;
+                    const card=(label,x,accent)=>`<div class="text-[10px] font-bold ${accent} mb-2">${escapeHtml(label)}</div><div class="grid grid-cols-3 gap-2 text-[10px]"><div><span class="text-slate-500">Scheduled</span><div class="text-white font-black text-sm">${x.total}</div></div><div><span class="text-slate-500">Completed</span><div class="text-emerald-400 font-black text-sm">${x.done}</div></div><div><span class="text-slate-500">Compliance</span><div class="text-cyan-300 font-black text-sm">${x.pct}%</div></div></div><div class="mt-2 text-[9px] text-slate-400">Overdue: <b class="text-red-400">${x.ov}</b> · Overdue, Done: <b class="text-orange-400">${x.od}</b> · Pending: <b class="text-amber-400">${x.pending}</b> · STSOK: <b class="text-blue-400">${x.stsok}</b></div>`;
+                    cmpPrimary.innerHTML=card(primaryValue||'Date 1',a,'text-amber-300');
+                    cmpSecondary.innerHTML=card(compareValue||'Date 2',b,'text-blue-300');
+                }
+            }
             document.getElementById("calib-kpi-pending").innerText = tPending;
             document.getElementById("calib-kpi-stsok").innerText = tStsok;
             document.getElementById("calib-kpi-na").innerText = tNa;
@@ -4096,7 +4250,16 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 3: CALIBRATION CALENDAR ---
+        function setCalendarFilterMonth(){
+            const v=document.getElementById('calendar-filter-month')?.value;
+            if(!v)return;
+            const [y,m]=v.split('-').map(Number);
+            if(y && m){ calendarDate=new Date(y,m-1,1); renderCalendarModule(); }
+        }
+
         function renderCalendarModule() {
+            const filter=document.getElementById('calendar-filter-month');
+            if(filter && !filter.value) filter.value=`${calendarDate.getFullYear()}-${String(calendarDate.getMonth()+1).padStart(2,'0')}`;
             const year = calendarDate.getFullYear();
             const month = calendarDate.getMonth();
 
@@ -4159,11 +4322,13 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function changeMonth(direction) {
             calendarDate.setMonth(calendarDate.getMonth() + direction);
+            const f=document.getElementById('calendar-filter-month'); if(f) f.value=`${calendarDate.getFullYear()}-${String(calendarDate.getMonth()+1).padStart(2,'0')}`;
             renderCalendarModule();
         }
 
         function resetToCurrentMonth() {
             calendarDate = new Date();
+            const f=document.getElementById('calendar-filter-month'); if(f) f.value=`${calendarDate.getFullYear()}-${String(calendarDate.getMonth()+1).padStart(2,'0')}`;
             renderCalendarModule();
         }
 
@@ -4333,8 +4498,30 @@ window.addEventListener("cloudsync:status", (event) => {
             renderProjectsModule();
         }
 
+        function populateProjectsCompareYears(){
+            const years=[...new Set(projectsList.map(pr=>String(pr.date||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)))].sort();
+            ['projects-compare-year-1','projects-compare-year-2'].forEach((id,i)=>{const el=document.getElementById(id);if(!el)return;const prev=el.value;el.innerHTML=years.map(y=>`<option value="${y}">${y}</option>`).join('');el.value=years.includes(prev)?prev:(years.includes(String(new Date().getFullYear()))?String(new Date().getFullYear()):(years[0]||''));});
+            const now=new Date(),cm=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`,cd=now.toISOString().slice(0,10);
+            ['projects-compare-month-1','projects-compare-month-2'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.value)el.value=cm;});
+            ['projects-compare-date-1','projects-compare-date-2'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.value)el.value=cd;});
+        }
+        function onProjectsCompareChange(){
+            populateProjectsCompareYears();
+            const type=document.getElementById('projects-compare-type')?.value||'NONE';
+            ['projects-compare-year-1','projects-compare-year-2','projects-compare-month-1','projects-compare-month-2','projects-compare-date-1','projects-compare-date-2'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+            if(type==='YEAR'){document.getElementById('projects-compare-year-1')?.classList.remove('hidden');document.getElementById('projects-compare-year-2')?.classList.remove('hidden');}
+            if(type==='MONTH'){document.getElementById('projects-compare-month-1')?.classList.remove('hidden');document.getElementById('projects-compare-month-2')?.classList.remove('hidden');}
+            if(type==='DATE'){document.getElementById('projects-compare-date-1')?.classList.remove('hidden');document.getElementById('projects-compare-date-2')?.classList.remove('hidden');}
+            renderProjectsModule();
+        }
+        function filterProjectsForPeriod(periodType,value){
+            return projectsList.filter(pr=>{if(currentPlant!=="ALL"&&normalizePlant(pr.plant)!==normalizePlant(currentPlant))return false;const d=String(pr.date||'').slice(0,10);if(periodType==='YEAR')return d.startsWith(String(value));if(periodType==='MONTH')return d.startsWith(String(value));if(periodType==='DATE')return d===String(value);return true;});
+        }
+        function projectStatusCounts(list){const o={"In Progress":0,Planning:0,"On Hold":0,Completed:0};(list||[]).forEach(pr=>{const st=String(pr.status||'Planning').trim();if(o[st]!==undefined)o[st]++;});return o;}
+
         function renderProjectsModule() {
             populateProjectsYearFilter();
+            populateProjectsCompareYears();
             const type = document.getElementById("projects-date-filter-type")?.value || 'ALL';
             const yearFilter = document.getElementById("projects-year-filter")?.value || 'ALL';
             const monthFilter = document.getElementById("projects-month-filter")?.value || '';
@@ -4395,6 +4582,20 @@ window.addEventListener("cloudsync:status", (event) => {
                         </div>`;
                     container.appendChild(card);
                 });
+            }
+
+            const compareType=document.getElementById('projects-compare-type')?.value||'NONE';
+            const comparePanelId='projects-overall-comparison';
+            let comparePanel=document.getElementById(comparePanelId);
+            if(!comparePanel){ comparePanel=document.createElement('div'); comparePanel.id=comparePanelId; comparePanel.className='bg-slate-800/90 border border-cyan-500/20 p-3 rounded-xl space-y-3'; container.parentElement.insertBefore(comparePanel, container); }
+            if(compareType==='NONE'){ comparePanel.classList.add('hidden'); comparePanel.innerHTML=''; } else {
+                comparePanel.classList.remove('hidden');
+                const aType=compareType==='YEAR'?'YEAR':compareType==='MONTH'?'MONTH':'DATE';
+                const aVal=compareType==='YEAR'?document.getElementById('projects-compare-year-1')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-1')?.value:document.getElementById('projects-compare-date-1')?.value;
+                const bVal=compareType==='YEAR'?document.getElementById('projects-compare-year-2')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-2')?.value:document.getElementById('projects-compare-date-2')?.value;
+                const a=filterProjectsForPeriod(aType,aVal), b=filterProjectsForPeriod(aType,bVal), ac=projectStatusCounts(a), bc=projectStatusCounts(b);
+                const rows=(list,label)=>list.length?list.map(pr=>`<tr class="border-b border-slate-700/30"><td class="py-1.5 px-2 font-semibold text-white">${escapeHtml(pr.plant)}</td><td class="py-1.5 px-2">${escapeHtml(pr.title)}</td><td class="py-1.5 px-2 text-cyan-300">${Number(pr.progress||0)}%</td><td class="py-1.5 px-2">${escapeHtml(pr.status||'Planning')}</td><td class="py-1.5 px-2 text-slate-400">${escapeHtml(pr.date||'—')}</td></tr>`).join(''):`<tr><td colspan="5" class="py-4 text-center text-slate-500 italic">No projects for ${escapeHtml(label)}.</td></tr>`;
+                comparePanel.innerHTML=`<div class="flex items-center justify-between"><h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i> Overall Project Comparison</h4><span class="text-[10px] text-slate-400">${escapeHtml(aVal||'Date 1')} vs ${escapeHtml(bVal||'Date 2')}</span></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-2"><div class="bg-slate-900/60 rounded-xl border border-slate-700/50 p-2"><div class="text-[10px] font-bold text-amber-300 mb-2">${escapeHtml(aVal||'Date 1')} — ${a.length} Projects</div><div class="grid grid-cols-4 gap-1 text-[9px] mb-2"><span>In Progress <b>${ac['In Progress']}</b></span><span>Planning <b>${ac.Planning}</b></span><span>On Hold <b>${ac['On Hold']}</b></span><span>Completed <b>${ac.Completed}</b></span></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 uppercase"><tr><th class="text-left">Plant</th><th class="text-left">Project</th><th>Progress</th><th>Status</th><th>Target</th></tr></thead><tbody>${rows(a,aVal)}</tbody></table></div></div><div class="bg-slate-900/60 rounded-xl border border-slate-700/50 p-2"><div class="text-[10px] font-bold text-blue-300 mb-2">${escapeHtml(bVal||'Date 2')} — ${b.length} Projects</div><div class="grid grid-cols-4 gap-1 text-[9px] mb-2"><span>In Progress <b>${bc['In Progress']}</b></span><span>Planning <b>${bc.Planning}</b></span><span>On Hold <b>${bc['On Hold']}</b></span><span>Completed <b>${bc.Completed}</b></span></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 uppercase"><tr><th class="text-left">Plant</th><th class="text-left">Project</th><th>Progress</th><th>Status</th><th>Target</th></tr></thead><tbody>${rows(b,bVal)}</tbody></table></div></div></div>`;
             }
 
             // Restore timeline expansion after any intentional project redraw.
@@ -4670,52 +4871,6 @@ window.addEventListener("cloudsync:status", (event) => {
         }
     </script>
 
-<script>
-(function(){
-const O={cal:window.renderCalibModule,cald:window.renderCalendarModule,proj:window.renderProjectsModule};
-const now=()=>{const d=new Date();return{y:d.getFullYear(),m:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}};
-const esc=v=>typeof escapeHtml==='function'?escapeHtml(v):String(v??'');
-const match=(v,t,p)=>!p||t==='ALL'||String(v||'').startsWith(String(p));
-window.onCalibCompareChange=function(){const t=document.getElementById('calib-compare-type').value,n=now();['calib-period-1','calib-period-2','calib-month-1','calib-month-2'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));if(t==='YEAR'){['calib-period-1','calib-period-2'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));let a=document.getElementById('calib-period-1'),b=document.getElementById('calib-period-2');if(!a.value)a.value=n.y;if(!b.value)b.value=n.y-1}else if(t==='MONTH'){['calib-month-1','calib-month-2'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));let a=document.getElementById('calib-month-1'),b=document.getElementById('calib-month-2');if(!a.value)a.value=n.m;if(!b.value){let d=new Date(n.y,n.m.slice(5)-2,1);b.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}};renderCalibModule()};
-function calCfg(){let t=document.getElementById('calib-compare-type')?.value||'ALL';return t==='YEAR'?['YEAR',document.getElementById('calib-period-1')?.value,document.getElementById('calib-period-2')?.value]:t==='MONTH'?['MONTH',document.getElementById('calib-month-1')?.value,document.getElementById('calib-month-2')?.value]:['ALL','','']}
-function calRows(period,t){return equipmentList.filter(e=>{if(currentPlant!=='ALL'&&normalizePlant(e.plant)!==normalizePlant(currentPlant))return false;return t==='ALL'||[e.extSched,e.extCalib,e.intSched,e.intCalib].some(x=>match(x,t,period))})}
-function calMetric(a){let ea=0,ed=0,ia=0,id=0,s=0,d=0;a.forEach(e=>{if(e.extSched){ea++;if(e.extCalib)ed++}if(e.intSched){ia++;if(e.intCalib)id++}[getSubCalibStatus(e.extSched,e.extCalib),getSubCalibStatus(e.intSched,e.intCalib)].forEach(x=>{if(x!=='NA'){s++;if(x==='DONE'||x==='OVERDUE, DONE')d++}})});return{ea,ed,ia,id,s,d,p:s?Math.round(d/s*100):0}}
-function calTable(a){return `<div class="overflow-x-auto mt-2"><table class="w-full text-[9px] text-slate-300"><thead class="text-slate-500 uppercase border-b border-slate-700"><tr><th class="py-1">Equipment</th><th>Code</th><th>Plant</th><th>EXT</th><th>INT</th><th>Status</th></tr></thead><tbody>${a.map(e=>`<tr class="border-b border-slate-700/30"><td class="py-1">${esc(e.type)}</td><td class="text-blue-300">${esc(e.code)}</td><td>${esc(e.plant)}</td><td>${esc(e.extSched||'-')} / ${esc(e.extCalib||'-')}</td><td>${esc(e.intSched||'-')} / ${esc(e.intCalib||'-')}</td><td>${esc(getCalibStatus(e))}</td></tr>`).join('')||'<tr><td colspan="6" class="py-3 text-center text-slate-500">No data</td></tr>'}</tbody></table></div>`}
-window.renderCalibModule=function(){let [t,a,b]=calCfg();if(t==='ALL'){O.cal();document.getElementById('calib-comparison-panel')?.classList.add('hidden');return}let A=calRows(a,t),B=calRows(b,t),old=equipmentList;equipmentList=A;O.cal();equipmentList=old;let p=document.getElementById('calib-comparison-panel');if(!p){p=document.createElement('div');p.id='calib-comparison-panel';p.className='mt-4 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl';document.querySelector('#module-calibration .overflow-x-auto')?.parentElement?.after(p)}let x=calMetric(A),y=calMetric(B);p.classList.remove('hidden');p.innerHTML=`<h4 class="text-xs font-bold text-white uppercase mb-3"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i>${esc(a)} vs ${esc(b)} — Calibration Tracker</h4><div class="grid grid-cols-1 lg:grid-cols-2 gap-3"><div class="bg-slate-900/60 p-3 rounded-xl"><b class="text-amber-300 text-xs">${esc(a)}</b><div class="grid grid-cols-3 gap-2 text-[10px] mt-2"><span>EXT ${x.ed}/${x.ea}</span><span>INT ${x.id}/${x.ia}</span><span>Done ${x.d}/${x.s} (${x.p}%)</span></div>${calTable(A)}</div><div class="bg-slate-900/60 p-3 rounded-xl"><b class="text-blue-300 text-xs">${esc(b)}</b><div class="grid grid-cols-3 gap-2 text-[10px] mt-2"><span>EXT ${y.ed}/${y.ea}</span><span>INT ${y.id}/${y.ia}</span><span>Done ${y.d}/${y.s} (${y.p}%)</span></div>${calTable(B)}</div></div>`}
-window.onCalendarCompareChange=function(){let t=document.getElementById('calendar-compare-type').value,n=now();['calendar-period-1','calendar-period-2'].forEach(id=>document.getElementById(id)?.classList.toggle('hidden',t!=='MONTH'));if(t==='MONTH'){let a=document.getElementById('calendar-period-1'),b=document.getElementById('calendar-period-2');if(!a.value)a.value=n.m;if(!b.value){let d=new Date(n.y,n.m.slice(5)-2,1);b.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}};renderCalendarModule()}
-function calMonth(v){let q=String(v).split('-').map(Number);return new Date(q[0],q[1]-1,1)}
-function mini(v){let d=calMonth(v),y=d.getFullYear(),m=d.getMonth(),first=d.getDay(),days=new Date(y,m+1,0).getDate(),eq=equipmentList.filter(e=>currentPlant==='ALL'||normalizePlant(e.plant)===normalizePlant(currentPlant));let cells=Array(first).fill('<div></div>').join('');for(let i=1;i<=days;i++){let ds=`${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`,ev=eq.filter(e=>[e.extSched,e.extCalib,e.intSched,e.intCalib].includes(ds));cells+=`<div class="min-h-[55px] bg-slate-900/70 border border-slate-700/50 rounded p-1"><div class="text-[9px] text-slate-300 font-bold">${i}</div>${ev.slice(0,4).map(e=>`<div class="text-[7px] text-blue-300 truncate">${esc(e.code)}</div>`).join('')}${ev.length>4?`<div class="text-[7px] text-slate-500">+${ev.length-4}</div>`:''}</div>`}return `<div class="text-xs font-bold text-white mb-2">${esc(v)}</div><div class="grid grid-cols-7 gap-1 text-[8px] text-slate-500 mb-1">${['SUN','MON','TUE','WED','THU','FRI','SAT'].map(x=>`<div>${x}</div>`).join('')}</div><div class="grid grid-cols-7 gap-1">${cells}</div>`}
-window.renderCalendarModule=function(){let t=document.getElementById('calendar-compare-type')?.value||'ALL',a=document.getElementById('calendar-period-1')?.value||'',b=document.getElementById('calendar-period-2')?.value||'';if(t!=='MONTH'){O.cald();document.getElementById('calendar-comparison-panel')?.classList.add('hidden');return}calendarDate=calMonth(a);O.cald();let p=document.getElementById('calendar-comparison-panel');if(p){p.classList.remove('hidden');p.innerHTML=`<div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3">${mini(a)}</div><div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3">${mini(b)}</div>`}}
-window.onProjectsCompareChange=function(){let t=document.getElementById('projects-compare-type').value,n=now();['projects-compare-1','projects-compare-2','projects-compare-month-1','projects-compare-month-2'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));if(t==='YEAR'){['projects-compare-1','projects-compare-2'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));let a=document.getElementById('projects-compare-1'),b=document.getElementById('projects-compare-2');if(!a.value)a.value=n.y;if(!b.value)b.value=n.y-1}else if(t==='MONTH'){['projects-compare-month-1','projects-compare-month-2'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));let a=document.getElementById('projects-compare-month-1'),b=document.getElementById('projects-compare-month-2');if(!a.value)a.value=n.m;if(!b.value){let d=new Date(n.y,n.m.slice(5)-2,1);b.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}};renderProjectsModule()}
-function proj(t,p){return projectsList.filter(e=>(currentPlant==='ALL'||normalizePlant(e.plant)===normalizePlant(currentPlant))&&match(e.date,t,p))}
-window.renderProjectsModule=function(){let ct=document.getElementById('projects-compare-type')?.value||'ALL';if(ct==='ALL'){O.proj();document.getElementById('projects-comparison-panel')?.classList.add('hidden');return}let t=ct,a=t==='YEAR'?document.getElementById('projects-compare-1')?.value:'',b=t==='YEAR'?document.getElementById('projects-compare-2')?.value:'',ma=t==='MONTH'?document.getElementById('projects-compare-month-1')?.value:'',mb=t==='MONTH'?document.getElementById('projects-compare-month-2')?.value:'';let p1=t==='YEAR'?a:ma,p2=t==='YEAR'?b:mb;let mt=document.getElementById('projects-date-filter-type'),yr=document.getElementById('projects-year-filter'),mo=document.getElementById('projects-month-filter'),ot=mt?.value,oy=yr?.value,om=mo?.value;if(mt)mt.value=t;if(t==='YEAR'&&yr)yr.value=p1;if(t==='MONTH'&&mo)mo.value=p1;O.proj();if(mt)mt.value=ot||'ALL';if(yr)yr.value=oy||'';if(mo)mo.value=om||'';let A=proj(t,p1),B=proj(t,p2),panel=document.getElementById('projects-comparison-panel');if(!panel)return;const stat=l=>['In Progress','Planning','On Hold','Completed'].map(s=>`${s}: ${l.filter(x=>String(x.status||'Planning')===s).length}`).join(' · ');const cards=l=>l.map(x=>`<div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-2"><div class="flex justify-between"><b class="text-[10px] text-white">${esc(x.title)}</b><span class="text-[9px] text-cyan-300">${esc(x.status||'Planning')}</span></div><div class="text-[9px] text-slate-400">${esc(x.plant)} · Target ${esc(x.date||'-')}</div><div class="text-[9px] mt-1">Progress: <b>${Number(x.progress||0)}%</b></div></div>`).join('');panel.classList.remove('hidden');panel.innerHTML=`<h4 class="text-xs font-bold text-white uppercase mb-3"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i>${esc(p1)} vs ${esc(p2)} — Automation Projects</h4><div class="grid grid-cols-1 lg:grid-cols-2 gap-3"><div><b class="text-amber-300 text-xs">${esc(p1)} — ${A.length} projects</b><div class="grid gap-2 mt-2">${cards(A)||'<span class="text-[10px] text-slate-500">No projects</span>'}</div><div class="text-[9px] text-slate-400 mt-2">${stat(A)}</div></div><div><b class="text-blue-300 text-xs">${esc(p2)} — ${B.length} projects</b><div class="grid gap-2 mt-2">${cards(B)||'<span class="text-[10px] text-slate-500">No projects</span>'}</div><div class="text-[9px] text-slate-400 mt-2">${stat(B)}</div></div></div>`}
-})();
-</script>
-
-<script>
-(function(){
- const _summaryOriginal=window.renderSummaryModule;
- function sumMatch(v,t,p){return !p||t==='all'||String(v||'').startsWith(String(p));}
- function topByLine(logs){const m={};(logs||[]).forEach(dt=>{const line=String(dt.line||'Unclassified Line').trim();const eq=String(dt.equipment||'Unclassified Equipment').trim();const cat=String(dt.category||'Unclassified').trim();const dur=Math.max(0,(new Date(dt.end)-new Date(dt.start))/3600000);if(!m[line])m[line]={line,total:0,c:{}};m[line].total+=dur;const k=eq+'|||'+cat;if(!m[line].c[k])m[line].c[k]={eq,cat,d:0};m[line].c[k].d+=dur});return Object.values(m).map(x=>{let z=Object.values(x.c).sort((a,b)=>b.d-a.d)[0];return{line:x.line,eq:z?.eq||'—',cat:z?.cat||'—',d:z?.d||0,total:x.total}}).sort((a,b)=>b.total-a.total)}
- window.renderSummaryModule=function(){
-   _summaryOriginal();
-   const type=document.getElementById('summary-filter-type')?.value||'all';
-   const compare=type==='compare-year'||type==='compare-month';
-   let box=document.getElementById('summary-top-equipment-comparison');
-   if(!compare){if(box)box.classList.add('hidden');return}
-   const primary=type==='compare-year'?document.getElementById('summary-year-filter')?.value:document.getElementById('summary-month-filter')?.value;
-   const other=type==='compare-year'?document.getElementById('summary-compare-year')?.value:document.getElementById('summary-compare-month')?.value;
-   const t=type==='compare-year'?'year':'month';
-   const filt=list=>list.filter(dt=>(currentPlant==='ALL'||normalizePlant(dt.plant)===normalizePlant(currentPlant))&&sumMatch(dt.start,t,arguments[0]));
-   const A=downtimeLogs.filter(dt=>(currentPlant==='ALL'||normalizePlant(dt.plant)===normalizePlant(currentPlant))&&sumMatch(dt.start,t,primary));
-   const B=downtimeLogs.filter(dt=>(currentPlant==='ALL'||normalizePlant(dt.plant)===normalizePlant(currentPlant))&&sumMatch(dt.start,t,other));
-   const a=topByLine(A),b=topByLine(B);
-   if(!box){box=document.createElement('div');box.id='summary-top-equipment-comparison';box.className='mt-3 bg-slate-900/50 border border-slate-700/50 rounded-xl p-2.5';document.getElementById('summary-top5-downtime-body')?.closest('.space-y-2')?.appendChild(box)}
-   const table=(arr,label,cls)=>`<div><div class="text-[10px] font-bold ${cls} mb-1">${escapeHtml(label)}</div><div class="overflow-x-auto"><table class="w-full text-[9px] text-slate-300"><thead class="text-slate-500 uppercase border-b border-slate-700"><tr><th class="py-1 text-left">Line</th><th class="py-1 text-left">Equipment</th><th class="py-1 text-left">Failure</th><th class="py-1 text-right">Equipment Hrs</th><th class="py-1 text-right">Line Total</th></tr></thead><tbody>${arr.map(x=>`<tr class="border-b border-slate-700/30"><td class="py-1 font-semibold text-white">${escapeHtml(x.line)}</td><td class="py-1">${escapeHtml(x.eq)}</td><td class="py-1">${escapeHtml(x.cat)}</td><td class="py-1 text-right text-red-300">${x.d.toFixed(1)}</td><td class="py-1 text-right">${x.total.toFixed(1)}</td></tr>`).join('')||'<tr><td colspan="5" class="py-3 text-center text-slate-500">No downtime data</td></tr>'}</tbody></table></div></div>`;
-   box.classList.remove('hidden');box.innerHTML=`<div class="text-[10px] font-bold uppercase text-slate-400 mb-2"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i>Top Equipment by Line — ${escapeHtml(primary)} vs ${escapeHtml(other)}</div><div class="grid grid-cols-1 lg:grid-cols-2 gap-3">${table(a,primary,'text-amber-300')}${table(b,other,'text-blue-300')}</div>`;
- };
-})();
-</script>
 <div id="cloud-sync-status"
      class="fixed bottom-2 right-2 z-[9999] text-[10px] text-slate-500 bg-slate-900/80 border border-slate-700 rounded-lg px-2 py-1 no-print">
     Local save mode
