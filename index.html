@@ -1123,6 +1123,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="chart-box-container">
                             <canvas id="chart-summary-projects"></canvas>
                         </div>
+                        <div id="summary-project-date-indicator" class="text-center text-[10px] font-semibold text-slate-300 bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-1.5">Year: All Dates</div>
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
@@ -1584,6 +1585,23 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                 </div>
 
+                <div id="downtime-comparison-details" class="hidden mt-3 pt-3 border-t-2 border-cyan-500/30">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="text-xs font-bold text-cyan-300 uppercase tracking-wider"><i class="fa-solid fa-code-compare mr-1"></i> Downtime Details — Date vs Date</h4>
+                            <span id="downtime-comparison-label" class="text-[10px] text-slate-400"></span>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-slate-700/60 rounded-xl overflow-hidden">
+                            <div class="min-w-0 lg:border-r-2 lg:border-cyan-500/30">
+                                <div id="downtime-primary-detail-title" class="bg-amber-500/10 text-amber-300 font-bold text-[10px] uppercase px-3 py-2 border-b border-slate-700/60"></div>
+                                <div class="overflow-x-auto"><table class="w-full text-left text-[10px] text-slate-300"><thead class="bg-slate-900/90 text-slate-500 uppercase"><tr><th class="px-2 py-2">Line</th><th class="px-2 py-2">Equipment</th><th class="px-2 py-2">Failure</th><th class="px-2 py-2 text-center">Downtime</th></tr></thead><tbody id="downtime-primary-detail-body" class="divide-y divide-slate-700/40"></tbody></table></div>
+                            </div>
+                            <div class="min-w-0">
+                                <div id="downtime-compare-detail-title" class="bg-blue-500/10 text-blue-300 font-bold text-[10px] uppercase px-3 py-2 border-b border-slate-700/60"></div>
+                                <div class="overflow-x-auto"><table class="w-full text-left text-[10px] text-slate-300"><thead class="bg-slate-900/90 text-slate-500 uppercase"><tr><th class="px-2 py-2">Line</th><th class="px-2 py-2">Equipment</th><th class="px-2 py-2">Failure</th><th class="px-2 py-2 text-center">Downtime</th></tr></thead><tbody id="downtime-compare-detail-body" class="divide-y divide-slate-700/40"></tbody></table></div>
+                            </div>
+                        </div>
+                    </div>
+
                 <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl space-y-3">
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
                         <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Historical Downtime Records</h3>
@@ -1608,22 +1626,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <tbody id="downtime-table-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
                         </table>
 
-                    <div id="downtime-comparison-details" class="hidden mt-3 pt-3 border-t-2 border-cyan-500/30">
-                        <div class="flex items-center justify-between mb-2">
-                            <h4 class="text-xs font-bold text-cyan-300 uppercase tracking-wider"><i class="fa-solid fa-code-compare mr-1"></i> Downtime Details — Date vs Date</h4>
-                            <span id="downtime-comparison-label" class="text-[10px] text-slate-400"></span>
-                        </div>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-slate-700/60 rounded-xl overflow-hidden">
-                            <div class="min-w-0 lg:border-r-2 lg:border-cyan-500/30">
-                                <div id="downtime-primary-detail-title" class="bg-amber-500/10 text-amber-300 font-bold text-[10px] uppercase px-3 py-2 border-b border-slate-700/60"></div>
-                                <div class="overflow-x-auto"><table class="w-full text-left text-[10px] text-slate-300"><thead class="bg-slate-900/90 text-slate-500 uppercase"><tr><th class="px-2 py-2">Line</th><th class="px-2 py-2">Equipment</th><th class="px-2 py-2">Failure</th><th class="px-2 py-2 text-center">Downtime</th></tr></thead><tbody id="downtime-primary-detail-body" class="divide-y divide-slate-700/40"></tbody></table></div>
-                            </div>
-                            <div class="min-w-0">
-                                <div id="downtime-compare-detail-title" class="bg-blue-500/10 text-blue-300 font-bold text-[10px] uppercase px-3 py-2 border-b border-slate-700/60"></div>
-                                <div class="overflow-x-auto"><table class="w-full text-left text-[10px] text-slate-300"><thead class="bg-slate-900/90 text-slate-500 uppercase"><tr><th class="px-2 py-2">Line</th><th class="px-2 py-2">Equipment</th><th class="px-2 py-2">Failure</th><th class="px-2 py-2 text-center">Downtime</th></tr></thead><tbody id="downtime-compare-detail-body" class="divide-y divide-slate-700/40"></tbody></table></div>
-                            </div>
-                        </div>
-                    </div>
+                    
                     </div>
                 </div>
             </section>
@@ -1712,11 +1715,15 @@ window.addEventListener("cloudsync:status", (event) => {
                             <select id="projects-compare-type" onchange="onProjectsCompareChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
                                 <option value="NONE">Off</option>
                                 <option value="YEAR">Year vs Year</option>
+                                <option value="CUSTOM_YEAR">Custom Year vs Year</option>
                                 <option value="MONTH">Month vs Month</option>
                                 <option value="DATE">Date vs Date</option>
                             </select>
                             <select id="projects-compare-year-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1"></select>
                             <select id="projects-compare-year-2" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1"></select>
+                            <input type="number" id="projects-compare-custom-year-1" min="2000" max="2100" placeholder="Year 1" oninput="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 w-20">
+                            <span id="projects-compare-custom-vs" class="hidden text-slate-400 font-bold">vs</span>
+                            <input type="number" id="projects-compare-custom-year-2" min="2000" max="2100" placeholder="Year 2" oninput="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 w-20">
                             <input type="month" id="projects-compare-month-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
                             <input type="month" id="projects-compare-month-2" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
                             <input type="date" id="projects-compare-date-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
@@ -1745,6 +1752,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="chart-box-container" style="height: 235px !important; max-height: 235px !important;">
                         <canvas id="chart-projects-mill"></canvas>
                     </div>
+                    <div id="projects-chart-date-indicator" class="text-center text-[10px] font-semibold text-slate-300 bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-1.5">Date: All Dates</div>
                 </div>
 
                 <div id="projects-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
@@ -3555,6 +3563,16 @@ window.addEventListener("cloudsync:status", (event) => {
             } else {
                 projectStatuses.forEach((st,idx)=>projectDatasets.push({label:st,data:chartPlants.map(p=>Number(projectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx]}));
             }
+            const summaryProjectDateIndicator=document.getElementById('summary-project-date-indicator');
+            if(summaryProjectDateIndicator){
+                if(projectCompareMode){
+                    summaryProjectDateIndicator.textContent=`Year: ${paretoComparison.primaryLabel}  vs  ${paretoComparison.compareLabel}`;
+                } else if(paretoComparison && paretoComparison.primaryLabel){
+                    summaryProjectDateIndicator.textContent=`Year: ${paretoComparison.primaryLabel}`;
+                } else {
+                    summaryProjectDateIndicator.textContent='Year: All Dates';
+                }
+            }
             chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{type:'bar',data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets:projectDatasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:5,font:{size:8},color:'#cbd5e1'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1}}}}});
 
             if(chartSummaryPareto) chartSummaryPareto.destroy();
@@ -4562,14 +4580,15 @@ window.addEventListener("cloudsync:status", (event) => {
         function onProjectsCompareChange(){
             populateProjectsCompareYears();
             const type=document.getElementById('projects-compare-type')?.value||'NONE';
-            ['projects-compare-year-1','projects-compare-year-2','projects-compare-month-1','projects-compare-month-2','projects-compare-date-1','projects-compare-date-2'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+            ['projects-compare-year-1','projects-compare-year-2','projects-compare-custom-year-1','projects-compare-custom-year-2','projects-compare-custom-vs','projects-compare-month-1','projects-compare-month-2','projects-compare-date-1','projects-compare-date-2'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
             if(type==='YEAR'){document.getElementById('projects-compare-year-1')?.classList.remove('hidden');document.getElementById('projects-compare-year-2')?.classList.remove('hidden');}
+            if(type==='CUSTOM_YEAR'){document.getElementById('projects-compare-custom-year-1')?.classList.remove('hidden');document.getElementById('projects-compare-custom-vs')?.classList.remove('hidden');document.getElementById('projects-compare-custom-year-2')?.classList.remove('hidden');}
             if(type==='MONTH'){document.getElementById('projects-compare-month-1')?.classList.remove('hidden');document.getElementById('projects-compare-month-2')?.classList.remove('hidden');}
             if(type==='DATE'){document.getElementById('projects-compare-date-1')?.classList.remove('hidden');document.getElementById('projects-compare-date-2')?.classList.remove('hidden');}
             renderProjectsModule();
         }
         function filterProjectsForPeriod(periodType,value){
-            return projectsList.filter(pr=>{if(currentPlant!=="ALL"&&normalizePlant(pr.plant)!==normalizePlant(currentPlant))return false;const d=String(pr.date||'').slice(0,10);if(periodType==='YEAR')return d.startsWith(String(value));if(periodType==='MONTH')return d.startsWith(String(value));if(periodType==='DATE')return d===String(value);return true;});
+            return projectsList.filter(pr=>{if(currentPlant!=="ALL"&&normalizePlant(pr.plant)!==normalizePlant(currentPlant))return false;const d=String(pr.date||'').slice(0,10);if(periodType==='YEAR'||periodType==='CUSTOM_YEAR')return d.startsWith(String(value));if(periodType==='MONTH')return d.startsWith(String(value));if(periodType==='DATE')return d===String(value);return true;});
         }
         function projectStatusCounts(list){const o={"In Progress":0,Planning:0,"On Hold":0,Completed:0};(list||[]).forEach(pr=>{const st=String(pr.status||'Planning').trim();if(o[st]!==undefined)o[st]++;});return o;}
 
@@ -4583,6 +4602,16 @@ window.addEventListener("cloudsync:status", (event) => {
             const toFilter = document.getElementById("projects-date-to")?.value || '';
             const dateText = type === 'YEAR' ? `Year: ${yearFilter}` : type === 'MONTH' ? `Month: ${monthFilter || '—'}` : type === 'RANGE' ? `Range: ${fromFilter || '—'} to ${toFilter || '—'}` : 'All Dates';
             document.getElementById("projects-chart-year-badge").innerText = dateText;
+            const projectDateIndicator=document.getElementById('projects-chart-date-indicator');
+            if(projectDateIndicator){
+                const cmp=document.getElementById('projects-compare-type')?.value||'NONE';
+                let cmpText='';
+                if(cmp==='YEAR') cmpText=`${document.getElementById('projects-compare-year-1')?.value||'Year 1'} vs ${document.getElementById('projects-compare-year-2')?.value||'Year 2'}`;
+                else if(cmp==='CUSTOM_YEAR') cmpText=`${document.getElementById('projects-compare-custom-year-1')?.value||'Year 1'} vs ${document.getElementById('projects-compare-custom-year-2')?.value||'Year 2'}`;
+                else if(cmp==='MONTH') cmpText=`${document.getElementById('projects-compare-month-1')?.value||'Month 1'} vs ${document.getElementById('projects-compare-month-2')?.value||'Month 2'}`;
+                else if(cmp==='DATE') cmpText=`${document.getElementById('projects-compare-date-1')?.value||'Date 1'} vs ${document.getElementById('projects-compare-date-2')?.value||'Date 2'}`;
+                projectDateIndicator.textContent=cmp!=='NONE'?`Year Comparison: ${cmpText}`:(type==='YEAR'?`Year: ${yearFilter}`:type==='MONTH'?`Month: ${monthFilter || '—'}`:type==='RANGE'?`Date Range: ${fromFilter || '—'} to ${toFilter || '—'}`:'Year: All Dates');
+            }
 
             const filtered = projectsList.filter(pr => {
                 if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
@@ -4644,9 +4673,9 @@ window.addEventListener("cloudsync:status", (event) => {
             if(!comparePanel){ comparePanel=document.createElement('div'); comparePanel.id=comparePanelId; comparePanel.className='bg-slate-800/90 border border-cyan-500/20 p-3 rounded-xl space-y-3'; container.parentElement.insertBefore(comparePanel, container); }
             if(compareType==='NONE'){ comparePanel.classList.add('hidden'); comparePanel.innerHTML=''; } else {
                 comparePanel.classList.remove('hidden');
-                const aType=compareType==='YEAR'?'YEAR':compareType==='MONTH'?'MONTH':'DATE';
-                const aVal=compareType==='YEAR'?document.getElementById('projects-compare-year-1')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-1')?.value:document.getElementById('projects-compare-date-1')?.value;
-                const bVal=compareType==='YEAR'?document.getElementById('projects-compare-year-2')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-2')?.value:document.getElementById('projects-compare-date-2')?.value;
+                const aType=compareType==='YEAR'?'YEAR':compareType==='CUSTOM_YEAR'?'CUSTOM_YEAR':compareType==='MONTH'?'MONTH':'DATE';
+                const aVal=compareType==='YEAR'?document.getElementById('projects-compare-year-1')?.value:compareType==='CUSTOM_YEAR'?document.getElementById('projects-compare-custom-year-1')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-1')?.value:document.getElementById('projects-compare-date-1')?.value;
+                const bVal=compareType==='YEAR'?document.getElementById('projects-compare-year-2')?.value:compareType==='CUSTOM_YEAR'?document.getElementById('projects-compare-custom-year-2')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-2')?.value:document.getElementById('projects-compare-date-2')?.value;
                 const a=filterProjectsForPeriod(aType,aVal), b=filterProjectsForPeriod(aType,bVal), ac=projectStatusCounts(a), bc=projectStatusCounts(b);
                 const rows=(list,label)=>list.length?list.map(pr=>`<tr class="border-b border-slate-700/30"><td class="py-1.5 px-2 font-semibold text-white">${escapeHtml(pr.plant)}</td><td class="py-1.5 px-2">${escapeHtml(pr.title)}</td><td class="py-1.5 px-2 text-cyan-300">${Number(pr.progress||0)}%</td><td class="py-1.5 px-2">${escapeHtml(pr.status||'Planning')}</td><td class="py-1.5 px-2 text-slate-400">${escapeHtml(pr.date||'—')}</td></tr>`).join(''):`<tr><td colspan="5" class="py-4 text-center text-slate-500 italic">No projects for ${escapeHtml(label)}.</td></tr>`;
                 comparePanel.innerHTML=`<div class="flex items-center justify-between"><h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i> Overall Project Comparison</h4><span class="text-[10px] text-slate-400">${escapeHtml(aVal||'Date 1')} vs ${escapeHtml(bVal||'Date 2')}</span></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-slate-700/60 rounded-xl overflow-hidden"><div class="period-divider bg-slate-900/60 p-2"><div class="text-[10px] font-bold text-amber-300 mb-2">${escapeHtml(aVal||'Date 1')} — ${a.length} Projects</div><div class="grid grid-cols-4 gap-1 text-[9px] mb-2"><span>In Progress <b>${ac['In Progress']}</b></span><span>Planning <b>${ac.Planning}</b></span><span>On Hold <b>${ac['On Hold']}</b></span><span>Completed <b>${ac.Completed}</b></span></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 uppercase"><tr><th class="text-left">Plant</th><th class="text-left">Project</th><th>Progress</th><th>Status</th><th>Target</th></tr></thead><tbody>${rows(a,aVal)}</tbody></table></div></div><div class="bg-slate-900/60 p-2"><div class="text-[10px] font-bold text-blue-300 mb-2">${escapeHtml(bVal||'Date 2')} — ${b.length} Projects</div><div class="grid grid-cols-4 gap-1 text-[9px] mb-2"><span>In Progress <b>${bc['In Progress']}</b></span><span>Planning <b>${bc.Planning}</b></span><span>On Hold <b>${bc['On Hold']}</b></span><span>Completed <b>${bc.Completed}</b></span></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 uppercase"><tr><th class="text-left">Plant</th><th class="text-left">Project</th><th>Progress</th><th>Status</th><th>Target</th></tr></thead><tbody>${rows(b,bVal)}</tbody></table></div></div></div>`;
@@ -4689,9 +4718,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 let projectGraphLabels = ['Plant 1', 'Plant 2', 'PreMix Plant'];
                 let projectGraphDatasets;
                 if (projectCompareType !== 'NONE') {
-                    const aType = projectCompareType==='YEAR'?'YEAR':projectCompareType==='MONTH'?'MONTH':'DATE';
-                    const aVal = projectCompareType==='YEAR'?document.getElementById('projects-compare-year-1')?.value:projectCompareType==='MONTH'?document.getElementById('projects-compare-month-1')?.value:document.getElementById('projects-compare-date-1')?.value;
-                    const bVal = projectCompareType==='YEAR'?document.getElementById('projects-compare-year-2')?.value:projectCompareType==='MONTH'?document.getElementById('projects-compare-month-2')?.value:document.getElementById('projects-compare-date-2')?.value;
+                    const aType = projectCompareType==='YEAR'?'YEAR':projectCompareType==='CUSTOM_YEAR'?'CUSTOM_YEAR':projectCompareType==='MONTH'?'MONTH':'DATE';
+                    const aVal = projectCompareType==='YEAR'?document.getElementById('projects-compare-year-1')?.value:projectCompareType==='CUSTOM_YEAR'?document.getElementById('projects-compare-custom-year-1')?.value:projectCompareType==='MONTH'?document.getElementById('projects-compare-month-1')?.value:document.getElementById('projects-compare-date-1')?.value;
+                    const bVal = projectCompareType==='YEAR'?document.getElementById('projects-compare-year-2')?.value:projectCompareType==='CUSTOM_YEAR'?document.getElementById('projects-compare-custom-year-2')?.value:projectCompareType==='MONTH'?document.getElementById('projects-compare-month-2')?.value:document.getElementById('projects-compare-date-2')?.value;
                     const ac = projectStatusCounts(filterProjectsForPeriod(aType,aVal));
                     const bc = projectStatusCounts(filterProjectsForPeriod(aType,bVal));
                     const shortA = aVal || 'Date 1', shortB = bVal || 'Date 2';
