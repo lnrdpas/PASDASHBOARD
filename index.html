@@ -1714,11 +1714,11 @@ window.addEventListener("cloudsync:status", (event) => {
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-bar text-blue-400"></i> Project Distribution & Progress per Mill (Plant)
                         </h4>
-                        <span id="projects-chart-year-badge" class="text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">Filtered by Year</span>
                     </div>
                     <div class="chart-box-container" style="height: 235px !important; max-height: 235px !important;">
                         <canvas id="chart-projects-mill"></canvas>
                     </div>
+                    <p id="projects-chart-period-note" class="text-[10px] text-center font-semibold text-slate-400">Selected Period • Area / Plant</p>
                 </div>
 
                 <div id="projects-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
@@ -3524,9 +3524,55 @@ window.addEventListener("cloudsync:status", (event) => {
             } else {
                 projectStatuses.forEach((st,idx)=>projectDatasets.push({label:st,data:chartPlants.map(p=>Number(projectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx],stack:'single',borderRadius:3}));
             }
-            chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{type:'bar',data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets:projectDatasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:5,font:{size:8},color:'#cbd5e1'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1}}}}});
-            const summaryProjectDateNote=document.getElementById('summary-project-date-note');
-            if(summaryProjectDateNote){summaryProjectDateNote.textContent=projectCompareMode?`${paretoComparison.primaryLabel}  vs  ${paretoComparison.compareLabel}  •  Area / Plant`:((paretoComparison?.primaryLabel||'Selected Period')+'  •  Area / Plant');}
+            chartSummaryProjects = new Chart(projCanvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: chartPlants.map(p => p === 'PreMix' ? 'PreMix Plant' : p),
+                    datasets: projectDatasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 10,
+                                padding: 5,
+                                font: { size: 8 },
+                                color: '#cbd5e1',
+                                generateLabels: function(chart) {
+                                    const labels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                                    if (!projectCompareMode) return labels;
+                                    return labels.filter((item, index) => index % 2 === 0).map((item, index) => {
+                                        item.datasetIndex = index * 2;
+                                        item.text = projectStatuses[index] || item.text;
+                                        return item;
+                                    });
+                                }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(ctx) {
+                                    const ds = ctx.chart.data.datasets[ctx.datasetIndex] || {};
+                                    const period = ds.stack === 'date2' ? paretoComparison.compareLabel : paretoComparison.primaryLabel;
+                                    return `${ctx.dataset.label} — ${period}: ${ctx.raw || 0}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true, ticks: { font: { size: 10 }, color: '#cbd5e1' } },
+                        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 } }
+                    }
+                }
+            });
+            // Keep the chart legend focused on project status only. The comparison years are shown once below the graph.
+            chartSummaryProjects.projectDatasets = projectDatasets;
+            const summaryProjectDateNote = document.getElementById('summary-project-date-note');
 
             if(chartSummaryPareto) chartSummaryPareto.destroy();
             const p=paretoComparison.primary||[], c=paretoComparison.compare||[];
@@ -4643,20 +4689,71 @@ window.addEventListener("cloudsync:status", (event) => {
                 const datasets = [];
                 if (compareMode) {
                     statusKeys.forEach(st => {
-                        datasets.push({label:`${st} — ${chartPeriodA}`,data:chartPlants.map(p=>countsA[p][st]),backgroundColor:statusColors[st],stack:'date1',borderRadius:3});
-                        datasets.push({label:`${st} — ${chartPeriodB}`,data:chartPlants.map(p=>countsB[p][st]),backgroundColor:statusColors[st],stack:'date2',borderRadius:3,borderWidth:1,borderColor:'#0f172a'});
+                        datasets.push({label:st,data:chartPlants.map(p=>countsA[p][st]),backgroundColor:statusColors[st],stack:'date1',borderRadius:3,period:chartPeriodA});
+                        datasets.push({label:st,data:chartPlants.map(p=>countsB[p][st]),backgroundColor:statusColors[st],stack:'date2',borderRadius:3,borderWidth:1,borderColor:'#0f172a',period:chartPeriodB});
                     });
                 } else {
-                    statusKeys.forEach(st=>datasets.push({label:st,data:chartPlants.map(p=>countsA[p][st]),backgroundColor:statusColors[st],stack:'single',borderRadius:3}));
+                    statusKeys.forEach(st=>datasets.push({label:st,data:chartPlants.map(p=>countsA[p][st]),backgroundColor:statusColors[st],stack:'single',borderRadius:3,period:dateText}));
                 }
                 chartProjectsMill = new Chart(ctxMill, {
-                    type:'bar',
-                    data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets},
-                    options:{responsive:true,maintainAspectRatio:false,animation:{duration:250},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:9,padding:6,font:{size:9},color:'#94a3b8'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.4)'}}}}
+                    type: 'bar',
+                    data: {
+                        labels: chartPlants.map(p => p === 'PreMix' ? 'PreMix Plant' : p),
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 250 },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: {
+                                    boxWidth: 9,
+                                    padding: 6,
+                                    font: { size: 9 },
+                                    color: '#94a3b8',
+                                    generateLabels: function(chart) {
+                                        const labels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                                        if (!compareMode) return labels;
+                                        return labels.filter((item, index) => index % 2 === 0).map((item, index) => {
+                                            item.datasetIndex = index * 2;
+                                            item.text = statusKeys[index] || item.text;
+                                            return item;
+                                        });
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                callbacks: {
+                                    label: function(ctx) {
+                                        const ds = ctx.chart.data.datasets[ctx.datasetIndex] || {};
+                                        return `${ctx.dataset.label} — ${ds.period || ''}: ${ctx.raw || 0}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                stacked: true,
+                                ticks: { font: { size: 10 }, color: '#94a3b8' },
+                                grid: { display: false }
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 },
+                                grid: { color: 'rgba(51,65,85,0.4)' }
+                            }
+                        }
+                    }
                 });
             }
-            const badge=document.getElementById('projects-chart-year-badge');
-            if(badge) badge.textContent=compareMode ? `${chartPeriodA}  vs  ${chartPeriodB} • Area / Plant` : `${dateText} • Area / Plant`;
+            const periodNote=document.getElementById('projects-chart-period-note');
+            if(periodNote) periodNote.textContent=compareMode ? `${chartPeriodA}  vs  ${chartPeriodB}  •  Area / Plant` : `${dateText}  •  Area / Plant`;
         }
 
         function openProjectModal() {
