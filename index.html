@@ -3448,9 +3448,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 "On Hold": list.filter(pr => String(pr.status || "").trim() === "On Hold").length,
                 Completed: list.filter(pr => String(pr.status || "").trim() === "Completed").length
             });
-            // Project Status & Progress can optionally ignore the Executive Summary filters.
-            // When enabled, the chart returns to the overall project-status view while all
-            // other Executive Summary sections continue using the selected filters.
             const projectChartIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
             const projectOverallPrimary = projectChartIgnoreFilter ? projectOverall(projectsList) : projectOverall(filteredPr);
             const projectOverallCompare = (!projectChartIgnoreFilter && isCompare) ? projectOverall(comparisonPr) : null;
@@ -3488,36 +3485,26 @@ window.addEventListener("cloudsync:status", (event) => {
             chartSummaryCalib=new Chart(calibCanvas.getContext('2d'),{type:isCompare?'bar':'doughnut',data:isCompare?{labels:[paretoComparison.primaryLabel,paretoComparison.compareLabel],datasets:[{label:'Completed',data:[cDone,Number(window._summaryCompareCalib||0)],backgroundColor:'#22c55e'}]}:{labels:['DONE','REMAINING'],datasets:[{data:[cDone,cRemaining],backgroundColor:['#22c55e','#334155'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label||ctx.label}: ${ctx.raw}`}}},scales:isCompare?{x:{ticks:{font:{size:11},color:'#cbd5e1'}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'}}}:undefined}});
 
             // PROJECT STATUS & PROGRESS — doughnut chart.
-            // Normally it follows the selected plant/date filters. If Ignore Filters is
-            // enabled, the caller passes totals from the complete project list and disables
-            // comparison for this chart, returning it to the overall project-status view.
+            // It follows the selected filters unless Ignore Filters is enabled.
             if(chartSummaryProjects) chartSummaryProjects.destroy();
             const statusLabels=['In Progress','Planning','On Hold','Completed'];
             const primaryProjectValues=statusLabels.map(k=>Number(projectOverallPrimary?.[k]||0));
-            const compareProjectValues=isCompare?statusLabels.map(k=>Number(projectOverallCompare?.[k]||0)):[];
-            const projectPieLabels=isCompare
-                ? statusLabels.flatMap((label,i)=>[`${paretoComparison.primaryLabel} — ${label}`, `${paretoComparison.compareLabel} — ${label}`])
+            const projectIsCompare = !projectChartIgnoreFilter && !!projectOverallCompare && paretoComparison?.mode!=='single';
+            const compareProjectValues=projectIsCompare?statusLabels.map(k=>Number(projectOverallCompare?.[k]||0)):[];
+            const projectPieLabels=projectIsCompare
+                ? statusLabels.flatMap(label=>[`${paretoComparison.primaryLabel} — ${label}`,`${paretoComparison.compareLabel} — ${label}`])
                 : statusLabels;
-            const projectPieValues=isCompare
-                ? statusLabels.flatMap((_,i)=>[primaryProjectValues[i], compareProjectValues[i]])
+            const projectPieValues=projectIsCompare
+                ? statusLabels.flatMap((_,i)=>[primaryProjectValues[i],compareProjectValues[i]])
                 : primaryProjectValues;
-            const projectPieColors=isCompare
+            const projectPieColors=projectIsCompare
                 ? statusLabels.flatMap((_,i)=>[['#3b82f6','#60a5fa'],['#eab308','#facc15'],['#ef4444','#f87171'],['#22c55e','#4ade80']][i])
                 : ['#3b82f6','#eab308','#ef4444','#22c55e'];
-            const projectChartTitle = document.querySelector('#chart-summary-projects')?.closest('.bg-slate-800\/90')?.querySelector('h4');
-            if (projectChartTitle) projectChartTitle.innerHTML = `<i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress${projectChartIgnoreFilter ? ' — Overall' : ''}`;
             chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{
                 type:'doughnut',
                 data:{labels:projectPieLabels,datasets:[{data:projectPieValues,backgroundColor:projectPieColors,borderColor:'#1e293b',borderWidth:2,hoverOffset:4}]},
-                options:{
-                    responsive:true,maintainAspectRatio:false,
-                    plugins:{
-                        legend:{position:'bottom',labels:{boxWidth:10,padding:6,font:{size:8},color:'#cbd5e1'}},
-                        tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}`}}
-                    }
-                }
+                options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:6,font:{size:8},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}`}}}}
             });
-
             if(chartSummaryPareto) chartSummaryPareto.destroy();
             const p=paretoComparison.primary||[], c=paretoComparison.compare||[];
             const labels=p.map((x,i)=>[x.equipment||x.label||'—',x.line||'',isCompare&&c[i]?`vs ${c[i].equipment||'—'}`:'']);
