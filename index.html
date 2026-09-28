@@ -19,7 +19,6 @@
    SECURITY: Never place a Supabase Secret Key, service_role key, or
    database password in this file.
    ============================================================ */
-// SECURITY HARDENED: authentication is cloud-only; no local password fallback.
 window.CLOUD_CONFIG = {
     // Set true after you replace the publishable-key placeholder below.
     enabled: true,
@@ -47,7 +46,7 @@ window.CloudAuth = (() => {
         client = window.supabase.createClient(
             window.CLOUD_CONFIG.projectUrl,
             window.CLOUD_CONFIG.publishableKey,
-            { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false } }
+            { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } }
         );
         return true;
     }
@@ -368,7 +367,7 @@ window.CloudSync = (() => {
 
     function readArray(key) {
         try {
-            const raw = sessionStorage.getItem(key);
+            const raw = localStorage.getItem(key);
             const parsed = raw ? JSON.parse(raw) : [];
             return Array.isArray(parsed) ? parsed : [];
         } catch {
@@ -377,7 +376,7 @@ window.CloudSync = (() => {
     }
 
     function writeArray(key, value) {
-        sessionStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+        localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
     }
 
     function rowId(value, index) {
@@ -673,15 +672,15 @@ window.CloudSync = (() => {
             ...Object.values(CATEGORIES)
         ]);
 
-        const originalSet = sessionStorage.setItem.bind(sessionStorage);
-        const originalRemove = sessionStorage.removeItem.bind(sessionStorage);
+        const originalSet = localStorage.setItem.bind(localStorage);
+        const originalRemove = localStorage.removeItem.bind(localStorage);
 
-        sessionStorage.setItem = function(key, value) {
+        localStorage.setItem = function(key, value) {
             originalSet(key, value);
             if (watched.has(key)) schedulePush();
         };
 
-        sessionStorage.removeItem = function(key) {
+        localStorage.removeItem = function(key) {
             originalRemove(key);
             if (watched.has(key)) schedulePush();
         };
@@ -693,8 +692,8 @@ window.CloudSync = (() => {
         // In cloud mode, browser localStorage must never be allowed to become
         // the source of truth. Remove the old browser cache before pulling
         // the authoritative dataset from Supabase.
-        Object.values(DATASETS).forEach(cfg => sessionStorage.removeItem(cfg.key));
-        Object.values(CATEGORIES).forEach(key => sessionStorage.removeItem(key));
+        Object.values(DATASETS).forEach(cfg => localStorage.removeItem(cfg.key));
+        Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
 
         // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
         // the pull itself can trigger a save of stale/partial browser data.
@@ -706,19 +705,8 @@ window.CloudSync = (() => {
         return result;
     }
 
-    function clearClientCache() {
-        Object.values(DATASETS).forEach(cfg => sessionStorage.removeItem(cfg.key));
-        Object.values(CATEGORIES).forEach(key => sessionStorage.removeItem(key));
-        Object.keys(lastSynced).forEach(key => {
-            if (Array.isArray(lastSynced[key])) lastSynced[key] = [];
-            else lastSynced[key] = {};
-        });
-        ready = false;
-    }
-
     return {
         start,
-        clearClientCache,
         pull,
         push,
         refresh: refreshIfClean,
@@ -821,6 +809,27 @@ window.addEventListener("cloudsync:status", (event) => {
         .summary-kpi-compare { font-size: 10px; line-height: 1.35; min-height: 15px; margin-top: 3px; color: #67e8f9; font-weight: 700; }
         .summary-period-note { font-size: 10px; line-height: 1.35; color: #94a3b8; }
         .pareto-info-note { font-size: 10px; line-height: 1.4; color: #94a3b8; }
+
+        /* PDF capture: preserve the dashboard's original visual design while
+           allowing the report to grow vertically instead of clipping to the
+           browser viewport. */
+        .report-capture {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            width: 100% !important;
+        }
+        .report-capture .report-card,
+        .report-capture .bg-slate-800,
+        .report-capture table,
+        .report-capture tr {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+        .report-capture canvas {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
 
         @media print {
             @page {
@@ -1071,9 +1080,15 @@ window.addEventListener("cloudsync:status", (event) => {
                             <span>Equipment Availability</span>
                             <i class="fa-solid fa-circle-check text-emerald-400"></i>
                         </div>
-                        <h3 id="summary-availability-rate" class="text-2xl font-black text-emerald-400">0%</h3>
+                        <div class="flex items-center gap-2">
+                            <h3 id="summary-availability-rate" class="text-2xl font-black text-emerald-400">0%</h3>
+                            <input id="summary-availability-edit" type="number" min="0" max="100" step="0.1"
+                                   class="admin-only hidden w-20 bg-slate-900 border border-emerald-500/40 rounded-lg px-2 py-1 text-lg font-black text-emerald-400 focus:outline-none focus:border-emerald-400"
+                                   onchange="saveEquipmentAvailabilityPercent(this.value)" aria-label="Equipment Availability Percent">
+                        </div>
+                        <div id="summary-availability-source" class="text-[9px] text-slate-500 mt-0.5"></div>
                         <div id="summary-availability-compare" class="summary-kpi-compare hidden"></div>
-                        <p class="text-[10px] text-slate-400 mt-1">% Operational Time</p>
+                        <p class="text-[10px] text-slate-400 mt-1">% Operational Time · Admin editable</p>
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
@@ -1110,30 +1125,18 @@ window.addEventListener("cloudsync:status", (event) => {
                 <!-- ALL THREE GRAPHS BESIDE EACH OTHER IN A 3-COLUMN GRID -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-2">
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
-                        <div class="flex items-center justify-between gap-2">
-                            <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-chart-pie text-emerald-400"></i> Calibration Status Breakdown
-                            </h4>
-                            <label class="flex items-center gap-1.5 text-[9px] text-slate-400 font-semibold cursor-pointer whitespace-nowrap" title="When enabled, this chart ignores the Executive Summary plant/date filters and shows all calibration records.">
-                                <input id="summary-calib-ignore-filter" type="checkbox" checked onchange="renderSummaryModule()" class="accent-emerald-500">
-                                Ignore Filters
-                            </label>
-                        </div>
+                        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie text-emerald-400"></i> Calibration Status Breakdown
+                        </h4>
                         <div class="chart-box-container">
                             <canvas id="chart-summary-calib"></canvas>
                         </div>
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
-                        <div class="flex items-center justify-between gap-2">
-                            <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
-                            </h4>
-                            <label class="flex items-center gap-1.5 text-[9px] text-slate-400 font-semibold cursor-pointer whitespace-nowrap" title="When enabled, this chart ignores the Executive Summary plant/date filters and shows all projects.">
-                                <input id="summary-projects-ignore-filter" type="checkbox" checked onchange="renderSummaryModule()" class="accent-blue-500">
-                                Ignore Filters
-                            </label>
-                        </div>
+                        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
+                        </h4>
                         <div class="chart-box-container">
                             <canvas id="chart-summary-projects"></canvas>
                         </div>
@@ -1778,15 +1781,25 @@ window.addEventListener("cloudsync:status", (event) => {
                 <button onclick="closeUserManagementModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
 
-            <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-2">
-                <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-shield-halved text-emerald-400 mr-1.5"></i> Secure Authentication</h4>
-                <p class="text-[11px] text-slate-400">Passwords are managed by Supabase Auth / the approved administrator process. PASDASHBOARD does not store passwords in the browser, localStorage, or dashboard database.</p>
+            <!-- CHANGE PASSWORD SECTION (Main Account Only) -->
+            <div id="main-account-password-section" class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
+                <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-key text-amber-400 mr-1.5"></i> Change Main Account Password</h4>
+                <div id="pass-update-msg" class="hidden text-xs p-2.5 rounded-lg text-center font-medium"></div>
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">New Password</label>
+                        <input type="password" id="new-main-password" placeholder="Enter new password" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
+                    </div>
+                    <button type="button" onclick="updateMainPassword()" class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-4 rounded-xl transition shadow-md">
+                        Update Password
+                    </button>
+                </div>
             </div>
 
             <!-- ADD / MANAGE SUB-USERS SECTION (Main Account Authority) -->
             <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
                 <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-user-plus text-emerald-400 mr-1.5"></i> Authorized Operators / Users</h4>
-                <p class="text-[11px] text-slate-400">Additional accounts are created through the secure Supabase Auth service. Passwords are never stored by this dashboard.</p>
+                <p class="text-[11px] text-slate-400">Create additional accounts using a username and password only. The Main Account continues to use its email address.</p>
 
                 <form onsubmit="handleAddUserSubmit(event)" class="space-y-3 text-xs pt-1">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1809,7 +1822,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                     <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
                         <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
-                        <p class="text-[10px] text-slate-500">The Main Account selects which pages this user can open. Role controls whether the user can edit records. Database RLS independently enforces these permissions.</p>
+                        <p class="text-[10px] text-slate-500">The Main Account selects which pages this user can open. Role controls whether the user can edit records.</p>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="summary" checked> Executive Summary</label>
                             <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="calibration"> Calibration Tracker</label>
@@ -1863,7 +1876,7 @@ window.addEventListener("cloudsync:status", (event) => {
             </div>
             <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
-                <p class="text-[10px] text-slate-500">The Main Account selects which pages this account can open. Role controls whether the user can edit records. Database RLS independently enforces these permissions.</p>
+                <p class="text-[10px] text-slate-500">The Main Account selects which pages this account can open. Role controls whether the user can edit records.</p>
                 <div class="grid grid-cols-2 gap-2 text-xs">
                     <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="summary"> Executive Summary</label>
                     <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="calibration"> Calibration Tracker</label>
@@ -2049,6 +2062,9 @@ window.addEventListener("cloudsync:status", (event) => {
     </div>
 
     <script>
+        let AUTH_USER = "PAS";
+        let AUTH_PASS = "PASPASPAS";
+        let additionalUsers = [];
         let CURRENT_ROLE = "admin";
         let CURRENT_IS_MAIN = false;
         let CURRENT_ACCESS_PAGES = ["summary", "calibration", "uptime", "calendar", "projects"];
@@ -2140,18 +2156,12 @@ window.addEventListener("cloudsync:status", (event) => {
         async function checkAuth() {
             const isAuth = sessionStorage.getItem("authenticated") === "true";
             const loggedUser = sessionStorage.getItem("logged_user");
-            const loggedRole = sessionStorage.getItem("logged_role") || "viewer";
+            const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
             const loggedIsMain = sessionStorage.getItem("logged_is_main") === "true";
             try { CURRENT_ACCESS_PAGES = JSON.parse(sessionStorage.getItem("logged_access_pages") || "[]"); } catch (_) { CURRENT_ACCESS_PAGES = []; }
             if (!Array.isArray(CURRENT_ACCESS_PAGES) || !CURRENT_ACCESS_PAGES.length) CURRENT_ACCESS_PAGES = ["summary", "projects"];
 
             if (isAuth) {
-                if (!window.CLOUD_CONFIG?.enabled || !window.CloudAuth?.getClient?.()) {
-                    sessionStorage.clear();
-                    document.getElementById("login-screen").classList.remove("hidden");
-                    document.getElementById("app-content").classList.add("hidden");
-                    return;
-                }
                 CURRENT_ROLE = loggedRole;
                 CURRENT_IS_MAIN = loggedIsMain;
                 document.getElementById("login-screen").classList.add("hidden");
@@ -2162,6 +2172,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 // cloud dataset for the authenticated browser before rendering.
                 const cloudResult = await ensureCloudDataLoaded();
                 if (cloudResult?.ok || cloudResult?.localOnly) {
+                    await loadEquipmentAvailabilitySettings();
                     loadSavedStorage();
                     populateCategoryDropdowns();
                     populateDowntimeCategoryDropdowns();
@@ -2220,8 +2231,30 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            err.textContent = "Secure cloud authentication is unavailable. Please contact the dashboard administrator.";
-            err.classList.remove("hidden");
+            loadSavedUsers();
+            let isValid = false;
+            let role = "viewer";
+            if (u === AUTH_USER && p === AUTH_PASS) { isValid = true; role = "admin"; }
+            else {
+                const foundSub = additionalUsers.find(sub => sub.username === u && sub.password === p);
+                if (foundSub) { isValid = true; role = foundSub.role || "viewer"; }
+            }
+            if (isValid) {
+                sessionStorage.setItem("authenticated", "true");
+                sessionStorage.setItem("logged_user", u);
+                sessionStorage.setItem("logged_role", role);
+                sessionStorage.setItem("logged_is_main", u === AUTH_USER ? "true" : "false");
+                const localPages = role === "admin" ? ["summary", "calibration", "uptime", "calendar", "projects"] : (foundSub?.access_pages || ["summary", "projects"]);
+                sessionStorage.setItem("logged_access_pages", JSON.stringify(localPages));
+                CURRENT_ACCESS_PAGES = localPages;
+                CURRENT_ROLE = role;
+                CURRENT_IS_MAIN = u === AUTH_USER;
+                err.classList.add("hidden");
+                await checkAuth();
+            } else {
+                err.textContent = "Invalid username or password!";
+                err.classList.remove("hidden");
+            }
         }
 
         async function handleLogout() {
@@ -2231,12 +2264,27 @@ window.addEventListener("cloudsync:status", (event) => {
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
             sessionStorage.removeItem("logged_access_pages");
-            (window.CloudSync?.clearClientCache?.());
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
             document.getElementById("login-username").value = "";
             document.getElementById("login-password").value = "";
             checkAuth();
+        }
+
+        function loadSavedUsers() {
+            const savedMainPass = localStorage.getItem("suite_main_password");
+            const savedSubUsers = localStorage.getItem("suite_sub_users");
+            if (savedMainPass) AUTH_PASS = savedMainPass;
+            if (savedSubUsers) {
+                try {
+                    additionalUsers = JSON.parse(savedSubUsers).map(u => ({
+                        ...u,
+                        role: u.role === "admin" ? "admin" : "viewer"
+                    }));
+                } catch (e) {
+                    additionalUsers = [];
+                }
+            }
         }
 
         async function openUserManagementModal() {
@@ -2247,7 +2295,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const loggedUser = sessionStorage.getItem("logged_user") || "";
             const mainPassSection = document.getElementById("main-account-password-section");
             if (mainPassSection) {
-                mainPassSection.classList.add("hidden");
+                const cloudMode = !!window.CLOUD_CONFIG?.enabled;
+                mainPassSection.classList.toggle("hidden", cloudMode || loggedUser !== AUTH_USER);
             }
 
             await renderSubUsersList();
@@ -2273,7 +2322,21 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function updateMainPassword() {
-            alert("Main Account password changes are handled by Supabase Auth / the approved administrator process. The dashboard never stores passwords.");
+            if (!isAdminUser() || (sessionStorage.getItem("logged_user") || "") !== AUTH_USER) return;
+            const newPass = document.getElementById("new-main-password").value.trim();
+            const msg = document.getElementById("pass-update-msg");
+            if (!newPass) {
+                msg.className = "text-xs p-2.5 rounded-lg text-center font-medium bg-red-500/10 border border-red-500/20 text-red-400";
+                msg.innerText = "Please enter a valid password!";
+                msg.classList.remove("hidden");
+                return;
+            }
+            AUTH_PASS = newPass;
+            localStorage.setItem("suite_main_password", AUTH_PASS);
+            msg.className = "text-xs p-2.5 rounded-lg text-center font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400";
+            msg.innerText = "Main account password updated successfully!";
+            msg.classList.remove("hidden");
+            document.getElementById("new-main-password").value = "";
         }
 
         async function handleAddUserSubmit(e) {
@@ -2300,7 +2363,15 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            alert("Secure cloud authentication is unavailable. No local account will be created.");
+            if (username === AUTH_USER || additionalUsers.some(u => u.username === username)) {
+                alert("Username already exists or is reserved."); return;
+            }
+            additionalUsers.push({ username, password: upass, role });
+            localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
+            document.getElementById("new-user-name").value = "";
+            document.getElementById("new-user-pass").value = "";
+            if (roleEl) roleEl.value = "viewer";
+            renderSubUsersList();
         }
 
         async function renderSubUsersList() {
@@ -2342,7 +2413,18 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            container.innerHTML = `<p class="text-[11px] text-slate-500 italic">User management is available only through secure cloud authentication.</p>`;
+            if (additionalUsers.length === 0) {
+                container.innerHTML = `<p class="text-[11px] text-slate-500 italic">No custom user accounts added yet.</p>`;
+                return;
+            }
+            additionalUsers.forEach((usr, idx) => {
+                if (!usr || usr.username === AUTH_USER) return;
+                const isFull = (usr.role || "viewer") === "admin";
+                const item = document.createElement("div");
+                item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2 rounded-xl text-xs gap-2";
+                item.innerHTML = `<div class="min-w-0"><div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username)}</div><div class="text-[9px] ${isFull ? "text-emerald-400" : "text-amber-400"} ml-5 font-bold">${isFull ? "Full Access" : "View Only"}</div></div><div class="flex items-center gap-1"><button type="button" onclick="toggleSubUserRole(${idx})" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5" title="Change access"><i class="fa-solid fa-user-shield"></i></button><button type="button" onclick="deleteSubUser(${idx})" class="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5" title="Remove access"><i class="fa-solid fa-trash"></i></button></div>`;
+                container.appendChild(item);
+            });
         }
 
         async function openEditCloudUser(userId) {
@@ -2414,6 +2496,22 @@ window.addEventListener("cloudsync:status", (event) => {
             const result = await window.CloudAuth.setRole(userId, next);
             if (!result.ok) alert(result.error || "Unable to change role.");
             await renderSubUsersList();
+        }
+
+        function toggleSubUserRole(idx) {
+            if (!isAdminUser() || !additionalUsers[idx]) return;
+            additionalUsers[idx].role = (additionalUsers[idx].role || "viewer") === "admin" ? "viewer" : "admin";
+            localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
+            renderSubUsersList();
+        }
+
+        function deleteSubUser(idx) {
+            if (CURRENT_ROLE !== "admin") return;
+            if (confirm("Are you sure you want to remove access for this user?")) {
+                additionalUsers.splice(idx, 1);
+                localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
+                renderSubUsersList();
+            }
         }
 
         let currentPlant = "ALL";
@@ -2496,9 +2594,9 @@ window.addEventListener("cloudsync:status", (event) => {
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
             sessionStorage.removeItem("logged_access_pages");
-            window.CloudSync?.clearClientCache?.();
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
+            loadSavedUsers();
             checkAuth();
         };
 
@@ -2516,13 +2614,13 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function loadSavedStorage() {
-            const savedEq = sessionStorage.getItem("suite_equipment_data");
-            const savedDt = sessionStorage.getItem("suite_downtime_data");
-            const savedPr = sessionStorage.getItem("suite_projects_data");
-            const savedCats = sessionStorage.getItem("suite_equipment_categories");
-            const savedDtCats = sessionStorage.getItem("suite_downtime_categories");
-            const savedUptimeEqCats = sessionStorage.getItem("suite_uptime_equipment_categories");
-            const savedLineCats = sessionStorage.getItem("suite_line_categories");
+            const savedEq = localStorage.getItem("suite_equipment_data");
+            const savedDt = localStorage.getItem("suite_downtime_data");
+            const savedPr = localStorage.getItem("suite_projects_data");
+            const savedCats = localStorage.getItem("suite_equipment_categories");
+            const savedDtCats = localStorage.getItem("suite_downtime_categories");
+            const savedUptimeEqCats = localStorage.getItem("suite_uptime_equipment_categories");
+            const savedLineCats = localStorage.getItem("suite_line_categories");
 
             if (savedEq) equipmentList = JSON.parse(savedEq);
             if (savedDt) downtimeLogs = JSON.parse(savedDt);
@@ -2534,13 +2632,13 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function saveStorage() {
-            sessionStorage.setItem("suite_equipment_data", JSON.stringify(equipmentList));
-            sessionStorage.setItem("suite_downtime_data", JSON.stringify(downtimeLogs));
-            sessionStorage.setItem("suite_projects_data", JSON.stringify(projectsList));
-            sessionStorage.setItem("suite_equipment_categories", JSON.stringify(equipmentCategories));
-            sessionStorage.setItem("suite_downtime_categories", JSON.stringify(downtimeCategories));
-            sessionStorage.setItem("suite_uptime_equipment_categories", JSON.stringify(uptimeEquipmentCategories));
-            sessionStorage.setItem("suite_line_categories", JSON.stringify(lineCategories));
+            localStorage.setItem("suite_equipment_data", JSON.stringify(equipmentList));
+            localStorage.setItem("suite_downtime_data", JSON.stringify(downtimeLogs));
+            localStorage.setItem("suite_projects_data", JSON.stringify(projectsList));
+            localStorage.setItem("suite_equipment_categories", JSON.stringify(equipmentCategories));
+            localStorage.setItem("suite_downtime_categories", JSON.stringify(downtimeCategories));
+            localStorage.setItem("suite_uptime_equipment_categories", JSON.stringify(uptimeEquipmentCategories));
+            localStorage.setItem("suite_line_categories", JSON.stringify(lineCategories));
         }
 
         function escapeHtml(str) {
@@ -3162,17 +3260,30 @@ window.addEventListener("cloudsync:status", (event) => {
                 return {hrs,uptime};
             };
             const primaryCalib=calcCalib(filteredEq), compareCalib=isCompare?calcCalib(comparisonEq):null;
-            const calibChartIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
-            const calibChartPrimary = calibChartIgnoreFilter ? calcCalib(equipmentList) : primaryCalib;
-            const calibChartCompare = (!calibChartIgnoreFilter && isCompare) ? compareCalib : null;
-            window._summaryCompareCalib = calibChartCompare?.compliance || 0;
+            window._summaryCompareCalib = compareCalib?.compliance || 0;
             const primaryDown=calcDowntime(filteredDt), compareDown=isCompare?calcDowntime(comparisonDt):null;
             const calibCompliance=primaryCalib.compliance;
             const cDone=primaryCalib.done;
             const totalScheduledCalib=primaryCalib.scheduled;
             document.getElementById("summary-calib-compliance").innerText = `${calibCompliance}%`;
             document.getElementById("summary-projects-count").innerText = filteredPr.length;
-            document.getElementById("summary-availability-rate").innerText = `${primaryDown.uptime}%`;
+            const availabilityCtx = getAvailabilityPeriodContext();
+            const primaryAvailability = getAvailabilityValue(currentPlant || 'ALL', availabilityCtx.type, availabilityCtx.key, primaryDown.uptime);
+            const availabilityEl = document.getElementById("summary-availability-rate");
+            if (availabilityEl) availabilityEl.innerText = `${primaryAvailability}%`;
+            const availabilityEdit = document.getElementById("summary-availability-edit");
+            if (availabilityEdit) {
+                availabilityEdit.value = primaryAvailability;
+                availabilityEdit.classList.toggle("hidden", !isAdminUser());
+            }
+            const availabilitySource = document.getElementById("summary-availability-source");
+            if (availabilitySource) {
+                const hasManual = Object.prototype.hasOwnProperty.call(
+                    equipmentAvailabilitySettings,
+                    availabilitySettingKey(currentPlant || 'ALL', availabilityCtx.type, availabilityCtx.key)
+                );
+                availabilitySource.textContent = hasManual ? "Manual value" : "Calculated from downtime";
+            }
             document.getElementById("summary-uptime-rate").innerText = `${primaryDown.uptime}%`;
             document.getElementById("summary-dt-hours").innerText = `${primaryDown.hrs.toFixed(1)} hrs`;
             const mtbf = filteredDt.length > 0 ? (720 / filteredDt.length).toFixed(1) : "0";
@@ -3192,7 +3303,15 @@ window.addEventListener("cloudsync:status", (event) => {
                 if(relPrimary) relPrimary.innerHTML=`<strong class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}</strong><br>Downtime: <strong>${primaryDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${mtbf} hrs</strong> · MTTR: <strong>${mttr} mins</strong> · Uptime: <strong>${primaryDown.uptime}%</strong>`;
                 if(relCompare) relCompare.innerHTML=`<strong class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}</strong><br>Downtime: <strong>${compareDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${compareMtbf} hrs</strong> · MTTR: <strong>${compareMttr} mins</strong> · Uptime: <strong>${compareDown.uptime}%</strong>`;
             }
-            setCompare('summary-availability-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
+            const compareAvailabilityCtx = (compareType === 'compare-year')
+                ? { type: 'year', key: document.getElementById('summary-compare-year')?.value || 'ALL' }
+                : (compareType === 'compare-month')
+                    ? { type: 'month', key: document.getElementById('summary-compare-month')?.value || 'ALL' }
+                    : availabilityCtx;
+            const compareAvailability = isCompare
+                ? getAvailabilityValue(currentPlant || 'ALL', compareAvailabilityCtx.type, compareAvailabilityCtx.key, compareDown.uptime)
+                : 0;
+            setCompare('summary-availability-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryAvailability}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareAvailability}%` : '', isCompare);
             setCompare('summary-uptime-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
             setCompare('summary-calib-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryCalib.compliance}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareCalib.compliance}%` : '', isCompare);
             setCompare('summary-projects-compare', isCompare ? `${primaryValue || 'Date 1'}: ${filteredPr.length} &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${comparisonPr.length}` : '', isCompare);
@@ -3240,10 +3359,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 }).filter(Boolean).sort((a,b)=>b.lineTotal-a.lineTotal);
             };
             const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
-            const compareTopByLine = isCompare ? buildTopEquipmentByLine(comparisonDt) : [];
             const top5Body = document.getElementById("summary-top5-downtime-body");
             const top5PLabel = primaryValue || 'Selected Period';
-            const top5CLabel = compareValue || 'Comparison';
             const top5PrimaryEquipmentHead = document.getElementById("summary-top5-primary-equipment-head");
             const top5PrimaryFailureHead = document.getElementById("summary-top5-primary-failure-head");
             const top5PrimaryTimeHead = document.getElementById("summary-top5-primary-time-head");
@@ -3251,54 +3368,8 @@ window.addEventListener("cloudsync:status", (event) => {
             if (top5PrimaryFailureHead) top5PrimaryFailureHead.textContent = `${top5PLabel} — Failure Category`;
             if (top5PrimaryTimeHead) top5PrimaryTimeHead.textContent = `${top5PLabel} — Downtime`;
             top5Body.innerHTML = "";
-
-            // In comparison mode, show the same Line once and place Date 1 / Date 2
-            // equipment, failure category and downtime side-by-side. In single-period
-            // mode, keep the original compact four-column layout.
-            const top5HeadRow = document.querySelector('#summary-top5-downtime-body')?.closest('table')?.querySelector('thead tr');
-            if (top5HeadRow) {
-                const thead = top5HeadRow.parentNode;
-                const oldDynamicSub = thead.querySelector('tr.summary-top5-compare-subhead');
-                if (oldDynamicSub) oldDynamicSub.remove();
-                if (isCompare) {
-                    top5HeadRow.innerHTML = `
-                        <th class="py-1.5 px-2">Line Category</th>
-                        <th colspan="3" class="py-1.5 px-2 text-center text-amber-300 border-l border-slate-700/60">${escapeHtml(top5PLabel)}</th>
-                        <th colspan="3" class="py-1.5 px-2 text-center text-blue-300 border-l border-slate-700/60">${escapeHtml(top5CLabel)}</th>`;
-                    const subRow = document.createElement('tr');
-                    subRow.className = 'summary-top5-compare-subhead bg-slate-900/70 text-slate-500 text-[9px] uppercase';
-                    subRow.innerHTML = `<th class="py-1 px-2"></th><th class="py-1 px-2 border-l border-slate-700/60">Equipment</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th><th class="py-1 px-2 border-l border-slate-700/60">Equipment</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th>`;
-                    thead.appendChild(subRow);
-                } else {
-                    top5HeadRow.innerHTML = `
-                        <th class="py-1.5 px-2">Line Category</th>
-                        <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Equipment</th>
-                        <th id="summary-top5-primary-failure-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Failure Category</th>
-                        <th id="summary-top5-primary-time-head" class="py-2.5 px-3 text-center">${escapeHtml(top5PLabel)} — Downtime</th>`;
-                }
-            }
-
-            if (primaryTopByLine.length === 0 && (!isCompare || compareTopByLine.length === 0)) {
-                top5Body.innerHTML = `<tr><td colspan="${isCompare ? 7 : 4}" class="text-center py-4 text-slate-500 italic">No downtime records found for the selected period${isCompare ? 's' : ''}.</td></tr>`;
-            } else if (isCompare) {
-                const pMap = new Map(primaryTopByLine.map(x => [x.line, x]));
-                const cMap = new Map(compareTopByLine.map(x => [x.line, x]));
-                const lines = [...new Set([...primaryTopByLine.map(x => x.line), ...compareTopByLine.map(x => x.line)])]
-                    .sort((a,b) => Number(cMap.get(b)?.lineTotal || 0) + Number(pMap.get(b)?.lineTotal || 0) - Number(cMap.get(a)?.lineTotal || 0) - Number(pMap.get(a)?.lineTotal || 0));
-                lines.forEach(line => {
-                    const a = pMap.get(line), b = cMap.get(line);
-                    const tr = document.createElement('tr');
-                    tr.className = 'hover:bg-slate-800/50 transition align-top';
-                    const cell = (item, kind) => {
-                        if (!item) return kind === 'time' ? '<td class="py-2 px-2 text-center text-slate-600 border-l border-slate-700/40">—</td>' : '<td class="py-2 px-2 text-slate-600">—</td>';
-                        if (kind === 'time') return `<td class="py-2 px-2 text-center ${kind==='time'?'text-red-400 font-bold':''}">${Number(item.duration || 0).toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration || 0).toFixed(1)} hrs</div></td>`;
-                        if (kind === 'category') return `<td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>`;
-                        return `<td class="py-2 px-2 text-slate-200">${escapeHtml(item.equipment || '—')}</td>`;
-                    };
-                    const bEquipment = b ? `<td class="py-2 px-2 text-slate-200 border-l border-slate-700/40">${escapeHtml(b.equipment || '—')}</td>` : `<td class="py-2 px-2 text-slate-600 border-l border-slate-700/40">—</td>`;
-                    tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${escapeHtml(line)}</td>${cell(a,'equipment')}${cell(a,'category')}${cell(a,'time')}${bEquipment}${cell(b,'category')}${cell(b,'time')}`;
-                    top5Body.appendChild(tr);
-                });
+            if (primaryTopByLine.length === 0) {
+                top5Body.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-slate-500 italic">No downtime records found for ${escapeHtml(top5PLabel)}.</td></tr>`;
             } else {
                 primaryTopByLine.forEach(item => {
                     const tr = document.createElement("tr");
@@ -3367,17 +3438,10 @@ window.addEventListener("cloudsync:status", (event) => {
                 <div class="grid grid-cols-4 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">Done</span><span class="text-center">Scheduled Instruments</span><span class="text-center">Percent</span></div>
                 ${summaryPlants.map(p => { const d=calibByPlant[p]?.done||0; const sch=calibByPlant[p]?.scheduled||0; const pct=sch?((d/sch)*100).toFixed(0):'0'; return `<div class="grid grid-cols-4 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0"><span class="font-semibold text-white">${escapeHtml(p)}</span><strong class="text-center text-emerald-400">${d}</strong><span class="text-center text-slate-300">${sch}</span><span class="text-center text-blue-300">${pct}%</span></div>`; }).join('')}`;
 
-            // Overall project status totals for the selected period(s).
-            // These drive the Executive Summary Project Status & Progress chart.
-            const projectOverall = list => ({
-                "In Progress": list.filter(pr => String(pr.status || "").trim() === "In Progress").length,
-                Planning: list.filter(pr => String(pr.status || "").trim() === "Planning").length,
-                "On Hold": list.filter(pr => String(pr.status || "").trim() === "On Hold").length,
-                Completed: list.filter(pr => String(pr.status || "").trim() === "Completed").length
-            });
-            const projectChartIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
-            const projectOverallPrimary = projectChartIgnoreFilter ? projectOverall(projectsList) : projectOverall(filteredPr);
-            const projectOverallCompare = (!projectChartIgnoreFilter && isCompare) ? projectOverall(comparisonPr) : null;
+            const pInProgress = filteredPr.filter(pr => String(pr.status || "").trim() === "In Progress").length;
+            const pPlanning = filteredPr.filter(pr => String(pr.status || "").trim() === "Planning").length;
+            const pOnHold = filteredPr.filter(pr => String(pr.status || "").trim() === "On Hold").length;
+            const pCompleted = filteredPr.filter(pr => String(pr.status || "").trim() === "Completed").length;
 
             const projSupp = document.getElementById("summary-per-plant-projects");
             const projectViewAction = isPageAllowed("projects")
@@ -3398,41 +3462,22 @@ window.addEventListener("cloudsync:status", (event) => {
             const relBox = document.getElementById('summary-reliability-comparison');
             if (relBox) relBox.classList.toggle('hidden', !isCompare);
 
-            // Render summary charts. Project Status & Progress is an OVERALL summary
-            // of the selected period. In comparison mode, the two periods are shown side-by-side.
-            renderSummaryCharts(calibChartPrimary.done, Math.max(0, calibChartPrimary.scheduled - calibChartPrimary.done), projectOverallPrimary, projectOverallCompare, sortedLinePareto, currentPlant, paretoComparison, projectChartIgnoreFilter, calibChartIgnoreFilter, calibChartCompare);
+            // Render summary charts. Project chart receives per-plant counts so the main plant filter
+            // can show only the selected plant.
+            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectByPlant, sortedLinePareto, currentPlant, paretoComparison);
         }
 
-        function renderSummaryCharts(cDone, cRemaining, projectOverallPrimary, projectOverallCompare, sortedLinePareto, selectedPlant, paretoComparison, projectChartIgnoreFilter=false, calibChartIgnoreFilter=true, calibChartCompare=null) {
+        function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison) {
             const calibCanvas=document.getElementById('chart-summary-calib'), projCanvas=document.getElementById('chart-summary-projects'), paretoCanvas=document.getElementById('chart-summary-pareto');
             if(!calibCanvas||!projCanvas||!paretoCanvas||typeof Chart==='undefined') return;
             const isCompare=paretoComparison && paretoComparison.mode!=='single';
-
             if(chartSummaryCalib) chartSummaryCalib.destroy();
-            const calibIsCompare = !calibChartIgnoreFilter && !!calibChartCompare && isCompare;
-            chartSummaryCalib=new Chart(calibCanvas.getContext('2d'),{type:calibIsCompare?'bar':'doughnut',data:calibIsCompare?{labels:[paretoComparison.primaryLabel,paretoComparison.compareLabel],datasets:[{label:'Completed',data:[cDone,Number(calibChartCompare?.done||0)],backgroundColor:['#22c55e','#60a5fa']}] }:{labels:['DONE','REMAINING'],datasets:[{data:[cDone,cRemaining],backgroundColor:['#22c55e','#334155'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label||ctx.label}: ${ctx.raw}`}}},scales:calibIsCompare?{x:{ticks:{font:{size:11},color:'#cbd5e1'}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'}}}:undefined}});
+            chartSummaryCalib=new Chart(calibCanvas.getContext('2d'),{type:isCompare?'bar':'doughnut',data:isCompare?{labels:[paretoComparison.primaryLabel,paretoComparison.compareLabel],datasets:[{label:'Completed',data:[cDone,Number(window._summaryCompareCalib||0)],backgroundColor:'#22c55e'}]}:{labels:['DONE','REMAINING'],datasets:[{data:[cDone,cRemaining],backgroundColor:['#22c55e','#334155'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label||ctx.label}: ${ctx.raw}`}}},scales:isCompare?{x:{ticks:{font:{size:11},color:'#cbd5e1'}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'}}}:undefined}});
 
-            // PROJECT STATUS & PROGRESS — doughnut chart.
-            // It follows the selected filters unless Ignore Filters is enabled.
+            const allPlants=['Plant 1','Plant 2','PreMix']; const chartPlants=selectedPlant&&selectedPlant!=='ALL'?allPlants.filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)):allPlants;
             if(chartSummaryProjects) chartSummaryProjects.destroy();
-            const statusLabels=['In Progress','Planning','On Hold','Completed'];
-            const primaryProjectValues=statusLabels.map(k=>Number(projectOverallPrimary?.[k]||0));
-            const projectIsCompare = !projectChartIgnoreFilter && !!projectOverallCompare && paretoComparison?.mode!=='single';
-            const compareProjectValues=projectIsCompare?statusLabels.map(k=>Number(projectOverallCompare?.[k]||0)):[];
-            const projectPieLabels=projectIsCompare
-                ? statusLabels.flatMap(label=>[`${paretoComparison.primaryLabel} — ${label}`,`${paretoComparison.compareLabel} — ${label}`])
-                : statusLabels;
-            const projectPieValues=projectIsCompare
-                ? statusLabels.flatMap((_,i)=>[primaryProjectValues[i],compareProjectValues[i]])
-                : primaryProjectValues;
-            const projectPieColors=projectIsCompare
-                ? statusLabels.flatMap((_,i)=>[['#3b82f6','#60a5fa'],['#eab308','#facc15'],['#ef4444','#f87171'],['#22c55e','#4ade80']][i])
-                : ['#3b82f6','#eab308','#ef4444','#22c55e'];
-            chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{
-                type:'doughnut',
-                data:{labels:projectPieLabels,datasets:[{data:projectPieValues,backgroundColor:projectPieColors,borderColor:'#1e293b',borderWidth:2,hoverOffset:4}]},
-                options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:6,font:{size:8},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}`}}}}
-            });
+            chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{type:'bar',data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets:[{label:'In Progress',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.['In Progress']||0)),backgroundColor:'#3b82f6'},{label:'Planning',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.Planning||0)),backgroundColor:'#eab308'},{label:'On Hold',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.['On Hold']||0)),backgroundColor:'#ef4444'},{label:'Completed',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.Completed||0)),backgroundColor:'#22c55e'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:7,font:{size:9},color:'#cbd5e1'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1}}}}});
+
             if(chartSummaryPareto) chartSummaryPareto.destroy();
             const p=paretoComparison.primary||[], c=paretoComparison.compare||[];
             const labels=p.map((x,i)=>[x.equipment||x.label||'—',x.line||'',isCompare&&c[i]?`vs ${c[i].equipment||'—'}`:'']);
@@ -4553,27 +4598,205 @@ window.addEventListener("cloudsync:status", (event) => {
             }
         }
 
+
+        // --- EQUIPMENT AVAILABILITY MANUAL OVERRIDE ---
+        // The manual value is stored in Supabase so it survives refresh/login.
+        // If no manual value exists for the selected plant/period, the dashboard
+        // falls back to the calculated availability from downtime records.
+        let equipmentAvailabilitySettings = {};
+
+        function availabilitySettingKey(plant, filterType, periodKey) {
+            return `${plant || 'ALL'}|${filterType || 'all'}|${periodKey || 'ALL'}`;
+        }
+
+        function getAvailabilityPeriodContext() {
+            const type = document.getElementById('summary-filter-type')?.value || 'all';
+            const year = document.getElementById('summary-year-filter')?.value || '';
+            const month = document.getElementById('summary-month-filter')?.value || '';
+            if (type === 'year') return { type: 'year', key: year || 'ALL' };
+            if (type === 'month') return { type: 'month', key: month || 'ALL' };
+            if (type === 'compare-year') return { type: 'year', key: year || 'ALL' };
+            if (type === 'compare-month') return { type: 'month', key: month || 'ALL' };
+            return { type: 'all', key: 'ALL' };
+        }
+
+        function getAvailabilityValue(plant, filterType, periodKey, fallback) {
+            const key = availabilitySettingKey(plant, filterType, periodKey);
+            const value = equipmentAvailabilitySettings[key];
+            return Number.isFinite(Number(value)) ? Number(value) : Number(fallback);
+        }
+
+        async function loadEquipmentAvailabilitySettings() {
+            equipmentAvailabilitySettings = {};
+            try {
+                const client = window.CloudAuth?.getClient?.();
+                if (!client) return;
+                const { data, error } = await client
+                    .from('equipment_availability_settings')
+                    .select('plant,filter_type,period_key,availability_percent')
+                    .eq('app_id', window.CLOUD_CONFIG.appId);
+                if (error) {
+                    console.warn('Equipment availability settings:', error);
+                    return;
+                }
+                (data || []).forEach(row => {
+                    equipmentAvailabilitySettings[
+                        availabilitySettingKey(row.plant, row.filter_type, row.period_key)
+                    ] = Number(row.availability_percent);
+                });
+            } catch (e) {
+                console.warn('Equipment availability settings:', e);
+            }
+        }
+
+        async function saveEquipmentAvailabilityPercent(value) {
+            if (!isAdminUser()) return;
+            const num = Number(value);
+            if (!Number.isFinite(num) || num < 0 || num > 100) {
+                alert('Equipment Availability must be between 0 and 100%.');
+                renderSummaryModule();
+                return;
+            }
+
+            const ctx = getAvailabilityPeriodContext();
+            const plant = currentPlant || 'ALL';
+            const key = availabilitySettingKey(plant, ctx.type, ctx.key);
+            const client = window.CloudAuth?.getClient?.();
+
+            if (!client) {
+                alert('Cloud connection is not available. The value was not saved.');
+                return;
+            }
+
+            const { error } = await client
+                .from('equipment_availability_settings')
+                .upsert({
+                    app_id: window.CLOUD_CONFIG.appId,
+                    plant,
+                    filter_type: ctx.type,
+                    period_key: ctx.key,
+                    availability_percent: Number(num.toFixed(1)),
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'app_id,plant,filter_type,period_key' });
+
+            if (error) {
+                console.error(error);
+                alert('Equipment Availability could not be saved. Please verify the security SQL has been run.');
+                return;
+            }
+
+            equipmentAvailabilitySettings[key] = Number(num.toFixed(1));
+            renderSummaryModule();
+        }
+
         // --- EXPORT & REPORT UTILITIES ---
+        // --- SCREEN-FAITHFUL PDF EXPORT ---
+        // Captures the rendered dashboard instead of forcing the browser's
+        // print layout. The export keeps the original visual appearance,
+        // measures the complete overview height automatically, and lets the
+        // PDF engine create as many A4 landscape pages as the content needs.
+        function reportFileStamp() {
+            const d = new Date();
+            return d.toISOString().slice(0,10);
+        }
+
+        async function captureReportPDF(targetId, filename) {
+            const target = document.getElementById(targetId);
+            if (!target || typeof html2pdf === 'undefined') {
+                // Safe fallback if the library is unavailable.
+                document.body.className = `bg-slate-900 text-slate-100 min-h-screen flex flex-col ${targetId === 'module-summary' ? 'print-summary' : ''}`;
+                setTimeout(() => window.print(), 200);
+                return;
+            }
+
+            const oldScrollY = window.scrollY;
+            const oldOverflow = document.body.style.overflow;
+            const oldTargetStyle = target.getAttribute('style');
+            const oldClass = target.className;
+
+            try {
+                // Give charts one animation frame to finish before capture.
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+                // Temporarily make the report use its natural full height.
+                target.classList.add('report-capture');
+                target.style.height = 'auto';
+                target.style.maxHeight = 'none';
+                target.style.overflow = 'visible';
+                document.body.style.overflow = 'visible';
+                window.scrollTo(0, 0);
+
+                // Hide only controls marked no-print; the dashboard itself is
+                // otherwise captured exactly as it appears on screen.
+                const hidden = [];
+                target.querySelectorAll('.no-print').forEach(el => {
+                    hidden.push([el, el.style.display]);
+                    el.style.display = 'none';
+                });
+
+                await new Promise(resolve => setTimeout(resolve, 150));
+
+                const opt = {
+                    margin: [8, 8, 8, 8],
+                    filename: filename,
+                    image: { type: 'jpeg', quality: 0.96 },
+                    html2canvas: {
+                        scale: Math.min(2, Math.max(1.35, window.devicePixelRatio || 1.5)),
+                        useCORS: true,
+                        backgroundColor: '#0f172a',
+                        logging: false,
+                        scrollX: 0,
+                        scrollY: 0,
+                        windowWidth: Math.max(target.scrollWidth, 1200),
+                        windowHeight: target.scrollHeight + 40
+                    },
+                    jsPDF: {
+                        unit: 'mm',
+                        format: 'a4',
+                        orientation: 'landscape',
+                        compress: true
+                    },
+                    pagebreak: {
+                        mode: ['css', 'legacy'],
+                        avoid: ['.report-card', '.bg-slate-800', 'table', 'tr', 'canvas']
+                    }
+                };
+
+                await html2pdf().set(opt).from(target).save();
+
+                hidden.forEach(([el, display]) => { el.style.display = display; });
+            } catch (err) {
+                console.error('PDF export failed:', err);
+                alert('PDF export failed. Please try again.');
+            } finally {
+                if (oldTargetStyle === null) target.removeAttribute('style');
+                else target.setAttribute('style', oldTargetStyle);
+                target.className = oldClass;
+                document.body.style.overflow = oldOverflow;
+                window.scrollTo(0, oldScrollY);
+            }
+        }
+
         function exportSummaryPDF() {
-            document.body.className = "bg-slate-900 text-slate-100 min-h-screen flex flex-col print-summary";
-            setTimeout(() => {
-                window.print();
-                document.body.className = "bg-slate-900 text-slate-100 min-h-screen flex flex-col";
-            }, 300);
+            captureReportPDF('module-summary', `PASDASHBOARD_Executive_Summary_${reportFileStamp()}.pdf`);
         }
 
         function exportModuleReportWithGraph(modName) {
-            const modClasses = {
-                "calibration": "print-calibration",
-                "uptime": "print-uptime",
-                "calendar": "print-calendar",
-                "projects": "print-projects"
+            const ids = {
+                calibration: 'module-calibration',
+                uptime: 'module-uptime',
+                calendar: 'module-calendar',
+                projects: 'module-projects'
             };
-            document.body.className = `bg-slate-900 text-slate-100 min-h-screen flex flex-col ${modClasses[modName] || ''}`;
-            setTimeout(() => {
-                window.print();
-                document.body.className = "bg-slate-900 text-slate-100 min-h-screen flex flex-col";
-            }, 300);
+            const names = {
+                calibration: 'Calibration_Report',
+                uptime: 'Uptime_Downtime_Report',
+                calendar: 'Calibration_Calendar_Report',
+                projects: 'Automation_Projects_Report'
+            };
+            const id = ids[modName];
+            if (!id) return;
+            captureReportPDF(id, `PASDASHBOARD_${names[modName]}_${reportFileStamp()}.pdf`);
         }
 
         function downloadModuleExcel(modName) {
