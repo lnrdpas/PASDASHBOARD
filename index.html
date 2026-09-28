@@ -906,16 +906,6 @@ window.addEventListener("cloudsync:status", (event) => {
             display: none !important;
         }
     </style>
-
-<style id="pasd-filter-visibility-fix">
-  #module-calibration select, #module-calibration input[type="date"], #module-calibration input[type="month"],
-  #module-projects select, #module-projects input[type="date"], #module-projects input[type="month"] { color:#f8fafc !important; background-color:#0f172a !important; color-scheme:dark; }
-  #module-calibration select option, #module-projects select option { background:#0f172a !important; color:#f8fafc !important; }
-  #module-calibration .bg-white, #module-projects .bg-white { background-color:#1e293b !important; }
-  #projects-overall-comparison .period-divider { border-right:2px solid rgba(34,211,238,.35); }
-  #downtime-comparison-details { background:rgba(15,23,42,.35); }
-</style>
-
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
 
@@ -1123,7 +1113,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="chart-box-container">
                             <canvas id="chart-summary-projects"></canvas>
                         </div>
-                        <div id="summary-project-date-indicator" class="text-center text-[10px] font-semibold text-slate-300 bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-1.5">Year: All Dates</div>
+                        <p id="summary-project-date-note" class="text-[10px] text-center font-semibold text-slate-400">Selected Period • Area / Plant</p>
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
@@ -1201,7 +1191,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                     <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
 
                                 </div>
-                                <div id="summary-top5-tables" class="space-y-2">
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
                                 <div class="overflow-x-auto rounded-xl border border-slate-700/50">
                                     <table class="w-full text-left text-xs text-slate-300">
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
@@ -1585,23 +1575,6 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                 </div>
 
-                <div id="downtime-comparison-details" class="hidden mt-3 pt-3 border-t-2 border-cyan-500/30">
-                        <div class="flex items-center justify-between mb-2">
-                            <h4 class="text-xs font-bold text-cyan-300 uppercase tracking-wider"><i class="fa-solid fa-code-compare mr-1"></i> Downtime Details — Date vs Date</h4>
-                            <span id="downtime-comparison-label" class="text-[10px] text-slate-400"></span>
-                        </div>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-slate-700/60 rounded-xl overflow-hidden">
-                            <div class="min-w-0 lg:border-r-2 lg:border-cyan-500/30">
-                                <div id="downtime-primary-detail-title" class="bg-amber-500/10 text-amber-300 font-bold text-[10px] uppercase px-3 py-2 border-b border-slate-700/60"></div>
-                                <div class="overflow-x-auto"><table class="w-full text-left text-[10px] text-slate-300"><thead class="bg-slate-900/90 text-slate-500 uppercase"><tr><th class="px-2 py-2">Line</th><th class="px-2 py-2">Equipment</th><th class="px-2 py-2">Failure</th><th class="px-2 py-2 text-center">Downtime</th></tr></thead><tbody id="downtime-primary-detail-body" class="divide-y divide-slate-700/40"></tbody></table></div>
-                            </div>
-                            <div class="min-w-0">
-                                <div id="downtime-compare-detail-title" class="bg-blue-500/10 text-blue-300 font-bold text-[10px] uppercase px-3 py-2 border-b border-slate-700/60"></div>
-                                <div class="overflow-x-auto"><table class="w-full text-left text-[10px] text-slate-300"><thead class="bg-slate-900/90 text-slate-500 uppercase"><tr><th class="px-2 py-2">Line</th><th class="px-2 py-2">Equipment</th><th class="px-2 py-2">Failure</th><th class="px-2 py-2 text-center">Downtime</th></tr></thead><tbody id="downtime-compare-detail-body" class="divide-y divide-slate-700/40"></tbody></table></div>
-                            </div>
-                        </div>
-                    </div>
-
                 <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl space-y-3">
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
                         <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Historical Downtime Records</h3>
@@ -1625,8 +1598,6 @@ window.addEventListener("cloudsync:status", (event) => {
                             </thead>
                             <tbody id="downtime-table-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
                         </table>
-
-                    
                     </div>
                 </div>
             </section>
@@ -1715,15 +1686,11 @@ window.addEventListener("cloudsync:status", (event) => {
                             <select id="projects-compare-type" onchange="onProjectsCompareChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
                                 <option value="NONE">Off</option>
                                 <option value="YEAR">Year vs Year</option>
-                                <option value="CUSTOM_YEAR">Custom Year vs Year</option>
                                 <option value="MONTH">Month vs Month</option>
                                 <option value="DATE">Date vs Date</option>
                             </select>
                             <select id="projects-compare-year-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1"></select>
                             <select id="projects-compare-year-2" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1"></select>
-                            <input type="number" id="projects-compare-custom-year-1" min="2000" max="2100" placeholder="Year 1" oninput="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 w-20">
-                            <span id="projects-compare-custom-vs" class="hidden text-slate-400 font-bold">vs</span>
-                            <input type="number" id="projects-compare-custom-year-2" min="2000" max="2100" placeholder="Year 2" oninput="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 w-20">
                             <input type="month" id="projects-compare-month-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
                             <input type="month" id="projects-compare-month-2" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
                             <input type="date" id="projects-compare-date-1" onchange="renderProjectsModule()" class="hidden bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1">
@@ -1752,7 +1719,6 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="chart-box-container" style="height: 235px !important; max-height: 235px !important;">
                         <canvas id="chart-projects-mill"></canvas>
                     </div>
-                    <div id="projects-chart-date-indicator" class="text-center text-[10px] font-semibold text-slate-300 bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-1.5">Date: All Dates</div>
                 </div>
 
                 <div id="projects-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
@@ -3436,7 +3402,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            const top5Tables = document.getElementById('summary-top5-tables');
             const compareTopWrap = document.getElementById('summary-top5-compare-wrap');
             const compareTopBody = document.getElementById('summary-top5-compare-body');
             const compareTopEquipmentHead = document.getElementById('summary-top5-compare-equipment-head');
@@ -3444,12 +3409,6 @@ window.addEventListener("cloudsync:status", (event) => {
             const compareTopTimeHead = document.getElementById('summary-top5-compare-time-head');
             if (compareTopWrap && compareTopBody) {
                 compareTopWrap.classList.toggle('hidden', !isCompare);
-                if (top5Tables) {
-                    top5Tables.classList.toggle('grid', isCompare);
-                    top5Tables.classList.toggle('grid-cols-1', isCompare);
-                    top5Tables.classList.toggle('lg:grid-cols-2', isCompare);
-                    top5Tables.classList.toggle('gap-2', isCompare);
-                }
                 if (isCompare) {
                     const compareTopByLine = buildTopEquipmentByLine(comparisonDt);
                     if (compareTopEquipmentHead) compareTopEquipmentHead.textContent = `${compareValue || 'Date 2'} — Equipment`;
@@ -3556,24 +3515,18 @@ window.addEventListener("cloudsync:status", (event) => {
             const projectColors = ['#3b82f6','#eab308','#ef4444','#22c55e'];
             const projectDatasets = [];
             if(projectCompareMode){
+                // Same visual structure as Project Distribution & Progress per Mill:
+                // each Area/Plant has a stacked Date 1 bar and a stacked Date 2 bar.
                 projectStatuses.forEach((st,idx)=>{
-                    projectDatasets.push({label:`${st} — ${paretoComparison.primaryLabel}`,data:chartPlants.map(p=>Number(projectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx],stack:'primary'});
-                    projectDatasets.push({label:`${st} — ${paretoComparison.compareLabel}`,data:chartPlants.map(p=>Number(compareProjectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx],stack:'compare',borderWidth:1,borderColor:'#0f172a'});
+                    projectDatasets.push({label:`${st} — ${paretoComparison.primaryLabel}`,data:chartPlants.map(p=>Number(projectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx],stack:'date1',borderRadius:3});
+                    projectDatasets.push({label:`${st} — ${paretoComparison.compareLabel}`,data:chartPlants.map(p=>Number(compareProjectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx],stack:'date2',borderRadius:3,borderWidth:1,borderColor:'#0f172a'});
                 });
             } else {
-                projectStatuses.forEach((st,idx)=>projectDatasets.push({label:st,data:chartPlants.map(p=>Number(projectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx]}));
-            }
-            const summaryProjectDateIndicator=document.getElementById('summary-project-date-indicator');
-            if(summaryProjectDateIndicator){
-                if(projectCompareMode){
-                    summaryProjectDateIndicator.textContent=`Year: ${paretoComparison.primaryLabel}  vs  ${paretoComparison.compareLabel}`;
-                } else if(paretoComparison && paretoComparison.primaryLabel){
-                    summaryProjectDateIndicator.textContent=`Year: ${paretoComparison.primaryLabel}`;
-                } else {
-                    summaryProjectDateIndicator.textContent='Year: All Dates';
-                }
+                projectStatuses.forEach((st,idx)=>projectDatasets.push({label:st,data:chartPlants.map(p=>Number(projectByPlant?.[p]?.[st]||0)),backgroundColor:projectColors[idx],stack:'single',borderRadius:3}));
             }
             chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{type:'bar',data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets:projectDatasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:5,font:{size:8},color:'#cbd5e1'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1}}}}});
+            const summaryProjectDateNote=document.getElementById('summary-project-date-note');
+            if(summaryProjectDateNote){summaryProjectDateNote.textContent=projectCompareMode?`${paretoComparison.primaryLabel}  vs  ${paretoComparison.compareLabel}  •  Area / Plant`:((paretoComparison?.primaryLabel||'Selected Period')+'  •  Area / Plant');}
 
             if(chartSummaryPareto) chartSummaryPareto.destroy();
             const p=paretoComparison.primary||[], c=paretoComparison.compare||[];
@@ -4203,26 +4156,6 @@ window.addEventListener("cloudsync:status", (event) => {
             const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[]; let total=pd.reduce((a,b)=>a+b,0)+(isCompare?cd.reduce((a,b)=>a+b,0):0),run=0;const cpct=pp.map((x,i)=>{run+=pd[i]+(isCompare?cd[i]:0);return total?Number((run/total*100).toFixed(1)):0;});
             const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];ds.push({type:'line',label:'Cumulative %',data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'});
             chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].line} — ${pp[i].equipment} | vs ${cc[i].line} — ${cc[i].equipment}`:`${pp[i].line} — ${pp[i].equipment}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
-            const dtCompareBox=document.getElementById('downtime-comparison-details');
-            if(dtCompareBox){
-                dtCompareBox.classList.toggle('hidden', !isCompare);
-                if(isCompare){
-                    const dur=x=>Math.max(0,(new Date(x.end)-new Date(x.start))/3600000);
-                    const rows=list=>{
-                        const map={};
-                        (list||[]).forEach(x=>{const k=`${x.line||'Unclassified'}|||${x.equipment||'Unclassified'}|||${x.category||'Unclassified'}`;map[k]=(map[k]||0)+dur(x);});
-                        return Object.entries(map).map(([k,h])=>{const [line,equipment,category]=k.split('|||');return {line,equipment,category,h};}).sort((a,b)=>b.h-a.h);
-                    };
-                    const aRows=rows(primaryLogs), bRows=rows(compareLogs);
-                    const renderRows=list=>list.length?list.map(x=>`<tr><td class="px-2 py-1.5 text-white font-semibold">${escapeHtml(x.line)}</td><td class="px-2 py-1.5 text-slate-200">${escapeHtml(x.equipment)}</td><td class="px-2 py-1.5"><span class="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded">${escapeHtml(x.category)}</span></td><td class="px-2 py-1.5 text-center text-red-400 font-bold">${x.h.toFixed(1)} h</td></tr>`).join(''):`<tr><td colspan="4" class="py-4 text-center text-slate-500 italic">No downtime records.</td></tr>`;
-                    document.getElementById('downtime-comparison-label').textContent=`${primaryValue||'Date 1'} vs ${compareValue||'Date 2'}`;
-                    document.getElementById('downtime-primary-detail-title').textContent=`${primaryValue||'Date 1'} — ${aRows.length} line/equipment combinations`;
-                    document.getElementById('downtime-compare-detail-title').textContent=`${compareValue||'Date 2'} — ${bRows.length} line/equipment combinations`;
-                    document.getElementById('downtime-primary-detail-body').innerHTML=renderRows(aRows);
-                    document.getElementById('downtime-compare-detail-body').innerHTML=renderRows(bRows);
-                }
-            }
-
             const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto — ${primaryValue} vs ${compareValue}`:`Downtime Pareto — ${primaryValue||'All Time'}`;
         }
 
@@ -4580,15 +4513,14 @@ window.addEventListener("cloudsync:status", (event) => {
         function onProjectsCompareChange(){
             populateProjectsCompareYears();
             const type=document.getElementById('projects-compare-type')?.value||'NONE';
-            ['projects-compare-year-1','projects-compare-year-2','projects-compare-custom-year-1','projects-compare-custom-year-2','projects-compare-custom-vs','projects-compare-month-1','projects-compare-month-2','projects-compare-date-1','projects-compare-date-2'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
+            ['projects-compare-year-1','projects-compare-year-2','projects-compare-month-1','projects-compare-month-2','projects-compare-date-1','projects-compare-date-2'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
             if(type==='YEAR'){document.getElementById('projects-compare-year-1')?.classList.remove('hidden');document.getElementById('projects-compare-year-2')?.classList.remove('hidden');}
-            if(type==='CUSTOM_YEAR'){document.getElementById('projects-compare-custom-year-1')?.classList.remove('hidden');document.getElementById('projects-compare-custom-vs')?.classList.remove('hidden');document.getElementById('projects-compare-custom-year-2')?.classList.remove('hidden');}
             if(type==='MONTH'){document.getElementById('projects-compare-month-1')?.classList.remove('hidden');document.getElementById('projects-compare-month-2')?.classList.remove('hidden');}
             if(type==='DATE'){document.getElementById('projects-compare-date-1')?.classList.remove('hidden');document.getElementById('projects-compare-date-2')?.classList.remove('hidden');}
             renderProjectsModule();
         }
         function filterProjectsForPeriod(periodType,value){
-            return projectsList.filter(pr=>{if(currentPlant!=="ALL"&&normalizePlant(pr.plant)!==normalizePlant(currentPlant))return false;const d=String(pr.date||'').slice(0,10);if(periodType==='YEAR'||periodType==='CUSTOM_YEAR')return d.startsWith(String(value));if(periodType==='MONTH')return d.startsWith(String(value));if(periodType==='DATE')return d===String(value);return true;});
+            return projectsList.filter(pr=>{if(currentPlant!=="ALL"&&normalizePlant(pr.plant)!==normalizePlant(currentPlant))return false;const d=String(pr.date||'').slice(0,10);if(periodType==='YEAR')return d.startsWith(String(value));if(periodType==='MONTH')return d.startsWith(String(value));if(periodType==='DATE')return d===String(value);return true;});
         }
         function projectStatusCounts(list){const o={"In Progress":0,Planning:0,"On Hold":0,Completed:0};(list||[]).forEach(pr=>{const st=String(pr.status||'Planning').trim();if(o[st]!==undefined)o[st]++;});return o;}
 
@@ -4602,16 +4534,6 @@ window.addEventListener("cloudsync:status", (event) => {
             const toFilter = document.getElementById("projects-date-to")?.value || '';
             const dateText = type === 'YEAR' ? `Year: ${yearFilter}` : type === 'MONTH' ? `Month: ${monthFilter || '—'}` : type === 'RANGE' ? `Range: ${fromFilter || '—'} to ${toFilter || '—'}` : 'All Dates';
             document.getElementById("projects-chart-year-badge").innerText = dateText;
-            const projectDateIndicator=document.getElementById('projects-chart-date-indicator');
-            if(projectDateIndicator){
-                const cmp=document.getElementById('projects-compare-type')?.value||'NONE';
-                let cmpText='';
-                if(cmp==='YEAR') cmpText=`${document.getElementById('projects-compare-year-1')?.value||'Year 1'} vs ${document.getElementById('projects-compare-year-2')?.value||'Year 2'}`;
-                else if(cmp==='CUSTOM_YEAR') cmpText=`${document.getElementById('projects-compare-custom-year-1')?.value||'Year 1'} vs ${document.getElementById('projects-compare-custom-year-2')?.value||'Year 2'}`;
-                else if(cmp==='MONTH') cmpText=`${document.getElementById('projects-compare-month-1')?.value||'Month 1'} vs ${document.getElementById('projects-compare-month-2')?.value||'Month 2'}`;
-                else if(cmp==='DATE') cmpText=`${document.getElementById('projects-compare-date-1')?.value||'Date 1'} vs ${document.getElementById('projects-compare-date-2')?.value||'Date 2'}`;
-                projectDateIndicator.textContent=cmp!=='NONE'?`Year Comparison: ${cmpText}`:(type==='YEAR'?`Year: ${yearFilter}`:type==='MONTH'?`Month: ${monthFilter || '—'}`:type==='RANGE'?`Date Range: ${fromFilter || '—'} to ${toFilter || '—'}`:'Year: All Dates');
-            }
 
             const filtered = projectsList.filter(pr => {
                 if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
@@ -4641,7 +4563,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     const tm = syncProjectTimelineProgress(pr);
                     const computed = tm.timelineProgress == null ? Number(pr.progress || 0) : tm.timelineProgress;
                     const card = document.createElement("div");
-                    card.className = "bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between space-y-4 shadow-lg text-slate-200";
+                    card.className = "bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between space-y-4 shadow-lg";
                     card.innerHTML = `
                         <div class="space-y-2">
                             <div class="flex items-start justify-between gap-2">
@@ -4673,12 +4595,12 @@ window.addEventListener("cloudsync:status", (event) => {
             if(!comparePanel){ comparePanel=document.createElement('div'); comparePanel.id=comparePanelId; comparePanel.className='bg-slate-800/90 border border-cyan-500/20 p-3 rounded-xl space-y-3'; container.parentElement.insertBefore(comparePanel, container); }
             if(compareType==='NONE'){ comparePanel.classList.add('hidden'); comparePanel.innerHTML=''; } else {
                 comparePanel.classList.remove('hidden');
-                const aType=compareType==='YEAR'?'YEAR':compareType==='CUSTOM_YEAR'?'CUSTOM_YEAR':compareType==='MONTH'?'MONTH':'DATE';
-                const aVal=compareType==='YEAR'?document.getElementById('projects-compare-year-1')?.value:compareType==='CUSTOM_YEAR'?document.getElementById('projects-compare-custom-year-1')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-1')?.value:document.getElementById('projects-compare-date-1')?.value;
-                const bVal=compareType==='YEAR'?document.getElementById('projects-compare-year-2')?.value:compareType==='CUSTOM_YEAR'?document.getElementById('projects-compare-custom-year-2')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-2')?.value:document.getElementById('projects-compare-date-2')?.value;
+                const aType=compareType==='YEAR'?'YEAR':compareType==='MONTH'?'MONTH':'DATE';
+                const aVal=compareType==='YEAR'?document.getElementById('projects-compare-year-1')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-1')?.value:document.getElementById('projects-compare-date-1')?.value;
+                const bVal=compareType==='YEAR'?document.getElementById('projects-compare-year-2')?.value:compareType==='MONTH'?document.getElementById('projects-compare-month-2')?.value:document.getElementById('projects-compare-date-2')?.value;
                 const a=filterProjectsForPeriod(aType,aVal), b=filterProjectsForPeriod(aType,bVal), ac=projectStatusCounts(a), bc=projectStatusCounts(b);
                 const rows=(list,label)=>list.length?list.map(pr=>`<tr class="border-b border-slate-700/30"><td class="py-1.5 px-2 font-semibold text-white">${escapeHtml(pr.plant)}</td><td class="py-1.5 px-2">${escapeHtml(pr.title)}</td><td class="py-1.5 px-2 text-cyan-300">${Number(pr.progress||0)}%</td><td class="py-1.5 px-2">${escapeHtml(pr.status||'Planning')}</td><td class="py-1.5 px-2 text-slate-400">${escapeHtml(pr.date||'—')}</td></tr>`).join(''):`<tr><td colspan="5" class="py-4 text-center text-slate-500 italic">No projects for ${escapeHtml(label)}.</td></tr>`;
-                comparePanel.innerHTML=`<div class="flex items-center justify-between"><h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i> Overall Project Comparison</h4><span class="text-[10px] text-slate-400">${escapeHtml(aVal||'Date 1')} vs ${escapeHtml(bVal||'Date 2')}</span></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-slate-700/60 rounded-xl overflow-hidden"><div class="period-divider bg-slate-900/60 p-2"><div class="text-[10px] font-bold text-amber-300 mb-2">${escapeHtml(aVal||'Date 1')} — ${a.length} Projects</div><div class="grid grid-cols-4 gap-1 text-[9px] mb-2"><span>In Progress <b>${ac['In Progress']}</b></span><span>Planning <b>${ac.Planning}</b></span><span>On Hold <b>${ac['On Hold']}</b></span><span>Completed <b>${ac.Completed}</b></span></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 uppercase"><tr><th class="text-left">Plant</th><th class="text-left">Project</th><th>Progress</th><th>Status</th><th>Target</th></tr></thead><tbody>${rows(a,aVal)}</tbody></table></div></div><div class="bg-slate-900/60 p-2"><div class="text-[10px] font-bold text-blue-300 mb-2">${escapeHtml(bVal||'Date 2')} — ${b.length} Projects</div><div class="grid grid-cols-4 gap-1 text-[9px] mb-2"><span>In Progress <b>${bc['In Progress']}</b></span><span>Planning <b>${bc.Planning}</b></span><span>On Hold <b>${bc['On Hold']}</b></span><span>Completed <b>${bc.Completed}</b></span></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 uppercase"><tr><th class="text-left">Plant</th><th class="text-left">Project</th><th>Progress</th><th>Status</th><th>Target</th></tr></thead><tbody>${rows(b,bVal)}</tbody></table></div></div></div>`;
+                comparePanel.innerHTML=`<div class="flex items-center justify-between"><h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i> Overall Project Comparison</h4><span class="text-[10px] text-slate-400">${escapeHtml(aVal||'Date 1')} vs ${escapeHtml(bVal||'Date 2')}</span></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-2"><div class="bg-slate-900/60 rounded-xl border border-slate-700/50 p-2"><div class="text-[10px] font-bold text-amber-300 mb-2">${escapeHtml(aVal||'Date 1')} — ${a.length} Projects</div><div class="grid grid-cols-4 gap-1 text-[9px] mb-2"><span>In Progress <b>${ac['In Progress']}</b></span><span>Planning <b>${ac.Planning}</b></span><span>On Hold <b>${ac['On Hold']}</b></span><span>Completed <b>${ac.Completed}</b></span></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 uppercase"><tr><th class="text-left">Plant</th><th class="text-left">Project</th><th>Progress</th><th>Status</th><th>Target</th></tr></thead><tbody>${rows(a,aVal)}</tbody></table></div></div><div class="bg-slate-900/60 rounded-xl border border-slate-700/50 p-2"><div class="text-[10px] font-bold text-blue-300 mb-2">${escapeHtml(bVal||'Date 2')} — ${b.length} Projects</div><div class="grid grid-cols-4 gap-1 text-[9px] mb-2"><span>In Progress <b>${bc['In Progress']}</b></span><span>Planning <b>${bc.Planning}</b></span><span>On Hold <b>${bc['On Hold']}</b></span><span>Completed <b>${bc.Completed}</b></span></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 uppercase"><tr><th class="text-left">Plant</th><th class="text-left">Project</th><th>Progress</th><th>Status</th><th>Target</th></tr></thead><tbody>${rows(b,bVal)}</tbody></table></div></div></div>`;
             }
 
             // Restore timeline expansion after any intentional project redraw.
@@ -4692,70 +4614,49 @@ window.addEventListener("cloudsync:status", (event) => {
 
             container.querySelectorAll(".admin-only").forEach(el => el.classList.toggle("hidden", !isAdminUser()));
 
-            // Project Distribution & Progress per Mill: one stacked bar per plant,
-            // split by the actual project status. This stays synchronized with the
-            // same filtered project records used by the cards above.
+            // Project Distribution & Progress per Mill (Plant).
+            // Use the same stacked-bar structure as Executive Summary Project Status & Progress.
             const plants = ["Plant 1", "Plant 2", "PreMix"];
-            const statusCounts = {
-                "In Progress": plants.map(() => 0),
-                "Planning": plants.map(() => 0),
-                "On Hold": plants.map(() => 0),
-                "Completed": plants.map(() => 0)
+            const statusKeys = ["In Progress", "Planning", "On Hold", "Completed"];
+            const statusColors = {"In Progress":"#3b82f6", Planning:"#eab308", "On Hold":"#ef4444", Completed:"#22c55e"};
+            const compareMode = compareType !== 'NONE';
+            const chartPeriodA = compareMode ? aVal : dateText;
+            const chartPeriodB = compareMode ? bVal : '';
+            const chartFilteredA = compareMode ? filterProjectsForPeriod(aType, aVal) : filtered;
+            const chartFilteredB = compareMode ? filterProjectsForPeriod(aType, bVal) : [];
+            const applyPlantFilter = list => list.filter(pr => currentPlant === 'ALL' || normalizePlant(pr.plant) === normalizePlant(currentPlant));
+            const countByPlant = list => {
+                const out = {};
+                plants.forEach(p => out[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
+                applyPlantFilter(list).forEach(pr => {
+                    const plant = normalizePlant(pr.plant), st = String(pr.status || 'Planning').trim();
+                    if(out[plant] && Object.prototype.hasOwnProperty.call(out[plant], st)) out[plant][st]++;
+                });
+                return out;
             };
-            filtered.forEach(pr => {
-                const pi = plants.indexOf(normalizePlant(pr.plant));
-                if (pi < 0) return;
-                const status = String(pr.status || "Planning").trim();
-                if (!statusCounts[status]) statusCounts[status] = plants.map(() => 0);
-                statusCounts[status][pi] += 1;
-            });
-
+            const countsA = countByPlant(chartFilteredA), countsB = countByPlant(chartFilteredB);
+            const chartPlants = currentPlant !== 'ALL' ? plants.filter(p => normalizePlant(p) === normalizePlant(currentPlant)) : plants;
             const millCanvas = document.getElementById('chart-projects-mill');
             if (millCanvas && typeof Chart !== 'undefined') {
                 const ctxMill = millCanvas.getContext('2d');
                 if (chartProjectsMill) chartProjectsMill.destroy();
-                const projectCompareType = document.getElementById('projects-compare-type')?.value || 'NONE';
-                let projectGraphLabels = ['Plant 1', 'Plant 2', 'PreMix Plant'];
-                let projectGraphDatasets;
-                if (projectCompareType !== 'NONE') {
-                    const aType = projectCompareType==='YEAR'?'YEAR':projectCompareType==='CUSTOM_YEAR'?'CUSTOM_YEAR':projectCompareType==='MONTH'?'MONTH':'DATE';
-                    const aVal = projectCompareType==='YEAR'?document.getElementById('projects-compare-year-1')?.value:projectCompareType==='CUSTOM_YEAR'?document.getElementById('projects-compare-custom-year-1')?.value:projectCompareType==='MONTH'?document.getElementById('projects-compare-month-1')?.value:document.getElementById('projects-compare-date-1')?.value;
-                    const bVal = projectCompareType==='YEAR'?document.getElementById('projects-compare-year-2')?.value:projectCompareType==='CUSTOM_YEAR'?document.getElementById('projects-compare-custom-year-2')?.value:projectCompareType==='MONTH'?document.getElementById('projects-compare-month-2')?.value:document.getElementById('projects-compare-date-2')?.value;
-                    const ac = projectStatusCounts(filterProjectsForPeriod(aType,aVal));
-                    const bc = projectStatusCounts(filterProjectsForPeriod(aType,bVal));
-                    const shortA = aVal || 'Date 1', shortB = bVal || 'Date 2';
-                    projectGraphLabels = plants.map(p=>`${p} — ${shortA}`).concat(plants.map(p=>`${p} — ${shortB}`));
-                    const make = (status,color,counts,stack,label) => ({label:`${status} — ${label}`,data:plants.map(p=>{const all=filterProjectsForPeriod(aType,label==='Date 1'?aVal:bVal);return all.filter(pr=>normalizePlant(pr.plant)===normalizePlant(p)&&String(pr.status||'Planning').trim()===status).length;}),backgroundColor:color,borderRadius:4,stack});
-                    projectGraphDatasets = [
-                        make('In Progress','#3b82f6',ac,'period1',shortA), make('Planning','#eab308',ac,'period1',shortA), make('On Hold','#ef4444',ac,'period1',shortA), make('Completed','#22c55e',ac,'period1',shortA),
-                        make('In Progress','#3b82f6',bc,'period2',shortB), make('Planning','#eab308',bc,'period2',shortB), make('On Hold','#ef4444',bc,'period2',shortB), make('Completed','#22c55e',bc,'period2',shortB)
-                    ];
+                const datasets = [];
+                if (compareMode) {
+                    statusKeys.forEach(st => {
+                        datasets.push({label:`${st} — ${chartPeriodA}`,data:chartPlants.map(p=>countsA[p][st]),backgroundColor:statusColors[st],stack:'date1',borderRadius:3});
+                        datasets.push({label:`${st} — ${chartPeriodB}`,data:chartPlants.map(p=>countsB[p][st]),backgroundColor:statusColors[st],stack:'date2',borderRadius:3,borderWidth:1,borderColor:'#0f172a'});
+                    });
                 } else {
-                    projectGraphDatasets = [
-                        { label: 'In Progress', data: statusCounts['In Progress'], backgroundColor: '#3b82f6', borderRadius: 4 },
-                        { label: 'Planning', data: statusCounts['Planning'], backgroundColor: '#eab308', borderRadius: 4 },
-                        { label: 'On Hold', data: statusCounts['On Hold'], backgroundColor: '#ef4444', borderRadius: 4 },
-                        { label: 'Completed', data: statusCounts['Completed'], backgroundColor: '#22c55e', borderRadius: 4 }
-                    ];
+                    statusKeys.forEach(st=>datasets.push({label:st,data:chartPlants.map(p=>countsA[p][st]),backgroundColor:statusColors[st],stack:'single',borderRadius:3}));
                 }
                 chartProjectsMill = new Chart(ctxMill, {
-                    type: 'bar',
-                    data: { labels: projectGraphLabels, datasets: projectGraphDatasets },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        animation: { duration: 250 },
-                        plugins: {
-                            legend: { display: true, position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
-                            tooltip: { mode: 'index', intersect: false }
-                        },
-                        scales: {
-                            x: { stacked: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
-                            y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
-                        }
-                    }
+                    type:'bar',
+                    data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets},
+                    options:{responsive:true,maintainAspectRatio:false,animation:{duration:250},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:9,padding:6,font:{size:9},color:'#94a3b8'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1},grid:{color:'rgba(51,65,85,0.4)'}}}}
                 });
             }
+            const badge=document.getElementById('projects-chart-year-badge');
+            if(badge) badge.textContent=compareMode ? `${chartPeriodA}  vs  ${chartPeriodB} • Area / Plant` : `${dateText} • Area / Plant`;
         }
 
         function openProjectModal() {
