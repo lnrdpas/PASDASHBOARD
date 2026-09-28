@@ -851,8 +851,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             section {
                 display: block !important;
-                page-break-after: auto !important;
-                break-after: auto !important;
+                page-break-after: always;
             }
 
             body.print-summary section:not(#module-summary),
@@ -910,29 +909,6 @@ window.addEventListener("cloudsync:status", (event) => {
 
             tr {
                 page-break-inside: avoid;
-                break-inside: avoid;
-            }
-
-            /* Keep the existing dashboard/report appearance while preventing
-               individual report cards from being sliced between pages. */
-            #module-summary > div,
-            #module-calibration > div,
-            #module-uptime > div,
-            #module-calendar > div,
-            #module-projects > div,
-            #module-summary .grid > div,
-            #module-summary table,
-            #module-calibration table,
-            #module-uptime table,
-            #module-calendar table,
-            #module-projects table {
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-
-            html, body {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
             }
         }
 
@@ -1802,52 +1778,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 <button onclick="closeUserManagementModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
 
-            <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3 main-only">
-                <div>
-                    <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-gauge-high text-emerald-400 mr-1.5"></i> Equipment Availability %</h4>
-                    <p class="text-[10px] text-slate-500 mt-1">Main Account only. Set one availability value for a plant and reporting period. The Executive Summary shows only the saved percentage — no pencil/edit button is displayed there.</p>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div>
-                        <label class="block text-slate-300 font-semibold mb-1">Plant</label>
-                        <select id="availability-setting-plant" onchange="loadAvailabilitySettingIntoForm()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                            <option value="ALL">All Plants</option>
-                            <option value="Plant 1">Plant 1</option>
-                            <option value="Plant 2">Plant 2</option>
-                            <option value="PreMix">PreMix</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-slate-300 font-semibold mb-1">Period</label>
-                        <select id="availability-setting-type" onchange="onAvailabilitySettingTypeChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                            <option value="all">All Time</option>
-                            <option value="year">Year</option>
-                            <option value="month">Month</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div id="availability-setting-year-wrap" class="hidden">
-                        <label class="block text-slate-300 font-semibold mb-1">Year</label>
-                        <input id="availability-setting-year" type="number" min="2000" max="2100" placeholder="YYYY" onchange="loadAvailabilitySettingIntoForm()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                    </div>
-                    <div id="availability-setting-month-wrap" class="hidden">
-                        <label class="block text-slate-300 font-semibold mb-1">Month</label>
-                        <input id="availability-setting-month" type="month" onchange="loadAvailabilitySettingIntoForm()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-slate-300 font-semibold mb-1">Availability %</label>
-                        <input id="availability-setting-value" type="number" min="0" max="100" step="0.1" placeholder="0-100" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                    </div>
-                </div>
-                <div id="availability-setting-msg" class="hidden text-[10px] p-2 rounded-lg text-center font-semibold"></div>
-                <div class="flex justify-end">
-                    <button type="button" onclick="saveAvailabilitySetting()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-xl transition shadow-md">
-                        <i class="fa-solid fa-floppy-disk mr-1"></i> Save Availability %
-                    </button>
-                </div>
-            </div>
-
             <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-2">
                 <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-shield-halved text-emerald-400 mr-1.5"></i> Secure Authentication</h4>
                 <p class="text-[11px] text-slate-400">Passwords are managed by Supabase Auth / the approved administrator process. PASDASHBOARD does not store passwords in the browser, localStorage, or dashboard database.</p>
@@ -2158,11 +2088,6 @@ window.addEventListener("cloudsync:status", (event) => {
             document.querySelectorAll(".action-col, .edit-delete-action, .admin-control").forEach(el => {
                 el.classList.toggle("hidden", !isAdmin);
             });
-            // Main-account-only settings (including Equipment Availability %) are never
-            // shown to secondary Full Access/Admin accounts or View Only users.
-            document.querySelectorAll(".main-only").forEach(el => {
-                el.classList.toggle("hidden", !isMain);
-            });
             applyPageAuthorityUI();
         }
 
@@ -2237,7 +2162,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 // cloud dataset for the authenticated browser before rendering.
                 const cloudResult = await ensureCloudDataLoaded();
                 if (cloudResult?.ok || cloudResult?.localOnly) {
-                    await loadAvailabilitySettings();
                     loadSavedStorage();
                     populateCategoryDropdowns();
                     populateDowntimeCategoryDropdowns();
@@ -2326,9 +2250,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 mainPassSection.classList.add("hidden");
             }
 
-            await loadAvailabilitySettings();
             await renderSubUsersList();
-            onAvailabilitySettingTypeChange();
             document.getElementById("pass-update-msg").classList.add("hidden");
             document.getElementById("new-main-password").value = "";
             document.getElementById("new-user-name").value = "";
@@ -2564,9 +2486,6 @@ window.addEventListener("cloudsync:status", (event) => {
         let chartSummaryProjects = null;
         let chartProjectsMill = null;
         let chartDowntimePareto = null;
-        // Main-account editable Equipment Availability % settings. Values are stored in
-        // Supabase table equipment_availability_settings and are read-only everywhere else.
-        let availabilitySettingsCache = [];
         // Keep inline project timelines open when background cloud refreshes redraw the project cards.
         const expandedProjectTimelines = new Set();
 
@@ -3150,125 +3069,6 @@ window.addEventListener("cloudsync:status", (event) => {
             return "PENDING";
         }
 
-        // --- EQUIPMENT AVAILABILITY SETTINGS ---
-        async function loadAvailabilitySettings() {
-            availabilitySettingsCache = [];
-            const client = window.CloudAuth?.getClient?.();
-            if (!client) return;
-            try {
-                const { data, error } = await client
-                    .from("equipment_availability_settings")
-                    .select("id,app_id,plant,filter_type,period_key,availability_percent,updated_at")
-                    .eq("app_id", window.CLOUD_CONFIG?.appId || "PASDASHBOARD");
-                if (!error && Array.isArray(data)) availabilitySettingsCache = data;
-            } catch (e) {
-                console.warn("Equipment Availability settings could not be loaded:", e);
-            }
-        }
-
-        function availabilityPeriodKey(type, value) {
-            if (type === "year") return String(value || "").trim();
-            if (type === "month") return String(value || "").trim();
-            return "ALL";
-        }
-
-        function getSavedAvailability(plant, type, value) {
-            const p = plant || "ALL";
-            const key = availabilityPeriodKey(type, value);
-            const row = availabilitySettingsCache.find(x =>
-                String(x.app_id || "") === String(window.CLOUD_CONFIG?.appId || "PASDASHBOARD") &&
-                String(x.plant || "ALL") === String(p) &&
-                String(x.filter_type || "all") === String(type || "all") &&
-                String(x.period_key || "ALL") === String(key)
-            );
-            if (!row) return null;
-            const n = Number(row.availability_percent);
-            return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
-        }
-
-        function getAvailabilityDisplay(plant, type, value, fallback) {
-            const saved = getSavedAvailability(plant, type, value);
-            return saved === null ? Number(fallback || 0) : saved;
-        }
-
-        function setAvailabilityMessage(message, ok) {
-            const el = document.getElementById("availability-setting-msg");
-            if (!el) return;
-            el.className = `text-[10px] p-2 rounded-lg text-center font-semibold ${ok ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border border-red-500/20 text-red-400"}`;
-            el.textContent = message;
-            el.classList.remove("hidden");
-        }
-
-        function onAvailabilitySettingTypeChange() {
-            const type = document.getElementById("availability-setting-type")?.value || "all";
-            document.getElementById("availability-setting-year-wrap")?.classList.toggle("hidden", type !== "year");
-            document.getElementById("availability-setting-month-wrap")?.classList.toggle("hidden", type !== "month");
-            loadAvailabilitySettingIntoForm();
-        }
-
-        function loadAvailabilitySettingIntoForm() {
-            const plant = document.getElementById("availability-setting-plant")?.value || "ALL";
-            const type = document.getElementById("availability-setting-type")?.value || "all";
-            const year = document.getElementById("availability-setting-year")?.value || "";
-            const month = document.getElementById("availability-setting-month")?.value || "";
-            const valueEl = document.getElementById("availability-setting-value");
-            if (!valueEl) return;
-            const periodValue = type === "year" ? year : type === "month" ? month : "";
-            const saved = getSavedAvailability(plant, type, periodValue);
-            valueEl.value = saved === null ? "" : Number(saved).toFixed(1).replace(/\.0$/, "");
-            const msg = document.getElementById("availability-setting-msg");
-            if (msg) msg.classList.add("hidden");
-        }
-
-        async function saveAvailabilitySetting() {
-            if (!isMainAccount()) return;
-            const client = window.CloudAuth?.getClient?.();
-            if (!client) { setAvailabilityMessage("Secure cloud connection is unavailable.", false); return; }
-
-            const plant = document.getElementById("availability-setting-plant")?.value || "ALL";
-            const type = document.getElementById("availability-setting-type")?.value || "all";
-            const year = document.getElementById("availability-setting-year")?.value || "";
-            const month = document.getElementById("availability-setting-month")?.value || "";
-            const valueEl = document.getElementById("availability-setting-value");
-            const value = Number(valueEl?.value);
-
-            if (!Number.isFinite(value) || value < 0 || value > 100) {
-                setAvailabilityMessage("Enter an Availability % from 0 to 100.", false);
-                return;
-            }
-            if (type === "year" && !/^\d{4}$/.test(String(year))) {
-                setAvailabilityMessage("Enter a valid 4-digit year.", false);
-                return;
-            }
-            if (type === "month" && !/^\d{4}-\d{2}$/.test(String(month))) {
-                setAvailabilityMessage("Select a valid month.", false);
-                return;
-            }
-
-            const periodKey = availabilityPeriodKey(type, type === "year" ? year : type === "month" ? month : "");
-            const appId = window.CLOUD_CONFIG?.appId || "PASDASHBOARD";
-            const { error } = await client
-                .from("equipment_availability_settings")
-                .upsert({
-                    app_id: appId,
-                    plant,
-                    filter_type: type,
-                    period_key: periodKey,
-                    availability_percent: Number(value.toFixed(1)),
-                    updated_at: new Date().toISOString()
-                }, { onConflict: "app_id,plant,filter_type,period_key" });
-
-            if (error) {
-                setAvailabilityMessage(error.message || "Unable to save Availability %.", false);
-                return;
-            }
-
-            await loadAvailabilitySettings();
-            loadAvailabilitySettingIntoForm();
-            renderSummaryModule();
-            setAvailabilityMessage(`Saved ${Number(value.toFixed(1))}% for ${plant} — ${type === "all" ? "All Time" : periodKey}.`, true);
-        }
-
         // --- MODULE 0: SUMMARY ---
         function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
@@ -3372,11 +3172,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const totalScheduledCalib=primaryCalib.scheduled;
             document.getElementById("summary-calib-compliance").innerText = `${calibCompliance}%`;
             document.getElementById("summary-projects-count").innerText = filteredPr.length;
-            const primaryAvailability = getAvailabilityDisplay(currentPlant, primaryType, primaryValue, primaryDown.uptime);
-            const compareAvailability = isCompare
-                ? getAvailabilityDisplay(currentPlant, compareType, compareValue, compareDown.uptime)
-                : null;
-            document.getElementById("summary-availability-rate").innerText = `${Number(primaryAvailability).toFixed(1).replace(/\.0$/, "")}%`;
+            document.getElementById("summary-availability-rate").innerText = `${primaryDown.uptime}%`;
             document.getElementById("summary-uptime-rate").innerText = `${primaryDown.uptime}%`;
             document.getElementById("summary-dt-hours").innerText = `${primaryDown.hrs.toFixed(1)} hrs`;
             const mtbf = filteredDt.length > 0 ? (720 / filteredDt.length).toFixed(1) : "0";
@@ -3396,7 +3192,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 if(relPrimary) relPrimary.innerHTML=`<strong class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}</strong><br>Downtime: <strong>${primaryDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${mtbf} hrs</strong> · MTTR: <strong>${mttr} mins</strong> · Uptime: <strong>${primaryDown.uptime}%</strong>`;
                 if(relCompare) relCompare.innerHTML=`<strong class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}</strong><br>Downtime: <strong>${compareDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${compareMtbf} hrs</strong> · MTTR: <strong>${compareMttr} mins</strong> · Uptime: <strong>${compareDown.uptime}%</strong>`;
             }
-            setCompare('summary-availability-compare', isCompare ? `${primaryValue || 'Date 1'}: ${Number(primaryAvailability).toFixed(1).replace(/\.0$/, "")}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${Number(compareAvailability).toFixed(1).replace(/\.0$/, "")}%` : '', isCompare);
+            setCompare('summary-availability-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
             setCompare('summary-uptime-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
             setCompare('summary-calib-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryCalib.compliance}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareCalib.compliance}%` : '', isCompare);
             setCompare('summary-projects-compare', isCompare ? `${primaryValue || 'Date 1'}: ${filteredPr.length} &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${comparisonPr.length}` : '', isCompare);
