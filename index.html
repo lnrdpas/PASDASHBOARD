@@ -1107,9 +1107,15 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
-                        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
-                        </h4>
+                        <div class="flex items-center justify-between gap-2">
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
+                            </h4>
+                            <label class="flex items-center gap-1.5 text-[9px] text-slate-400 font-semibold cursor-pointer whitespace-nowrap" title="When enabled, this chart ignores the Executive Summary plant/date filters and shows all projects.">
+                                <input id="summary-projects-ignore-filter" type="checkbox" onchange="renderSummaryModule()" class="accent-blue-500">
+                                Ignore Filters
+                            </label>
+                        </div>
                         <div class="chart-box-container">
                             <canvas id="chart-summary-projects"></canvas>
                         </div>
@@ -3442,8 +3448,12 @@ window.addEventListener("cloudsync:status", (event) => {
                 "On Hold": list.filter(pr => String(pr.status || "").trim() === "On Hold").length,
                 Completed: list.filter(pr => String(pr.status || "").trim() === "Completed").length
             });
-            const projectOverallPrimary = projectOverall(filteredPr);
-            const projectOverallCompare = isCompare ? projectOverall(comparisonPr) : null;
+            // Project Status & Progress can optionally ignore the Executive Summary filters.
+            // When enabled, the chart returns to the overall project-status view while all
+            // other Executive Summary sections continue using the selected filters.
+            const projectChartIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
+            const projectOverallPrimary = projectChartIgnoreFilter ? projectOverall(projectsList) : projectOverall(filteredPr);
+            const projectOverallCompare = (!projectChartIgnoreFilter && isCompare) ? projectOverall(comparisonPr) : null;
 
             const projSupp = document.getElementById("summary-per-plant-projects");
             const projectViewAction = isPageAllowed("projects")
@@ -3466,10 +3476,10 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Render summary charts. Project Status & Progress is an OVERALL summary
             // of the selected period. In comparison mode, the two periods are shown side-by-side.
-            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectOverallPrimary, projectOverallCompare, sortedLinePareto, currentPlant, paretoComparison);
+            renderSummaryCharts(cDone, Math.max(0, totalScheduledCalib - cDone), projectOverallPrimary, projectOverallCompare, sortedLinePareto, currentPlant, paretoComparison, projectChartIgnoreFilter);
         }
 
-        function renderSummaryCharts(cDone, cRemaining, projectOverallPrimary, projectOverallCompare, sortedLinePareto, selectedPlant, paretoComparison) {
+        function renderSummaryCharts(cDone, cRemaining, projectOverallPrimary, projectOverallCompare, sortedLinePareto, selectedPlant, paretoComparison, projectChartIgnoreFilter=false) {
             const calibCanvas=document.getElementById('chart-summary-calib'), projCanvas=document.getElementById('chart-summary-projects'), paretoCanvas=document.getElementById('chart-summary-pareto');
             if(!calibCanvas||!projCanvas||!paretoCanvas||typeof Chart==='undefined') return;
             const isCompare=paretoComparison && paretoComparison.mode!=='single';
@@ -3477,10 +3487,10 @@ window.addEventListener("cloudsync:status", (event) => {
             if(chartSummaryCalib) chartSummaryCalib.destroy();
             chartSummaryCalib=new Chart(calibCanvas.getContext('2d'),{type:isCompare?'bar':'doughnut',data:isCompare?{labels:[paretoComparison.primaryLabel,paretoComparison.compareLabel],datasets:[{label:'Completed',data:[cDone,Number(window._summaryCompareCalib||0)],backgroundColor:'#22c55e'}]}:{labels:['DONE','REMAINING'],datasets:[{data:[cDone,cRemaining],backgroundColor:['#22c55e','#334155'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label||ctx.label}: ${ctx.raw}`}}},scales:isCompare?{x:{ticks:{font:{size:11},color:'#cbd5e1'}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'}}}:undefined}});
 
-            // PROJECT STATUS & PROGRESS — OVERALL SUMMARY as a pie chart.
-            // The main plant filter is already applied before this function, so these totals
-            // represent only the selected plant/area. When comparing periods, the two period
-            // totals are combined into one comparison pie so every project status remains visible.
+            // PROJECT STATUS & PROGRESS — doughnut chart.
+            // Normally it follows the selected plant/date filters. If Ignore Filters is
+            // enabled, the caller passes totals from the complete project list and disables
+            // comparison for this chart, returning it to the overall project-status view.
             if(chartSummaryProjects) chartSummaryProjects.destroy();
             const statusLabels=['In Progress','Planning','On Hold','Completed'];
             const primaryProjectValues=statusLabels.map(k=>Number(projectOverallPrimary?.[k]||0));
@@ -3494,6 +3504,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const projectPieColors=isCompare
                 ? statusLabels.flatMap((_,i)=>[['#3b82f6','#60a5fa'],['#eab308','#facc15'],['#ef4444','#f87171'],['#22c55e','#4ade80']][i])
                 : ['#3b82f6','#eab308','#ef4444','#22c55e'];
+            const projectChartTitle = document.querySelector('#chart-summary-projects')?.closest('.bg-slate-800\/90')?.querySelector('h4');
+            if (projectChartTitle) projectChartTitle.innerHTML = `<i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress${projectChartIgnoreFilter ? ' — Overall' : ''}`;
             chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{
                 type:'doughnut',
                 data:{labels:projectPieLabels,datasets:[{data:projectPieValues,backgroundColor:projectPieColors,borderColor:'#1e293b',borderWidth:2,hoverOffset:4}]},
