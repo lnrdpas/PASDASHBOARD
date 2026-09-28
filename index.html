@@ -791,18 +791,24 @@ window.addEventListener("cloudsync:status", (event) => {
         .chart-box-container {
             position: relative;
             width: 100%;
-            height: 145px !important;
-            max-height: 145px !important;
-            overflow: hidden;
+            height: 235px !important;
+            min-height: 235px !important;
+            max-height: 235px !important;
+            overflow: visible;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
         .chart-box-container canvas {
+            width: 100% !important;
+            height: 235px !important;
             max-width: 100% !important;
-            max-height: 145px !important;
+            max-height: 235px !important;
         }
+        .summary-kpi-compare { font-size: 10px; line-height: 1.35; min-height: 15px; margin-top: 3px; color: #67e8f9; font-weight: 700; }
+        .summary-period-note { font-size: 10px; line-height: 1.35; color: #94a3b8; }
+        .pareto-info-note { font-size: 10px; line-height: 1.4; color: #94a3b8; }
 
         @media print {
             @page {
@@ -1054,6 +1060,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-circle-check text-emerald-400"></i>
                         </div>
                         <h3 id="summary-availability-rate" class="text-2xl font-black text-emerald-400">0%</h3>
+                        <div id="summary-availability-compare" class="summary-kpi-compare hidden"></div>
                         <p class="text-[10px] text-slate-400 mt-1">% Operational Time</p>
                     </div>
 
@@ -1063,6 +1070,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-sliders text-blue-400"></i>
                         </div>
                         <h3 id="summary-calib-compliance" class="text-2xl font-black text-blue-400">0%</h3>
+                        <div id="summary-calib-compare" class="summary-kpi-compare hidden"></div>
                         <p class="text-[10px] text-slate-400 mt-1">Total Scheduled Compliance</p>
                     </div>
 
@@ -1072,6 +1080,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-bolt text-amber-400"></i>
                         </div>
                         <h3 id="summary-uptime-rate" class="text-2xl font-black text-cyan-400">0%</h3>
+                        <div id="summary-uptime-compare" class="summary-kpi-compare hidden"></div>
                         <p class="text-[10px] text-slate-400 mt-1">Reliability Target &gt;95%</p>
                     </div>
 
@@ -1081,13 +1090,14 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-diagram-project text-indigo-400"></i>
                         </div>
                         <h3 id="summary-projects-count" class="text-2xl font-black text-indigo-400">0</h3>
+                        <div id="summary-projects-compare" class="summary-kpi-compare hidden"></div>
                         <p class="text-[10px] text-slate-400 mt-1">Engineering Upgrades</p>
                     </div>
                 </div>
 
                 <!-- ALL THREE GRAPHS BESIDE EACH OTHER IN A 3-COLUMN GRID -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-2">
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2 overflow-hidden flex flex-col justify-between">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-pie text-emerald-400"></i> Calibration Status Breakdown
                         </h4>
@@ -1096,7 +1106,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         </div>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2 overflow-hidden flex flex-col justify-between">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-chart-line text-blue-400"></i> Project Status & Progress
                         </h4>
@@ -1105,14 +1115,14 @@ window.addEventListener("cloudsync:status", (event) => {
                         </div>
                     </div>
 
-                    <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2 overflow-hidden flex flex-col justify-between">
+                    <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-chart-bar text-amber-400"></i> Downtime Pareto by Line Category
+                            <i class="fa-solid fa-chart-bar text-amber-400"></i> <span id="summary-pareto-title">Downtime Pareto by Line Category</span>
                         </h4>
                         <div class="chart-box-container">
                             <canvas id="chart-summary-pareto"></canvas>
                         </div>
-                        <p class="text-[9px] text-slate-500 text-center">Total downtime hours by Line Category</p>
+                        <p id="summary-pareto-note" class="pareto-info-note text-center">Top 3 Line Categories by total downtime + Other. Equipment and failure category are identified for each period.</p>
                     </div>
                 </div>
 
@@ -1123,6 +1133,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-list-check text-emerald-400"></i> Calibration Status Supporting Details
                         </h4>
                         <div id="summary-per-plant-calib" class="space-y-2 pt-2"></div>
+                        <div id="summary-calib-comparison-details" class="hidden mt-2 pt-2 border-t border-slate-700/50"></div>
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-2.5 rounded-xl space-y-2">
@@ -1130,6 +1141,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <i class="fa-solid fa-list-check text-blue-400"></i> Project Status Supporting Details
                         </h4>
                         <div id="summary-per-plant-projects" class="space-y-2 pt-2"></div>
+                        <div id="summary-project-comparison-details" class="hidden mt-2 pt-2 border-t border-slate-700/50"></div>
                     </div>
                 </div>
 
@@ -1147,32 +1159,45 @@ window.addEventListener("cloudsync:status", (event) => {
                                 <div class="bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl">
                                     <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Area Downtime</span>
                                     <p id="summary-dt-hours" class="text-xl font-black text-red-400 mt-0.5">0 hrs</p>
+                                    <p id="summary-dt-hours-compare" class="hidden text-[10px] text-blue-300 mt-1"></p>
                                     <p class="text-[10px] text-slate-500 mt-0.5">Cumulative outage duration</p>
                                 </div>
                                 <div class="bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl">
                                     <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MTBF</span>
                                     <p id="summary-dt-mtbf" class="text-xl font-black text-blue-400 mt-0.5">0 hrs</p>
+                                    <p id="summary-dt-mtbf-compare" class="hidden text-[10px] text-blue-300 mt-1"></p>
                                     <p class="text-[10px] text-slate-500 mt-0.5">Average operational interval</p>
                                 </div>
                                 <div class="bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl">
                                     <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">MTTR</span>
                                     <p id="summary-dt-mttr" class="text-xl font-black text-amber-400 mt-0.5">0 mins</p>
+                                    <p id="summary-dt-mttr-compare" class="hidden text-[10px] text-amber-300 mt-1"></p>
                                     <p class="text-[10px] text-slate-500 mt-0.5">Average resolution response time</p>
+                                </div>
+                            </div>
+                            <div id="summary-reliability-comparison" class="hidden bg-slate-900/50 border border-slate-700/50 rounded-xl p-2.5">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">System Reliability Comparison</div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                    <div id="summary-reliability-primary" class="text-slate-300"></div>
+                                    <div id="summary-reliability-compare" class="text-slate-300"></div>
                                 </div>
                             </div>
 
                             <div id="summary-per-plant-reports" class="space-y-3"></div>
 
                             <div class="space-y-2">
-                                <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
+
+                                </div>
                                 <div class="overflow-x-auto rounded-xl border border-slate-700/50">
                                     <table class="w-full text-left text-xs text-slate-300">
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
                                                 <th class="py-1.5 px-2">Line Category</th>
-                                                <th class="py-2.5 px-3">Equipment</th>
-                                                <th class="py-2.5 px-3">Failure Category</th>
-                                                <th class="py-2.5 px-3 text-center">Total Time</th>
+                                                <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">Equipment</th>
+                                                <th id="summary-top5-primary-failure-head" class="py-2.5 px-3">Failure Category</th>
+                                                <th id="summary-top5-primary-time-head" class="py-2.5 px-3 text-center">Downtime</th>
                                             </tr>
                                         </thead>
                                         <tbody id="summary-top5-downtime-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -1344,9 +1369,11 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs flex-wrap">
                             <i class="fa-solid fa-filter text-slate-400"></i>
                             <select id="uptime-filter-type" onchange="onUptimeFilterTypeChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
-                                <option value="month" class="bg-slate-800">Month Only</option>
-                                <option value="year" class="bg-slate-800">Year Only</option>
-                                <option value="compare" class="bg-slate-800">Compare (Month vs Month / Year vs Year)</option>
+                                <option value="all" class="bg-slate-800">All Time</option>
+                                <option value="year" class="bg-slate-800">Filter by Year</option>
+                                <option value="month" class="bg-slate-800">Filter by Month</option>
+                                <option value="compare-year" class="bg-slate-800">Compare Year vs Year</option>
+                                <option value="compare-month" class="bg-slate-800">Compare Month vs Month</option>
                             </select>
 
                             <input type="month" id="uptime-month-filter" onchange="renderDowntimeModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
@@ -1491,7 +1518,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="lg:col-span-7 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between overflow-hidden">
                         <div class="flex items-center justify-between pb-2 border-b border-slate-700/50">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                                <i class="fa-solid fa-chart-bar text-blue-400"></i> Downtime Pareto by Line Category
+                                <i class="fa-solid fa-chart-bar text-blue-400"></i> <span id="dt-pareto-title">Downtime Pareto by Line Category</span>
                             </h3>
                             <span id="dt-chart-plant-label" class="text-xs text-slate-400">All Plants Breakdown</span>
                         </div>
@@ -1586,16 +1613,20 @@ window.addEventListener("cloudsync:status", (event) => {
                         <p class="text-xs text-slate-400">Track milestones, upgrade timelines & plant engineering roadmaps</p>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap no-print">
-                        <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+                        <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs flex-wrap">
                             <i class="fa-solid fa-filter text-slate-400"></i>
-                            <span class="text-slate-300 font-semibold">Filter Year:</span>
-                            <select id="projects-year-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
-                                <option value="ALL" class="bg-slate-800">All Years</option>
-                                <option value="2025" class="bg-slate-800">2025</option>
-                                <option value="2026" class="bg-slate-800" selected>2026</option>
-                                <option value="2027" class="bg-slate-800">2027</option>
-                                <option value="2028" class="bg-slate-800">2028</option>
+                            <span class="text-slate-300 font-semibold">Filter Date:</span>
+                            <select id="projects-date-filter-type" onchange="onProjectsDateFilterTypeChange()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
+                                <option value="ALL" class="bg-slate-800">All Dates</option>
+                                <option value="YEAR" class="bg-slate-800">By Year</option>
+                                <option value="MONTH" class="bg-slate-800">By Month</option>
+                                <option value="RANGE" class="bg-slate-800">Custom Date Range</option>
                             </select>
+                            <select id="projects-year-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden"></select>
+                            <input type="month" id="projects-month-filter" onchange="renderProjectsModule()" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer hidden">
+                            <input type="date" id="projects-date-from" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
+                            <span id="projects-date-to-label" class="text-slate-500 hidden">to</span>
+                            <input type="date" id="projects-date-to" onchange="renderProjectsModule()" class="bg-slate-800 text-white border border-slate-700 rounded-lg px-2 py-1 hidden">
                         </div>
                         <button onclick="downloadModuleExcel('projects')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/20">
                             <i class="fa-solid fa-file-excel"></i> Excel (.xlsx)
@@ -1617,7 +1648,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         </h4>
                         <span id="projects-chart-year-badge" class="text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">Filtered by Year</span>
                     </div>
-                    <div class="chart-box-container" style="height: 220px !important; max-height: 220px !important;">
+                    <div class="chart-box-container" style="height: 235px !important; max-height: 235px !important;">
                         <canvas id="chart-projects-mill"></canvas>
                     </div>
                 </div>
@@ -1953,15 +1984,16 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                     <div>
                         <label class="block text-slate-300 font-semibold mb-1">Progress %</label>
-                        <input type="number" id="proj-progress" min="0" max="100" required placeholder="0-100" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white outline-none">
+                        <input type="number" id="proj-progress" min="0" max="100" readonly placeholder="Auto" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white outline-none opacity-80">
                     </div>
                     <div>
                         <label class="block text-slate-300 font-semibold mb-1">Status</label>
                         <select id="proj-status" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-white outline-none">
                             <option value="In Progress">In Progress</option>
+                            <option value="Pending">Pending</option>
                             <option value="Planning">Planning</option>
                             <option value="On Hold">On Hold</option>
-                            <option value="Completed">Completed</option>
+                            <option value="Completed">Completed (Automatic)</option>
                         </select>
                     </div>
                 </div>
@@ -1970,7 +2002,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     <label class="block text-slate-300 font-semibold mb-1">Project Timeline Milestones</label>
                     <div id="project-milestones-editor" class="space-y-2"></div>
                     <button type="button" onclick="addProjectMilestoneRow()" class="mt-2 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-semibold"><i class="fa-solid fa-plus mr-1"></i> Add Timeline Step</button>
-                    <p class="text-[9px] text-slate-500 mt-1">Timeline progress is computed from completed milestone duration versus total planned duration.</p>
+                    <p class="text-[9px] text-slate-500 mt-1">Progress is automatic: each completed timeline step contributes to the project %. When all timeline steps are Completed, the project becomes Completed automatically. On Hold remains a manual override.</p>
                 </div>
 
                 <div>
@@ -3140,80 +3172,108 @@ window.addEventListener("cloudsync:status", (event) => {
                 return matchesSummaryDate(pr.date, primaryType, primaryValue);
             });
 
+            const comparisonEq = isCompare ? equipmentList.filter(eq => {
+                if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
+                return matchesSummaryDate(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, compareType, compareValue);
+            }) : [];
+            const comparisonPr = isCompare ? projectsList.filter(pr => {
+                if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
+                return matchesSummaryDate(pr.date, compareType, compareValue);
+            }) : [];
+
             const comparisonDt = isCompare ? downtimeLogs.filter(dt => {
                 if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                 return matchesSummaryDate(dt.start, compareType, compareValue);
             }) : [];
             const buildPareto = logs => {
                 const map = {};
-                logs.forEach(dt => {
+                (logs || []).forEach(dt => {
                     const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const s = new Date(dt.start), e = new Date(dt.end);
-                    const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
-                    if (!map[line]) map[line] = { line, duration: 0, count: 0 };
+                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
+                    if (!map[line]) map[line] = { line, duration: 0, equipment: {}, categories: {} };
                     map[line].duration += dur;
-                    map[line].count += 1;
+                    map[line].equipment[equipment] = (map[line].equipment[equipment] || 0) + dur;
+                    map[line].categories[category] = (map[line].categories[category] || 0) + dur;
                 });
-                return Object.values(map).sort((a,b) => b.duration - a.duration);
+                return Object.values(map).map(x => {
+                    const eq = Object.entries(x.equipment).sort((a,b)=>b[1]-a[1]);
+                    const cat = Object.entries(x.categories).sort((a,b)=>b[1]-a[1]);
+                    return { ...x, equipment: eq[0]?.[0] || 'Unclassified Equipment', category: cat[0]?.[0] || 'Unclassified' };
+                }).sort((a,b) => b.duration - a.duration);
             };
 
-            // Calculate calibration KPIs by instrument schedule.
-            // External and Internal are separate instruments; N/A/no schedule is not counted.
-            let cDone = 0, cOverdue = 0, cOverdueDone = 0, cPending = 0, cStsok = 0, cNa = 0;
-            filteredEq.forEach(eq => {
-                const sub = [
-                    getSubCalibStatus(eq.extSched, eq.extCalib),
-                    getSubCalibStatus(eq.intSched, eq.intCalib)
-                ];
-                const active = sub.filter(x => x !== "NA");
-                if (!active.length) { cNa++; return; }
-                active.forEach(st => {
-                    if (st === "DONE") cDone++;
-                    else if (st === "OVERDUE, DONE") { cOverdueDone++; cDone++; }
-                    else if (st === "OVERDUE") cOverdue++;
-                    else if (st === "PENDING") cPending++;
-                    else if (st === "STSOK") cStsok++;
-                });
-            });
+            const makeParetoBuckets = items => {
+                const top = (items || []).slice(0, 3).map((x, i) => ({ rank:i+1, label:x.line, line:x.line, duration:x.duration, equipment:x.equipment, category:x.category }));
+                const rest = (items || []).slice(3);
+                if (rest.length) {
+                    const eqMap = {}; rest.forEach(x => eqMap[x.equipment] = (eqMap[x.equipment] || 0) + x.duration);
+                    const eqNames = Object.entries(eqMap).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+                    top.push({ rank:4, label:'Other', line:'Remaining Lines', duration:rest.reduce((a,x)=>a+x.duration,0), equipment:eqNames.join(', ') || 'Other Equipment', category:'Multiple' });
+                }
+                while(top.length < 4) top.push({rank:top.length+1,label:top.length===3?'Other':'No Data',line:'No Data',duration:0,equipment:'—',category:'—'});
+                return top.slice(0,4);
+            };
 
-            const totalScheduledCalib = cDone + cOverdue + cPending + cStsok;
-            const calibCompliance = totalScheduledCalib > 0 ? Math.round((cDone / totalScheduledCalib) * 100) : 0;
-
+            const calcCalib = list => {
+                let done=0, overdue=0, pending=0, stsok=0;
+                (list||[]).forEach(eq => [getSubCalibStatus(eq.extSched,eq.extCalib),getSubCalibStatus(eq.intSched,eq.intCalib)].forEach(st=>{
+                    if(st==='DONE'||st==='OVERDUE, DONE') done++;
+                    else if(st==='OVERDUE') overdue++; else if(st==='PENDING') pending++; else if(st==='STSOK') stsok++;
+                }));
+                const scheduled=done+overdue+pending+stsok;
+                return {done,scheduled,compliance:scheduled?Math.round(done/scheduled*100):0};
+            };
+            const calcDowntime = list => {
+                let hrs=0; (list||[]).forEach(dt=>{ const d=(new Date(dt.end)-new Date(dt.start))/3600000; if(d>0) hrs+=d; });
+                const avail=((list||[]).length||1)*720;
+                const uptime=Math.max(0,Math.min(100,Number(((1-hrs/avail)*100).toFixed(1))));
+                return {hrs,uptime};
+            };
+            const primaryCalib=calcCalib(filteredEq), compareCalib=isCompare?calcCalib(comparisonEq):null;
+            window._summaryCompareCalib = compareCalib?.compliance || 0;
+            const primaryDown=calcDowntime(filteredDt), compareDown=isCompare?calcDowntime(comparisonDt):null;
+            const calibCompliance=primaryCalib.compliance;
+            const cDone=primaryCalib.done;
+            const totalScheduledCalib=primaryCalib.scheduled;
             document.getElementById("summary-calib-compliance").innerText = `${calibCompliance}%`;
             document.getElementById("summary-projects-count").innerText = filteredPr.length;
-
-            // Downtime metrics
-            let totalDtHours = 0;
-            filteredDt.forEach(dt => {
-                const s = new Date(dt.start);
-                const e = new Date(dt.end);
-                const diff = (e - s) / (1000 * 60 * 60);
-                if (diff > 0) totalDtHours += diff;
-            });
-
-            const totalAvailableHours = (filteredDt.length > 0 ? filteredDt.length : 1) * 720;
-            const uptimeRate = Math.max(0, Math.min(100, parseFloat(((1 - (totalDtHours / totalAvailableHours)) * 100).toFixed(1))));
-            const availabilityRate = uptimeRate;
-
-            document.getElementById("summary-availability-rate").innerText = `${availabilityRate}%`;
-            document.getElementById("summary-uptime-rate").innerText = `${uptimeRate}%`;
-            document.getElementById("summary-dt-hours").innerText = `${totalDtHours.toFixed(1)} hrs`;
-
+            document.getElementById("summary-availability-rate").innerText = `${primaryDown.uptime}%`;
+            document.getElementById("summary-uptime-rate").innerText = `${primaryDown.uptime}%`;
+            document.getElementById("summary-dt-hours").innerText = `${primaryDown.hrs.toFixed(1)} hrs`;
             const mtbf = filteredDt.length > 0 ? (720 / filteredDt.length).toFixed(1) : "0";
-            const mttr = filteredDt.length > 0 ? Math.round((totalDtHours / filteredDt.length) * 60) : 0;
+            const mttr = filteredDt.length > 0 ? Math.round((primaryDown.hrs / filteredDt.length) * 60) : 0;
             document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
+            const compareMtbf = comparisonDt.length > 0 ? (720 / comparisonDt.length).toFixed(1) : "0";
+            const compareMttr = comparisonDt.length > 0 ? Math.round((compareDown.hrs / comparisonDt.length) * 60) : 0;
+
+            const setCompare = (id, html, show) => { const el=document.getElementById(id); if(!el)return; el.innerHTML=html; el.classList.toggle('hidden',!show); };
+            setCompare('summary-dt-hours-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareDown.hrs.toFixed(1)} hrs` : '', isCompare);
+            setCompare('summary-dt-mtbf-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareMtbf} hrs` : '', isCompare);
+            setCompare('summary-dt-mttr-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareMttr} mins` : '', isCompare);
+            setCompare('summary-reliability-comparison', isCompare ? '' : '', isCompare);
+            const relPrimary=document.getElementById('summary-reliability-primary'), relCompare=document.getElementById('summary-reliability-compare');
+            if(isCompare){
+                if(relPrimary) relPrimary.innerHTML=`<strong class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}</strong><br>Downtime: <strong>${primaryDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${mtbf} hrs</strong> · MTTR: <strong>${mttr} mins</strong> · Uptime: <strong>${primaryDown.uptime}%</strong>`;
+                if(relCompare) relCompare.innerHTML=`<strong class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}</strong><br>Downtime: <strong>${compareDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${compareMtbf} hrs</strong> · MTTR: <strong>${compareMttr} mins</strong> · Uptime: <strong>${compareDown.uptime}%</strong>`;
+            }
+            setCompare('summary-availability-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
+            setCompare('summary-uptime-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
+            setCompare('summary-calib-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryCalib.compliance}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareCalib.compliance}%` : '', isCompare);
+            setCompare('summary-projects-compare', isCompare ? `${primaryValue || 'Date 1'}: ${filteredPr.length} &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${comparisonPr.length}` : '', isCompare);
 
             // Pareto = total downtime by Line Category. Repeated records for the same line are added together.
             const sortedLinePareto = buildPareto(filteredDt);
             const sortedComparePareto = isCompare ? buildPareto(comparisonDt) : [];
-            const paretoComparison = isCompare ? {
-                mode: compareType,
-                primaryLabel: primaryValue || 'Period 1',
-                compareLabel: compareValue || 'Period 2',
-                primary: sortedLinePareto,
-                compare: sortedComparePareto
-            } : null;
+            const paretoComparison = {
+                mode: isCompare ? compareType : 'single',
+                primaryLabel: primaryValue || 'Selected Period',
+                compareLabel: compareValue || '',
+                primary: makeParetoBuckets(sortedLinePareto),
+                compare: isCompare ? makeParetoBuckets(sortedComparePareto) : []
+            };
             const compareNote = document.getElementById('summary-compare-note');
             if (compareNote) {
                 if (isCompare) {
@@ -3226,37 +3286,47 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             }
 
-            // Top Equipment = ONE row per Line Category. Aggregate by Equipment + Failure Category and keep only the highest total downtime for each line.
-            const lineEquipmentMap = {};
-            filteredDt.forEach(dt => {
-                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
-                const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                const s = new Date(dt.start);
-                const e = new Date(dt.end);
-                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
-                if (!lineEquipmentMap[line]) lineEquipmentMap[line] = {};
-                const key = `${equipment}|||${category}`;
-                if (!lineEquipmentMap[line][key]) lineEquipmentMap[line][key] = { line, equipment, category, duration: 0 };
-                lineEquipmentMap[line][key].duration += dur;
-            });
-            const topEquipmentByLine = Object.values(lineEquipmentMap).map(group =>
-                Object.values(group).sort((a,b) => b.duration - a.duration)[0]
-            ).filter(Boolean).sort((a,b) => b.duration - a.duration);
-
+            // Top Equipment = ONE row per Line Category. Ranking follows the LINE'S TOTAL DOWNTIME.
+            // The displayed equipment is the highest-downtime Equipment + Failure Category contributor within that line.
+            const buildTopEquipmentByLine = logs => {
+                const map = {};
+                (logs || []).forEach(dt => {
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+                    if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
+                    map[line].lineTotal += dur;
+                    const key = `${equipment}|||${category}`;
+                    if (!map[line].contributors[key]) map[line].contributors[key] = { line, equipment, category, duration: 0 };
+                    map[line].contributors[key].duration += dur;
+                });
+                return Object.values(map).map(lineItem => {
+                    const top = Object.values(lineItem.contributors).sort((a,b)=>b.duration-a.duration)[0];
+                    return { ...top, lineTotal: lineItem.lineTotal };
+                }).filter(Boolean).sort((a,b)=>b.lineTotal-a.lineTotal);
+            };
+            const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
             const top5Body = document.getElementById("summary-top5-downtime-body");
+            const top5PLabel = primaryValue || 'Selected Period';
+            const top5PrimaryEquipmentHead = document.getElementById("summary-top5-primary-equipment-head");
+            const top5PrimaryFailureHead = document.getElementById("summary-top5-primary-failure-head");
+            const top5PrimaryTimeHead = document.getElementById("summary-top5-primary-time-head");
+            if (top5PrimaryEquipmentHead) top5PrimaryEquipmentHead.textContent = `${top5PLabel} — Equipment`;
+            if (top5PrimaryFailureHead) top5PrimaryFailureHead.textContent = `${top5PLabel} — Failure Category`;
+            if (top5PrimaryTimeHead) top5PrimaryTimeHead.textContent = `${top5PLabel} — Downtime`;
             top5Body.innerHTML = "";
-            if (topEquipmentByLine.length === 0) {
-                top5Body.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</td></tr>`;
+            if (primaryTopByLine.length === 0) {
+                top5Body.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-slate-500 italic">No downtime records found for ${escapeHtml(top5PLabel)}.</td></tr>`;
             } else {
-                topEquipmentByLine.forEach(item => {
+                primaryTopByLine.forEach(item => {
                     const tr = document.createElement("tr");
-                    tr.className = "hover:bg-slate-800/50 transition";
+                    tr.className = "hover:bg-slate-800/50 transition align-top";
                     tr.innerHTML = `
-                        <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(item.line)}</td>
-                        <td class="py-2.5 px-3 text-slate-200">${escapeHtml(item.equipment)}</td>
-                        <td class="py-2.5 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category)}</span></td>
-                        <td class="py-2.5 px-3 text-center text-red-400 font-bold">${item.duration.toFixed(1)} hrs</td>
+                        <td class="py-2 px-2 font-semibold text-white">${escapeHtml(item.line)}</td>
+                        <td class="py-2 px-3 text-slate-200">${escapeHtml(item.equipment || '—')}</td>
+                        <td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>
+                        <td class="py-2 px-3 text-center text-red-400 font-bold">${item.duration.toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration).toFixed(1)} hrs</div></td>
                     `;
                     top5Body.appendChild(tr);
                 });
@@ -3296,22 +3366,25 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (Object.prototype.hasOwnProperty.call(projectByPlant[plant], status)) projectByPlant[plant][status]++;
             });
 
+            const compareCalibByPlant = {};
+            allSummaryPlants.forEach(p => compareCalibByPlant[p] = {done:0, scheduled:0});
+            comparisonEq.forEach(eq => {
+                const plant = normalizePlant(eq.plant); if (!compareCalibByPlant[plant]) return;
+                [getSubCalibStatus(eq.extSched, eq.extCalib), getSubCalibStatus(eq.intSched, eq.intCalib)].forEach(st => {
+                    if(st === 'NA') return;
+                    compareCalibByPlant[plant].scheduled++;
+                    if(st === 'DONE' || st === 'OVERDUE, DONE') compareCalibByPlant[plant].done++;
+                });
+            });
             const calibSupp = document.getElementById("summary-per-plant-calib");
-            calibSupp.innerHTML = `
-                <div class="grid grid-cols-4 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
-                    <span>Plant</span><span class="text-center">Done</span><span class="text-center">Scheduled Instruments</span><span class="text-center">Percent</span>
+            calibSupp.innerHTML = isCompare ? `
+                <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryValue || 'Date 1')} vs ${escapeHtml(compareValue || 'Date 2')}</div>
+                <div class="grid grid-cols-5 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
+                    <span>Plant</span><span>Period</span><span class="text-center">Done</span><span class="text-center">Scheduled</span><span class="text-center">Percent</span>
                 </div>
-                ${summaryPlants.map(p => {
-                    const d = calibByPlant[p]?.done || 0;
-                    const sch = calibByPlant[p]?.scheduled || 0;
-                    const pct = sch ? ((d / sch) * 100).toFixed(0) : "0";
-                    return `<div class="grid grid-cols-4 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0">
-                        <span class="font-semibold text-white">${escapeHtml(p)}</span>
-                        <strong class="text-center text-emerald-400">${d}</strong>
-                        <span class="text-center text-slate-300">${sch}</span>
-                        <span class="text-center text-blue-300">${pct}%</span>
-                    </div>`;
-                }).join("") || `<div class="text-xs text-slate-500 italic">No plant selected.</div>`}`;
+                ${summaryPlants.map(p => { const a=calibByPlant[p]||{}; const b=compareCalibByPlant[p]||{}; const ap=a.scheduled?((a.done/a.scheduled)*100).toFixed(0):'0'; const bp=b.scheduled?((b.done/b.scheduled)*100).toFixed(0):'0'; return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-5 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryValue || 'Date 1')}</span><strong class="text-center text-emerald-400">${a.done||0}</strong><span class="text-center text-slate-300">${a.scheduled||0}</span><span class="text-center text-blue-300">${ap}%</span></div><div class="grid grid-cols-5 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareValue || 'Date 2')}</span><strong class="text-center text-emerald-300">${b.done||0}</strong><span class="text-center text-slate-300">${b.scheduled||0}</span><span class="text-center text-cyan-300">${bp}%</span></div></div>`; }).join('')}` : `
+                <div class="grid grid-cols-4 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">Done</span><span class="text-center">Scheduled Instruments</span><span class="text-center">Percent</span></div>
+                ${summaryPlants.map(p => { const d=calibByPlant[p]?.done||0; const sch=calibByPlant[p]?.scheduled||0; const pct=sch?((d/sch)*100).toFixed(0):'0'; return `<div class="grid grid-cols-4 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0"><span class="font-semibold text-white">${escapeHtml(p)}</span><strong class="text-center text-emerald-400">${d}</strong><span class="text-center text-slate-300">${sch}</span><span class="text-center text-blue-300">${pct}%</span></div>`; }).join('')}`;
 
             const pInProgress = filteredPr.filter(pr => String(pr.status || "").trim() === "In Progress").length;
             const pPlanning = filteredPr.filter(pr => String(pr.status || "").trim() === "Planning").length;
@@ -3322,21 +3395,20 @@ window.addEventListener("cloudsync:status", (event) => {
             const projectViewAction = isPageAllowed("projects")
                 ? `<button type="button" onclick="openProjectsFromSummary()" class="mt-2 w-full px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/15 text-[10px] font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> View Projects</button>`
                 : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
-            projSupp.innerHTML = `
-                <div class="grid grid-cols-5 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
-                    <span>Plant</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span>
-                </div>
-                ${summaryPlants.map(p => {
-                    const d = projectByPlant[p] || {};
-                    return `<div class="grid grid-cols-5 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0">
-                        <span class="font-semibold text-white">${escapeHtml(p)}</span>
-                        <strong class="text-center text-blue-400">${d["In Progress"] || 0}</strong>
-                        <strong class="text-center text-amber-400">${d.Planning || 0}</strong>
-                        <strong class="text-center text-red-400">${d["On Hold"] || 0}</strong>
-                        <strong class="text-center text-emerald-400">${d.Completed || 0}</strong>
-                    </div>`;
-                }).join("")}
+            const compareProjectByPlant = {};
+            allSummaryPlants.forEach(p => compareProjectByPlant[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
+            comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
+            projSupp.innerHTML = isCompare ? `
+                <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryValue || 'Date 1')} vs ${escapeHtml(compareValue || 'Date 2')}</div>
+                <div class="grid grid-cols-6 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span>Period</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
+                ${summaryPlants.map(p=>{const a=projectByPlant[p]||{},b=compareProjectByPlant[p]||{};return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-6 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryValue || 'Date 1')}</span><strong class="text-center text-blue-400">${a['In Progress']||0}</strong><strong class="text-center text-amber-400">${a.Planning||0}</strong><strong class="text-center text-red-400">${a['On Hold']||0}</strong><strong class="text-center text-emerald-400">${a.Completed||0}</strong></div><div class="grid grid-cols-6 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareValue || 'Date 2')}</span><strong class="text-center text-blue-300">${b['In Progress']||0}</strong><strong class="text-center text-amber-300">${b.Planning||0}</strong><strong class="text-center text-red-300">${b['On Hold']||0}</strong><strong class="text-center text-emerald-300">${b.Completed||0}</strong></div></div>`;}).join('')}
+                ${projectViewAction}` : `
+                <div class="grid grid-cols-5 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
+                ${summaryPlants.map(p=>{const d=projectByPlant[p]||{};return `<div class="grid grid-cols-5 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0"><span class="font-semibold text-white">${escapeHtml(p)}</span><strong class="text-center text-blue-400">${d['In Progress']||0}</strong><strong class="text-center text-amber-400">${d.Planning||0}</strong><strong class="text-center text-red-400">${d['On Hold']||0}</strong><strong class="text-center text-emerald-400">${d.Completed||0}</strong></div>`;}).join('')}
                 ${projectViewAction}`;
+
+            const relBox = document.getElementById('summary-reliability-comparison');
+            if (relBox) relBox.classList.toggle('hidden', !isCompare);
 
             // Render summary charts. Project chart receives per-plant counts so the main plant filter
             // can show only the selected plant.
@@ -3344,117 +3416,28 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function renderSummaryCharts(cDone, cRemaining, projectByPlant, sortedLinePareto, selectedPlant, paretoComparison) {
-            const calibCanvas = document.getElementById('chart-summary-calib');
-            const projCanvas = document.getElementById('chart-summary-projects');
-            const paretoCanvas = document.getElementById('chart-summary-pareto');
-            if (!calibCanvas || !projCanvas || !paretoCanvas || typeof Chart === 'undefined') return;
+            const calibCanvas=document.getElementById('chart-summary-calib'), projCanvas=document.getElementById('chart-summary-projects'), paretoCanvas=document.getElementById('chart-summary-pareto');
+            if(!calibCanvas||!projCanvas||!paretoCanvas||typeof Chart==='undefined') return;
+            const isCompare=paretoComparison && paretoComparison.mode!=='single';
+            if(chartSummaryCalib) chartSummaryCalib.destroy();
+            chartSummaryCalib=new Chart(calibCanvas.getContext('2d'),{type:isCompare?'bar':'doughnut',data:isCompare?{labels:[paretoComparison.primaryLabel,paretoComparison.compareLabel],datasets:[{label:'Completed',data:[cDone,Number(window._summaryCompareCalib||0)],backgroundColor:'#22c55e'}]}:{labels:['DONE','REMAINING'],datasets:[{data:[cDone,cRemaining],backgroundColor:['#22c55e','#334155'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label||ctx.label}: ${ctx.raw}`}}},scales:isCompare?{x:{ticks:{font:{size:11},color:'#cbd5e1'}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'}}}:undefined}});
 
-            // 1) Calibration completion — no overdue categories.
-            const ctxCalib = calibCanvas.getContext('2d');
-            if (chartSummaryCalib) chartSummaryCalib.destroy();
-            chartSummaryCalib = new Chart(ctxCalib, {
-                type: 'doughnut',
-                data: {
-                    labels: ['DONE', 'REMAINING'],
-                    datasets: [{
-                        data: [cDone, cRemaining],
-                        backgroundColor: ['#22c55e', '#334155'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '68%',
-                    plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
-                        tooltip: { callbacks: {
-                            label: function(ctx) {
-                                const total = ctx.dataset.data.reduce((a,b) => a + b, 0);
-                                const n = ctx.raw || 0;
-                                const pct = total ? ((n / total) * 100).toFixed(1) : '0.0';
-                                return `${ctx.label}: ${n} (${pct}%)`;
-                            }
-                        }}
-                    }
-                }
-            });
+            const allPlants=['Plant 1','Plant 2','PreMix']; const chartPlants=selectedPlant&&selectedPlant!=='ALL'?allPlants.filter(p=>normalizePlant(p)===normalizePlant(selectedPlant)):allPlants;
+            if(chartSummaryProjects) chartSummaryProjects.destroy();
+            chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{type:'bar',data:{labels:chartPlants.map(p=>p==='PreMix'?'PreMix Plant':p),datasets:[{label:'In Progress',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.['In Progress']||0)),backgroundColor:'#3b82f6'},{label:'Planning',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.Planning||0)),backgroundColor:'#eab308'},{label:'On Hold',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.['On Hold']||0)),backgroundColor:'#ef4444'},{label:'Completed',data:chartPlants.map(p=>Number(projectByPlant?.[p]?.Completed||0)),backgroundColor:'#22c55e'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:7,font:{size:9},color:'#cbd5e1'}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',stepSize:1}}}}});
 
-            // 2) Project Status & Progress — same stacked-bar indication as Automation Projects.
-            const ctxProj = projCanvas.getContext('2d');
-            if (chartSummaryProjects) chartSummaryProjects.destroy();
-            const allSummaryPlants = ['Plant 1', 'Plant 2', 'PreMix'];
-            const chartPlants = selectedPlant && selectedPlant !== 'ALL'
-                ? allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(selectedPlant))
-                : allSummaryPlants;
-            const chartLabels = chartPlants.map(p => p === 'PreMix' ? 'PreMix Plant' : p);
-            const getSeries = key => chartPlants.map(p => Number(projectByPlant?.[p]?.[key] || 0));
-            chartSummaryProjects = new Chart(ctxProj, {
-                type: 'bar',
-                data: {
-                    labels: chartLabels,
-                    datasets: [
-                        { label: 'In Progress', data: getSeries('In Progress'), backgroundColor: '#3b82f6', borderRadius: 4 },
-                        { label: 'Planning', data: getSeries('Planning'), backgroundColor: '#eab308', borderRadius: 4 },
-                        { label: 'On Hold', data: getSeries('On Hold'), backgroundColor: '#ef4444', borderRadius: 4 },
-                        { label: 'Completed', data: getSeries('Completed'), backgroundColor: '#22c55e', borderRadius: 4 }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
-                    plugins: {
-                        legend: { display: true, position: 'bottom', labels: { boxWidth: 9, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
-                        tooltip: { mode: 'index', intersect: false }
-                    },
-                    scales: {
-                        x: { stacked: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(51,65,85,0.4)' } }
-                    }
-                }
-            });
-
-            // 3) Pareto: total downtime by Line Category. In comparison mode,
-            // each line shows the computed total for both selected periods.
-            const ctxPareto = paretoCanvas.getContext('2d');
-            if (chartSummaryPareto) chartSummaryPareto.destroy();
-            const lineItems = sortedLinePareto || [];
-            const compareItems = paretoComparison?.compare || [];
-            const byLine = {};
-            lineItems.forEach(i => byLine[i.line] = { primary: Number(i.duration || 0), compare: 0 });
-            compareItems.forEach(i => { if (!byLine[i.line]) byLine[i.line] = { primary: 0, compare: 0 }; byLine[i.line].compare = Number(i.duration || 0); });
-            const paretoRows = Object.entries(byLine).sort((a,b) => (b[1].primary + b[1].compare) - (a[1].primary + a[1].compare));
-            const labels = paretoRows.length ? paretoRows.map(([line]) => line.length > 18 ? line.slice(0,18) + '…' : line) : ['No Data'];
-            const primaryData = paretoRows.length ? paretoRows.map(([,v]) => Number(v.primary.toFixed(1))) : [0];
-            const compareData = paretoRows.length ? paretoRows.map(([,v]) => Number(v.compare.toFixed(1))) : [];
-            const totalForCumulative = paretoRows.reduce((sum, [,v]) => sum + v.primary + (paretoComparison ? v.compare : 0), 0);
-            let cumulative = 0;
-            const cumulativePct = paretoRows.map(([,v]) => {
-                cumulative += totalForCumulative ? ((v.primary + (paretoComparison ? v.compare : 0)) / totalForCumulative) * 100 : 0;
-                return Number(cumulative.toFixed(1));
-            });
-            const datasets = [];
-            if (paretoComparison) {
-                datasets.push({ label: paretoComparison.primaryLabel, data: primaryData, backgroundColor: '#f59e0b', borderRadius: 4, maxBarThickness: 22, order: 2 });
-                datasets.push({ label: paretoComparison.compareLabel, data: compareData, backgroundColor: '#3b82f6', borderRadius: 4, maxBarThickness: 22, order: 2 });
-            } else {
-                datasets.push({ label: 'Downtime (hrs)', data: primaryData, backgroundColor: '#f59e0b', borderRadius: 4, maxBarThickness: 22, order: 2 });
-            }
-            datasets.push({ type: 'line', label: paretoComparison ? 'Cumulative % (combined)' : 'Cumulative %', data: paretoRows.length ? cumulativePct : [0], borderColor: '#38bdf8', backgroundColor: '#38bdf8', borderWidth: 2, pointRadius: 2, tension: 0.25, yAxisID: 'y1', order: 1 });
-            chartSummaryPareto = new Chart(ctxPareto, {
-                type: 'bar',
-                data: { labels, datasets },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, tooltip: { callbacks: {
-                        label: ctx => ctx.dataset.label === 'Cumulative %' ? `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%` : `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs`
-                    }}},
-                    scales: {
-                        x: { ticks: { font: { size: 8 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.35)' } },
-                        y1: { beginAtZero: true, min: 0, max: 100, position: 'right', ticks: { font: { size: 8 }, color: '#38bdf8', callback: value => `${value}%` }, grid: { drawOnChartArea: false } }
-                    }
-                }
-            });
+            if(chartSummaryPareto) chartSummaryPareto.destroy();
+            const p=paretoComparison.primary||[], c=paretoComparison.compare||[];
+            const labels=p.map((x,i)=>[x.equipment||x.label||'—',x.line||'',isCompare&&c[i]?`vs ${c[i].equipment||'—'}`:'']);
+            const primary=p.map(x=>Number((x.duration||0).toFixed(1))); const compare=isCompare?c.map(x=>Number((x.duration||0).toFixed(1))):[];
+            let total=primary.reduce((a,b)=>a+b,0)+(isCompare?compare.reduce((a,b)=>a+b,0):0), run=0;
+            const cum=p.map((x,i)=>{run+=(primary[i]+(isCompare?compare[i]:0));return total?Number((run/total*100).toFixed(1)):0});
+            const ds=[];
+            if(isCompare){ds.push({label:paretoComparison.primaryLabel,data:primary,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:28});ds.push({label:paretoComparison.compareLabel,data:compare,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:28});}
+            else ds.push({label:'Downtime (hrs)',data:primary,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30});
+            ds.push({type:'line',label:'Cumulative %',data:cum,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'});
+            chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8,left:4,right:4}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{};const b=c[i]||{};return isCompare?`${a.line||'Line'} — ${a.equipment||'—'}  |  vs ${b.line||'Line'} — ${b.equipment||'—'}`:`${a.line||'Line'} — ${a.equipment||'—'}`},label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,afterBody:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{},b=c[i]||{};return [`Primary failure: ${a.category||'—'}`,isCompare?`Comparison failure: ${b.category||'—'}`:''];}}}},scales:{x:{ticks:{color:'#cbd5e1',font:{size:9},maxRotation:0,minRotation:0,autoSkip:false},grid:{display:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+            const note=document.getElementById('summary-pareto-note'); const title=document.getElementById('summary-pareto-title'); if(title) title.textContent=isCompare?`Downtime Pareto — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto — ${paretoComparison.primaryLabel}`; if(note) note.innerHTML=isCompare?`<strong class="text-amber-300">${paretoComparison.primaryLabel}</strong> vs <strong class="text-blue-300">${paretoComparison.compareLabel}</strong> — Top 3 Line Categories + Other. Each bar identifies the specific equipment and line; hover for failure category and remaining-equipment details.`:'Top 3 Line Categories + Other. Each bar identifies the specific equipment, line, and failure category.';
         }
 
         // --- MODULE 1: CALIBRATION TRACKER ---
@@ -3878,76 +3861,45 @@ window.addEventListener("cloudsync:status", (event) => {
 
         // --- MODULE 2: PROCESS AUTOMATION UPTIME / DOWNTIME ---
         function onUptimeFilterTypeChange() {
-            const fType = document.getElementById("uptime-filter-type").value;
-            const monthInput = document.getElementById("uptime-month-filter");
-            const yearInput = document.getElementById("uptime-year-filter");
-            const compareLbl = document.getElementById("compare-label");
-            const compareMonth = document.getElementById("uptime-compare-month");
-            const compareYear = document.getElementById("uptime-compare-year");
-
-            monthInput.classList.add("hidden");
-            yearInput.classList.add("hidden");
-            compareLbl.classList.add("hidden");
-            compareMonth.classList.add("hidden");
-            compareYear.classList.add("hidden");
-
-            if (fType === "month") {
-                monthInput.classList.remove("hidden");
-                if (!monthInput.value) {
-                    const now = new Date();
-                    monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                }
-            } else if (fType === "year") {
-                yearInput.classList.remove("hidden");
-                if (!yearInput.value) yearInput.value = new Date().getFullYear();
-            } else if (fType === "compare") {
-                monthInput.classList.remove("hidden");
-                compareLbl.classList.remove("hidden");
-                compareMonth.classList.remove("hidden");
-                if (!monthInput.value) {
-                    const now = new Date();
-                    monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                }
-                if (!compareMonth.value) {
-                    compareMonth.value = `${new Date().getFullYear()-1}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-                }
-            }
+            const fType=document.getElementById("uptime-filter-type").value;
+            const monthInput=document.getElementById("uptime-month-filter"), yearInput=document.getElementById("uptime-year-filter");
+            const compareLbl=document.getElementById("compare-label"), compareMonth=document.getElementById("uptime-compare-month"), compareYear=document.getElementById("uptime-compare-year");
+            [monthInput,yearInput,compareLbl,compareMonth,compareYear].forEach(el=>el?.classList.add('hidden'));
+            const now=new Date();
+            if(fType==='month'||fType==='compare-month'){ monthInput.classList.remove('hidden'); if(!monthInput.value) monthInput.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`; }
+            if(fType==='year'||fType==='compare-year'){ yearInput.classList.remove('hidden'); if(!yearInput.value) yearInput.value=now.getFullYear(); }
+            if(fType==='compare-month'){ compareLbl.classList.remove('hidden'); compareMonth.classList.remove('hidden'); if(!compareMonth.value) compareMonth.value=`${now.getFullYear()-1}-${String(now.getMonth()+1).padStart(2,'0')}`; }
+            if(fType==='compare-year'){ compareLbl.classList.remove('hidden'); compareYear.classList.remove('hidden'); if(!compareYear.value) compareYear.value=now.getFullYear()-1; }
             renderDowntimeModule();
         }
 
         function resetUptimeFilter() {
-            document.getElementById("uptime-filter-type").value = "month";
+            document.getElementById("uptime-filter-type").value = "all";
             onUptimeFilterTypeChange();
         }
 
         function renderDowntimeModule() {
-            const fType = document.getElementById("uptime-filter-type").value;
-            const monthVal = document.getElementById("uptime-month-filter").value;
-            const yearVal = document.getElementById("uptime-year-filter").value;
-            const compareMonthVal = document.getElementById("uptime-compare-month").value;
-            const search = document.getElementById("dt-history-search").value.toLowerCase();
-
-            // Set initial default month if empty
-            if (!monthVal && (fType === "month" || fType === "compare")) {
-                const now = new Date();
-                document.getElementById("uptime-month-filter").value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-            }
-
-            const primaryLogs = downtimeLogs.filter(dt => {
-                if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
-                if (search) {
-                    const txt = `${dt.code} ${dt.equipment} ${dt.line} ${dt.category} ${dt.notes}`.toLowerCase();
-                    if (!txt.includes(search)) return false;
-                }
-                if (fType === "month") {
-                    return dt.start.startsWith(document.getElementById("uptime-month-filter").value);
-                } else if (fType === "year") {
-                    return dt.start.startsWith(yearVal);
-                } else if (fType === "compare") {
-                    return dt.start.startsWith(document.getElementById("uptime-month-filter").value);
-                }
-                return true;
+            const fType=document.getElementById("uptime-filter-type").value;
+            const monthVal=document.getElementById("uptime-month-filter").value;
+            const yearVal=document.getElementById("uptime-year-filter").value;
+            const compareMonthVal=document.getElementById("uptime-compare-month").value;
+            const compareYearVal=document.getElementById("uptime-compare-year").value;
+            const search=document.getElementById("dt-history-search").value.toLowerCase();
+            const matches=(dt,type,val)=>{ if(type==='all'||!val)return true; return type==='year'?String(dt.start||'').startsWith(String(val)):String(dt.start||'').startsWith(String(val)); };
+            const primaryType=fType==='compare-year'?'year':fType==='compare-month'?'month':fType;
+            const primaryValue=primaryType==='year'?yearVal:monthVal;
+            const compareType=fType==='compare-year'?'year':fType==='compare-month'?'month':'';
+            const compareValue=compareType==='year'?compareYearVal:compareMonthVal;
+            const isCompare=!!compareType;
+            const primaryLogs=downtimeLogs.filter(dt=>{
+                if(currentPlant!=="ALL"&&normalizePlant(dt.plant)!==normalizePlant(currentPlant))return false;
+                if(search){const txt=`${dt.code} ${dt.equipment} ${dt.line} ${dt.category} ${dt.notes}`.toLowerCase();if(!txt.includes(search))return false;}
+                return matches(dt,primaryType,primaryValue);
             });
+            const compareLogs=isCompare?downtimeLogs.filter(dt=>{
+                if(currentPlant!=="ALL"&&normalizePlant(dt.plant)!==normalizePlant(currentPlant))return false;
+                return matches(dt,compareType,compareValue);
+            }):[];
 
             // Calculate primary metrics
             let totalHrs = 0;
@@ -3968,34 +3920,13 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("uptime-kpi-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("uptime-kpi-mttr").innerText = `${mttr} mins`;
 
-            // Handle Compare Mode analysis
-            const compCard = document.getElementById("comparison-result-card");
-            if (fType === "compare") {
+            const compCard=document.getElementById("comparison-result-card");
+            if(isCompare){
                 compCard.classList.remove("hidden");
-                const compLogs = downtimeLogs.filter(dt => {
-                    if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
-                    return dt.start.startsWith(compareMonthVal);
-                });
-                let compHrs = 0;
-                compLogs.forEach(dt => {
-                    const s = new Date(dt.start);
-                    const e = new Date(dt.end);
-                    const diff = (e - s) / (1000 * 60 * 60);
-                    if (diff > 0) compHrs += diff;
-                });
-                const compAvail = (compLogs.length > 0 ? compLogs.length : 1) * 720;
-                const compUptime = Math.max(0, Math.min(100, parseFloat(((1 - (compHrs / compAvail)) * 100).toFixed(1))));
-
-                const diffPct = (uptimePct - compUptime).toFixed(1);
-                const diffHrs = (totalHrs - compHrs).toFixed(1);
-
-                document.getElementById("comparison-result-text").innerHTML = `
-                    Comparing <strong>${document.getElementById("uptime-month-filter").value}</strong> (${uptimePct}% uptime, ${totalHrs.toFixed(1)} hrs downtime) against <strong>${compareMonthVal}</strong> (${compUptime}% uptime, ${compHrs.toFixed(1)} hrs downtime).<br>
-                    Uptime Variance: <strong class="${diffPct >= 0 ? 'text-emerald-400' : 'text-red-400'}">${diffPct >= 0 ? '+' : ''}${diffPct}%</strong> | Downtime Variance: <strong class="${diffHrs <= 0 ? 'text-emerald-400' : 'text-red-400'}">${diffHrs <= 0 ? '' : '+'}${diffHrs} hrs</strong>.
-                `;
-            } else {
-                compCard.classList.add("hidden");
-            }
+                const calc=list=>{let h=0;list.forEach(dt=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000;if(d>0)h+=d;});const up=Math.max(0,Math.min(100,Number(((1-h/((list.length||1)*720))*100).toFixed(1))));return {h,up};};
+                const cp=calc(primaryLogs),cc=calc(compareLogs),dp=(cp.up-cc.up).toFixed(1),dh=(cp.h-cc.h).toFixed(1);
+                document.getElementById("comparison-result-text").innerHTML=`Comparing <strong>${primaryValue}</strong> (${cp.up}% uptime, ${cp.h.toFixed(1)} hrs downtime) against <strong>${compareValue}</strong> (${cc.up}% uptime, ${cc.h.toFixed(1)} hrs downtime).<br>Uptime Variance: <strong class="${dp>=0?'text-emerald-400':'text-red-400'}">${dp>=0?'+':''}${dp}%</strong> | Downtime Variance: <strong class="${dh<=0?'text-emerald-400':'text-red-400'}">${dh<=0?'':'+'}${dh} hrs</strong>.`;
+            }else compCard.classList.add("hidden");
 
             // Render Downtime History Table
             const tbody = document.getElementById("downtime-table-body");
@@ -4030,50 +3961,16 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             }
 
-            // Render Downtime Pareto Chart — total downtime by Line Category.
-            const lineMap = {};
-            primaryLogs.forEach(dt => {
-                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                const s = new Date(dt.start);
-                const e = new Date(dt.end);
-                const dur = Math.max(0, (e - s) / (1000 * 60 * 60));
-                if (!lineMap[line]) lineMap[line] = 0;
-                lineMap[line] += dur;
-            });
-            const sortedPareto = Object.entries(lineMap).sort((a,b) => b[1] - a[1]);
-            let cumulative = 0;
-            const totalParetoHours = sortedPareto.reduce((sum, i) => sum + i[1], 0);
-            const cumulativePct = sortedPareto.map(i => {
-                cumulative += totalParetoHours ? (i[1] / totalParetoHours) * 100 : 0;
-                return Number(cumulative.toFixed(1));
-            });
-
-            const ctxDowntimePareto = document.getElementById('chart-downtime-pareto').getContext('2d');
-            if (chartDowntimePareto) chartDowntimePareto.destroy();
-            chartDowntimePareto = new Chart(ctxDowntimePareto, {
-                type: 'bar',
-                data: {
-                    labels: sortedPareto.length ? sortedPareto.map(i => i[0].length > 18 ? i[0].slice(0,18) + '…' : i[0]) : ['No Incidents'],
-                    datasets: [{
-                        label: 'Downtime (hrs)', data: sortedPareto.length ? sortedPareto.map(i => Number(i[1].toFixed(1))) : [0],
-                        backgroundColor: '#ef4444', borderRadius: 6, order: 2
-                    }, {
-                        type: 'line', label: 'Cumulative %', data: sortedPareto.length ? cumulativePct : [0],
-                        borderColor: '#38bdf8', backgroundColor: '#38bdf8', borderWidth: 2,
-                        pointRadius: 3, tension: 0.25, yAxisID: 'y1', order: 1
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: { size: 9 }, color: '#94a3b8' } },
-                        tooltip: { callbacks: { label: ctx => ctx.dataset.label === 'Cumulative %' ? `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%` : `${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)} hrs` } } },
-                    scales: {
-                        x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8' }, grid: { color: 'rgba(51, 65, 85, 0.4)' } },
-                        y1: { beginAtZero: true, min: 0, max: 100, position: 'right', ticks: { font: { size: 9 }, color: '#38bdf8', callback: value => `${value}%` }, grid: { drawOnChartArea: false } }
-                    }
-                }
-            });
+            // Shared Pareto representation: Top 3 lines + Other, with specific equipment and comparison period.
+            const buildUptimePareto=logs=>{const map={};(logs||[]).forEach(dt=>{const line=String(dt.line||'Unclassified Line').trim();const eq=String(dt.equipment||'Unclassified Equipment').trim();const cat=String(dt.category||'Unclassified').trim();const dur=Math.max(0,(new Date(dt.end)-new Date(dt.start))/3600000);if(!map[line])map[line]={line,duration:0,eq:{},cat:{}};map[line].duration+=dur;map[line].eq[eq]=(map[line].eq[eq]||0)+dur;map[line].cat[cat]=(map[line].cat[cat]||0)+dur;});return Object.values(map).map(x=>({line:x.line,duration:x.duration,equipment:Object.entries(x.eq).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—',category:Object.entries(x.cat).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'})).sort((a,b)=>b.duration-a.duration);};
+            const bucket=list=>{const a=(list||[]).slice(0,3).map(x=>({...x,label:x.line}));const r=(list||[]).slice(3);if(r.length){const em={};r.forEach(x=>em[x.equipment]=(em[x.equipment]||0)+x.duration);a.push({line:'Remaining Lines',duration:r.reduce((q,x)=>q+x.duration,0),equipment:Object.entries(em).sort((x,y)=>y[1]-x[1]).map(x=>x[0]).join(', ')||'Other Equipment',category:'Multiple',label:'Other'});}while(a.length<4)a.push({line:'No Data',duration:0,equipment:'—',category:'—',label:a.length===3?'Other':'No Data'});return a.slice(0,4);};
+            const pp=bucket(buildUptimePareto(primaryLogs)), cc=bucket(buildUptimePareto(compareLogs));
+            const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
+            const labs=pp.map((x,i)=>[x.equipment,x.line,isCompare?`vs ${cc[i].equipment}`:'']);
+            const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[]; let total=pd.reduce((a,b)=>a+b,0)+(isCompare?cd.reduce((a,b)=>a+b,0):0),run=0;const cpct=pp.map((x,i)=>{run+=pd[i]+(isCompare?cd[i]:0);return total?Number((run/total*100).toFixed(1)):0;});
+            const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];ds.push({type:'line',label:'Cumulative %',data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'});
+            chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].line} — ${pp[i].equipment} | vs ${cc[i].line} — ${cc[i].equipment}`:`${pp[i].line} — ${pp[i].equipment}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+            const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto — ${primaryValue} vs ${compareValue}`:`Downtime Pareto — ${primaryValue||'All Time'}`;
         }
 
         function openDowntimeForm() {
@@ -4282,26 +4179,52 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function getTimelineMetrics(pr) {
-            const timeline = ensureProjectTimeline(pr).filter(m => m && m.start && m.end);
-            if (!timeline.length) return { plannedDays: 0, elapsedDays: 0, timelineProgress: null, varianceDays: null, completed: 0, total: 0 };
+            const timeline = ensureProjectTimeline(pr).filter(m => m && (m.name || m.start || m.end));
+            if (!timeline.length) return { plannedDays: 0, elapsedDays: 0, timelineProgress: null, varianceDays: null, completed: 0, total: 0, scheduleProgress: null };
+            let plannedMs = 0, elapsedMs = 0, completed = 0, validDurationSteps = 0;
             const now = new Date(); now.setHours(0,0,0,0);
-            let plannedMs = 0, elapsedMs = 0, completed = 0;
             timeline.forEach(m => {
+                const status = String(m.status || 'Pending').trim().toLowerCase();
+                if (status === 'completed') completed++;
+                if (!m.start || !m.end) return;
                 const start = new Date(m.start + 'T00:00:00');
                 const end = new Date(m.end + 'T00:00:00');
                 if (isNaN(start) || isNaN(end) || end < start) return;
                 const duration = Math.max(1, Math.round((end - start) / 86400000) + 1);
+                validDurationSteps++;
                 plannedMs += duration * 86400000;
                 const elapsedEnd = Math.min(Math.max(now, start), new Date(end.getTime() + 86400000));
                 if (elapsedEnd > start) elapsedMs += elapsedEnd - start;
-                if (String(m.status || '').toLowerCase() === 'completed') completed++;
             });
             const plannedDays = plannedMs / 86400000;
             const elapsedDays = elapsedMs / 86400000;
-            const timelineProgress = plannedDays > 0 ? Math.round(Math.min(100, (elapsedDays / plannedDays) * 100)) : 0;
+            // Project progress is driven by milestone completion, not elapsed calendar time.
+            // Every completed timeline step contributes equally to the project completion %.
             const scheduleProgress = timeline.length ? Math.round((completed / timeline.length) * 100) : 0;
-            const varianceDays = Math.round(scheduleProgress - timelineProgress);
-            return { plannedDays, elapsedDays, timelineProgress, varianceDays, completed, total: timeline.length, scheduleProgress };
+            const timelineProgress = scheduleProgress;
+            const varianceDays = null;
+            return { plannedDays, elapsedDays, timelineProgress, varianceDays, completed, total: timeline.length, scheduleProgress, validDurationSteps };
+        }
+
+        function getAutomaticProjectStatus(pr) {
+            const tm = getTimelineMetrics(pr);
+            const selected = String(pr.status || 'In Progress').trim();
+            // On Hold is an explicit user override and is retained even when milestones are complete.
+            if (selected === 'On Hold') return 'On Hold';
+            // Completion is automatic only when every timeline step is marked Completed.
+            if (tm.total > 0 && tm.completed === tm.total) return 'Completed';
+            // Do not allow a manually selected Completed state while unfinished steps remain.
+            if (selected === 'Completed') return 'In Progress';
+            return selected === 'Pending' || selected === 'Planning' ? selected : 'In Progress';
+        }
+
+        function syncProjectTimelineProgress(pr) {
+            const tm = getTimelineMetrics(pr);
+            if (tm.total > 0) {
+                pr.progress = tm.scheduleProgress;
+                pr.status = getAutomaticProjectStatus(pr);
+            }
+            return tm;
         }
 
         function timelineStatusClass(status) {
@@ -4357,13 +4280,51 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>`;
         }
 
+        function populateProjectsYearFilter() {
+            const select = document.getElementById("projects-year-filter");
+            if (!select) return;
+            const years = [...new Set(projectsList.map(pr => String(pr.date || '').slice(0,4)).filter(y => /^\d{4}$/.test(y)))].sort();
+            const current = String(new Date().getFullYear());
+            const previous = select.value;
+            select.innerHTML = `<option value="ALL" class="bg-slate-800">All Years</option>` + years.map(y => `<option value="${y}" class="bg-slate-800">${y}</option>`).join('');
+            if (years.includes(previous)) select.value = previous;
+            else if (years.includes(current)) select.value = current;
+            else select.value = 'ALL';
+        }
+
+        function onProjectsDateFilterTypeChange() {
+            const type = document.getElementById('projects-date-filter-type')?.value || 'ALL';
+            const year = document.getElementById('projects-year-filter');
+            const month = document.getElementById('projects-month-filter');
+            const from = document.getElementById('projects-date-from');
+            const to = document.getElementById('projects-date-to');
+            const toLabel = document.getElementById('projects-date-to-label');
+            [year, month, from, to, toLabel].forEach(el => el?.classList.add('hidden'));
+            if (type === 'YEAR') year?.classList.remove('hidden');
+            if (type === 'MONTH') month?.classList.remove('hidden');
+            if (type === 'RANGE') { from?.classList.remove('hidden'); to?.classList.remove('hidden'); toLabel?.classList.remove('hidden'); }
+            renderProjectsModule();
+        }
+
         function renderProjectsModule() {
-            const yearFilter = document.getElementById("projects-year-filter").value;
-            document.getElementById("projects-chart-year-badge").innerText = `Year: ${yearFilter}`;
+            populateProjectsYearFilter();
+            const type = document.getElementById("projects-date-filter-type")?.value || 'ALL';
+            const yearFilter = document.getElementById("projects-year-filter")?.value || 'ALL';
+            const monthFilter = document.getElementById("projects-month-filter")?.value || '';
+            const fromFilter = document.getElementById("projects-date-from")?.value || '';
+            const toFilter = document.getElementById("projects-date-to")?.value || '';
+            const dateText = type === 'YEAR' ? `Year: ${yearFilter}` : type === 'MONTH' ? `Month: ${monthFilter || '—'}` : type === 'RANGE' ? `Range: ${fromFilter || '—'} to ${toFilter || '—'}` : 'All Dates';
+            document.getElementById("projects-chart-year-badge").innerText = dateText;
 
             const filtered = projectsList.filter(pr => {
                 if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
-                if (yearFilter !== "ALL" && !String(pr.date || "").startsWith(yearFilter)) return false;
+                const d = String(pr.date || '').slice(0,10);
+                if (type === 'YEAR' && yearFilter !== 'ALL' && !d.startsWith(yearFilter)) return false;
+                if (type === 'MONTH' && monthFilter && !d.startsWith(monthFilter)) return false;
+                if (type === 'RANGE') {
+                    if (fromFilter && d < fromFilter) return false;
+                    if (toFilter && d > toFilter) return false;
+                }
                 return true;
             });
 
@@ -4371,7 +4332,7 @@ window.addEventListener("cloudsync:status", (event) => {
             container.innerHTML = "";
 
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 italic">No automation projects found for the selected year and plant.</div>`;
+                container.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 italic">No automation projects found for the selected date filter and plant.</div>`;
             } else {
                 filtered.forEach(pr => {
                     const statusColors = {
@@ -4380,7 +4341,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         "On Hold": "bg-red-500/10 text-red-400 border-red-500/20",
                         "Completed": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     };
-                    const tm = getTimelineMetrics(pr);
+                    const tm = syncProjectTimelineProgress(pr);
                     const computed = tm.timelineProgress == null ? Number(pr.progress || 0) : tm.timelineProgress;
                     const card = document.createElement("div");
                     card.className = "bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between space-y-4 shadow-lg";
@@ -4505,6 +4466,24 @@ window.addEventListener("cloudsync:status", (event) => {
             })).filter(m => m.name || m.start || m.end);
         }
 
+        function updateProjectFormProgressFromTimeline() {
+            const timeline = readProjectMilestonesFromForm();
+            const total = timeline.length;
+            const completed = timeline.filter(m => String(m.status || '').toLowerCase() === 'completed').length;
+            const pct = total ? Math.round((completed / total) * 100) : 0;
+            const progressEl = document.getElementById('proj-progress');
+            if (progressEl) progressEl.value = pct;
+            const statusEl = document.getElementById('proj-status');
+            if (statusEl && total > 0 && completed === total) statusEl.value = 'Completed';
+            else if (statusEl && statusEl.value === 'Completed') statusEl.value = 'In Progress';
+        }
+
+        document.addEventListener('change', function(e) {
+            if (e.target && e.target.classList && e.target.classList.contains('milestone-status')) {
+                updateProjectFormProgressFromTimeline();
+            }
+        });
+
         function handleProjectSubmit(e) {
             if (!isAdminUser()) return;
             e.preventDefault();
@@ -4513,8 +4492,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const plant = document.getElementById("proj-plant").value;
             const lead = document.getElementById("proj-lead").value;
             const date = document.getElementById("proj-date").value;
-            const progress = parseInt(document.getElementById("proj-progress").value);
-            const status = document.getElementById("proj-status").value;
+            const selectedStatus = document.getElementById("proj-status").value;
             const notes = document.getElementById("proj-notes").value;
             const timeline = readProjectMilestonesFromForm();
 
@@ -4522,10 +4500,13 @@ window.addEventListener("cloudsync:status", (event) => {
                 const pr = projectsList.find(item => item.id == id);
                 if (pr) {
                     pr.title = title; pr.plant = plant; pr.lead = lead; pr.date = date;
-                    pr.progress = progress; pr.status = status; pr.notes = notes; pr.timeline = timeline;
+                    pr.status = selectedStatus; pr.notes = notes; pr.timeline = timeline;
+                    syncProjectTimelineProgress(pr);
                 }
             } else {
-                projectsList.push({ id: Date.now(), title, plant, lead, date, progress, status, notes, timeline });
+                const pr = { id: Date.now(), title, plant, lead, date, progress: 0, status: selectedStatus, notes, timeline };
+                syncProjectTimelineProgress(pr);
+                projectsList.push(pr);
             }
 
             saveStorage();
@@ -4546,8 +4527,9 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("proj-plant").value = pr.plant;
             document.getElementById("proj-lead").value = pr.lead;
             document.getElementById("proj-date").value = pr.date;
-            document.getElementById("proj-progress").value = pr.progress;
-            document.getElementById("proj-status").value = pr.status;
+            syncProjectTimelineProgress(pr);
+            document.getElementById("proj-progress").value = pr.progress ?? 0;
+            document.getElementById("proj-status").value = pr.status || 'In Progress';
             document.getElementById("proj-notes").value = pr.notes || "";
             const editor = document.getElementById("project-milestones-editor");
             editor.innerHTML = "";
@@ -4666,420 +4648,5 @@ window.addEventListener("cloudsync:status", (event) => {
     Local save mode
 </div>
 
-
-<style id="pas-all-request-enhancements">
-  .pas-period-indicator{font-size:10px;font-weight:700;color:#93c5fd;text-align:center;margin-top:4px;line-height:1.35}
-  .pas-status-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 12px;font-size:9px;color:#94a3b8;margin-top:3px}
-  .pas-status-legend span{display:inline-flex;align-items:center;gap:4px}
-  .pas-status-legend i{width:9px;height:9px;border-radius:2px;display:inline-block}
-  .pas-date-controls{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-  .pas-date-controls select,.pas-date-controls input{background:#0f172a;color:#fff;border:1px solid #334155;border-radius:8px;padding:5px 7px;font-size:10px;outline:none}
-  .pas-date-controls label{font-size:10px;color:#94a3b8;font-weight:700}
-  .pas-compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .pas-compare-card{background:rgba(15,23,42,.55);border:1px solid rgba(71,85,105,.55);border-radius:10px;padding:8px;overflow:hidden}
-  .pas-compare-title{font-size:10px;font-weight:800;color:#e2e8f0;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em}
-  @media(max-width:900px){.pas-compare-grid{grid-template-columns:1fr}}
-</style>
-<script>
-(function(){
-  if(window.__PAS_ALL_REQUEST_ENHANCED__) return;
-  window.__PAS_ALL_REQUEST_ENHANCED__=true;
-
-  const origRenderSummaryModule = window.renderSummaryModule;
-  const origRenderCalibModule = window.renderCalibModule;
-  const origRenderDowntimeModule = window.renderDowntimeModule;
-  const origRenderCalendarModule = window.renderCalendarModule;
-  const origRenderProjectsModule = window.renderProjectsModule;
-  const origOnPlantChange = window.onPlantChange;
-  const origOnSummaryFilterTypeChange = window.onSummaryFilterTypeChange;
-  const origOnUptimeFilterTypeChange = window.onUptimeFilterTypeChange;
-  const origInitApp = window.initApp;
-
-  const plants=['Plant 1','Plant 2','PreMix'];
-  const statusDefs=[
-    {key:'In Progress',color:'#3b82f6'},
-    {key:'Planning',color:'#eab308'},
-    {key:'On Hold',color:'#ef4444'},
-    {key:'Completed',color:'#22c55e'}
-  ];
-
-  function esc(v){ return typeof escapeHtml==='function' ? escapeHtml(String(v??'')) : String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-  function dObj(v){ const d=new Date(v); return isNaN(d.getTime())?null:d; }
-  function ymd(v){ const d=dObj(v); return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:''; }
-  function ym(v){ const d=dObj(v); return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:''; }
-  function year(v){ const d=dObj(v); return d?String(d.getFullYear()):''; }
-  function periodMatch(dateStr,type,a,b){
-    if(!dateStr) return false;
-    const d=dObj(dateStr); if(!d) return false;
-    const ds=ymd(d);
-    if(type==='all') return true;
-    if(type==='year') return year(d)===String(a||'');
-    if(type==='month') return ym(d)===String(a||'');
-    if(type==='date') return ds===String(a||'');
-    if(type==='range') return (!a||ds>=a)&&(!b||ds<=b);
-    return true;
-  }
-  function firstDateOfRecord(r,kind){
-    if(kind==='project') return r?.date||'';
-    if(kind==='downtime') return r?.start||'';
-    return r?.extCalib||r?.extSched||r?.intCalib||r?.intSched||'';
-  }
-  function currentDateControl(prefix){
-    const t=document.getElementById(prefix+'-date-filter-type');
-    if(!t) return {type:'all'};
-    const type=t.value;
-    return {
-      type,
-      a:document.getElementById(prefix+'-date-a')?.value||'',
-      b:document.getElementById(prefix+'-date-b')?.value||''
-    };
-  }
-  function periodText(c){
-    if(!c) return '';
-    if(c.type==='all') return 'All Dates';
-    if(c.type==='year') return String(c.a||'Year');
-    if(c.type==='month') return String(c.a||'Month');
-    if(c.type==='date') return String(c.a||'Date');
-    if(c.type==='range') return `${c.a||'Start'} to ${c.b||'End'}`;
-    return '';
-  }
-  function ensureDateControls(prefix,host,options){
-    if(!host || document.getElementById(prefix+'-date-filter-type')) return;
-    const wrap=document.createElement('div');
-    wrap.id=prefix+'-enhanced-controls';
-    wrap.className='pas-date-controls no-print';
-    wrap.innerHTML=`
-      <label>Date Filter</label>
-      <select id="${prefix}-date-filter-type"></select>
-      <input type="number" id="${prefix}-date-a" min="2000" max="2100" placeholder="YYYY" class="hidden">
-      <input type="month" id="${prefix}-date-a-month" class="hidden">
-      <input type="date" id="${prefix}-date-a-date" class="hidden">
-      <span id="${prefix}-date-vs" class="text-slate-500 font-bold hidden">vs</span>
-      <input type="number" id="${prefix}-date-b" min="2000" max="2100" placeholder="YYYY" class="hidden">
-      <input type="month" id="${prefix}-date-b-month" class="hidden">
-      <input type="date" id="${prefix}-date-b-date" class="hidden">
-      <span id="${prefix}-range-label" class="text-slate-500 font-bold hidden">to</span>
-      <input type="date" id="${prefix}-range-from" class="hidden">
-      <input type="date" id="${prefix}-range-to" class="hidden">
-    `;
-    host.appendChild(wrap);
-    const sel=wrap.querySelector('select');
-    (options||[]).forEach(o=>{const op=document.createElement('option');op.value=o[0];op.textContent=o[1];sel.appendChild(op);});
-    sel.addEventListener('change',()=>updateDateControlUI(prefix));
-    ['date-a','date-a-month','date-a-date','date-b','date-b-month','date-b-date','range-from','range-to'].forEach(id=>wrap.querySelector('#'+prefix+'-'+id)?.addEventListener('change',()=>{
-      if(prefix==='calib') window.renderCalibModule();
-      if(prefix==='uptime2') window.renderDowntimeModule();
-      if(prefix==='projects2') window.renderProjectsModule();
-    }));
-    updateDateControlUI(prefix);
-  }
-  function updateDateControlUI(prefix){
-    const type=document.getElementById(prefix+'-date-filter-type')?.value||'all';
-    const ids=['date-a','date-a-month','date-a-date','date-b','date-b-month','date-b-date','range-from','range-to'];
-    ids.forEach(id=>document.getElementById(prefix+'-'+id)?.classList.add('hidden'));
-    document.getElementById(prefix+'-date-vs')?.classList.add('hidden');
-    document.getElementById(prefix+'-range-label')?.classList.add('hidden');
-    const now=new Date(), thisYear=String(now.getFullYear()), thisMonth=ym(now), today=ymd(now);
-    if(type==='year'){
-      const a=document.getElementById(prefix+'-date-a'); if(a){a.classList.remove('hidden');if(!a.value)a.value=thisYear;}
-    } else if(type==='month'){
-      const a=document.getElementById(prefix+'-date-a-month'); if(a){a.classList.remove('hidden');if(!a.value)a.value=thisMonth;}
-    } else if(type==='date'){
-      const a=document.getElementById(prefix+'-date-a-date'); if(a){a.classList.remove('hidden');if(!a.value)a.value=today;}
-    } else if(type==='range'){
-      const a=document.getElementById(prefix+'-range-from'),b=document.getElementById(prefix+'-range-to');
-      a?.classList.remove('hidden');b?.classList.remove('hidden');document.getElementById(prefix+'-range-label')?.classList.remove('hidden');
-    } else if(type==='year-vs-year'){
-      const a=document.getElementById(prefix+'-date-a'),b=document.getElementById(prefix+'-date-b');
-      a?.classList.remove('hidden');b?.classList.remove('hidden');document.getElementById(prefix+'-date-vs')?.classList.remove('hidden');
-      if(a&&!a.value)a.value=thisYear;if(b&&!b.value)b.value=String(now.getFullYear()-1);
-    } else if(type==='month-vs-month'){
-      const a=document.getElementById(prefix+'-date-a-month'),b=document.getElementById(prefix+'-date-b-month');
-      a?.classList.remove('hidden');b?.classList.remove('hidden');document.getElementById(prefix+'-date-vs')?.classList.remove('hidden');
-      if(a&&!a.value)a.value=thisMonth;if(b&&!b.value)b.value=`${now.getFullYear()-1}-${String(now.getMonth()+1).padStart(2,'0')}`;
-    } else if(type==='date-vs-date'){
-      const a=document.getElementById(prefix+'-date-a-date'),b=document.getElementById(prefix+'-date-b-date');
-      a?.classList.remove('hidden');b?.classList.remove('hidden');document.getElementById(prefix+'-date-vs')?.classList.remove('hidden');
-      if(a&&!a.value)a.value=today;if(b&&!b.value){const x=new Date(now);x.setDate(x.getDate()-1);b.value=ymd(x);}
-    }
-  }
-  function controlValue(prefix,which='primary'){
-    const type=document.getElementById(prefix+'-date-filter-type')?.value||'all';
-    if(type==='all') return {type:'all'};
-    if(type==='year') return {type:'year',a:document.getElementById(prefix+'-date-a')?.value||''};
-    if(type==='month') return {type:'month',a:document.getElementById(prefix+'-date-a-month')?.value||''};
-    if(type==='date') return {type:'date',a:document.getElementById(prefix+'-date-a-date')?.value||''};
-    if(type==='range') return {type:'range',a:document.getElementById(prefix+'-range-from')?.value||'',b:document.getElementById(prefix+'-range-to')?.value||''};
-    if(type==='year-vs-year') return {type:'year',a:document.getElementById(prefix+(which==='secondary'?'date-b':'date-a'))?.value||''};
-    if(type==='month-vs-month') return {type:'month',a:document.getElementById(prefix+(which==='secondary'?'date-b-month':'date-a-month'))?.value||''};
-    if(type==='date-vs-date') return {type:'date',a:document.getElementById(prefix+(which==='secondary'?'date-b-date':'date-a-date'))?.value||''};
-    return {type:'all'};
-  }
-  function isCompareControl(prefix){const t=document.getElementById(prefix+'-date-filter-type')?.value||'all';return /-vs-/.test(t);}
-  function filteredRecords(list,control,kind){
-    return list.filter(r=>{
-      if(currentPlant!=='ALL' && normalizePlant(r.plant)!==normalizePlant(currentPlant)) return false;
-      return control.type==='all' ? true : periodMatch(firstDateOfRecord(r,kind),control.type,control.a,control.b);
-    });
-  }
-  function addPeriodLegend(canvasId,periodId,legendId,compare,primary,secondary){
-    const canvas=document.getElementById(canvasId); if(!canvas)return;
-    let legend=document.getElementById(legendId),period=document.getElementById(periodId);
-    if(!legend){legend=document.createElement('div');legend.id=legendId;canvas.parentElement.appendChild(legend);}
-    legend.className='pas-status-legend';
-    legend.innerHTML=statusDefs.map(x=>`<span><i style="background:${x.color}"></i>${esc(x.key)}</span>`).join('');
-    if(!period){period=document.createElement('div');period.id=periodId;canvas.parentElement.appendChild(period);}
-    period.className='pas-period-indicator';
-    period.textContent=compare ? `${esc(primary)} vs ${esc(secondary)} • Area / Plant` : `${esc(primary||'All Dates')} • Area / Plant`;
-  }
-  function projectCounts(list){
-    const out={};plants.forEach(p=>out[p]={'In Progress':0,Planning:0,'On Hold':0,Completed:0});
-    list.forEach(pr=>{const p=normalizePlant(pr.plant);if(!out[p])return;const st=String(pr.status||'Planning').trim();if(out[p][st]!=null)out[p][st]++;});
-    return out;
-  }
-  function drawProjectPlantChart(canvasId,list1,list2,label1,label2,compare){
-    const canvas=document.getElementById(canvasId);if(!canvas||typeof Chart==='undefined')return;
-    const existing=canvasId==='chart-summary-projects'?chartSummaryProjects:chartProjectsMill;
-    if(existing)existing.destroy();
-    const visiblePlants=currentPlant==='ALL'?plants:plants.filter(p=>normalizePlant(p)===normalizePlant(currentPlant));
-    const c1=projectCounts(list1),c2=projectCounts(list2||[]);
-    const labels=visiblePlants.map(p=>p==='PreMix'?'PreMix Plant':p);
-    const datasets=[];
-    if(compare){
-      statusDefs.forEach(st=>datasets.push({label:st.key+' — '+label1,data:visiblePlants.map(p=>c1[p][st.key]),backgroundColor:st.color,borderRadius:4,stack:'p1'}));
-      statusDefs.forEach(st=>datasets.push({label:st.key+' — '+label2,data:visiblePlants.map(p=>c2[p][st.key]),backgroundColor:st.color+'99',borderRadius:4,stack:'p2'}));
-    }else statusDefs.forEach(st=>datasets.push({label:st.key,data:visiblePlants.map(p=>c1[p][st.key]),backgroundColor:st.color,borderRadius:4,stack:'single'}));
-    const ch=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,animation:{duration:250},plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:'#cbd5e1'},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:10},color:'#cbd5e1',stepSize:1},grid:{color:'rgba(51,65,85,.4)'}}}}});
-    if(canvasId==='chart-summary-projects')chartSummaryProjects=ch;else chartProjectsMill=ch;
-    addPeriodLegend(canvasId,canvasId==='chart-summary-projects'?'summary-project-period':'projects-period-indicator',canvasId==='chart-summary-projects'?'summary-project-legend':'projects-status-legend',compare,label1,label2);
-  }
-
-  function ensureEnhancementUI(){
-    // Calibration date filter + comparison panel.
-    const calibBar=document.querySelector('#module-calibration .controls-bar');
-    if(calibBar) ensureDateControls('calib',calibBar,[['all','All Dates'],['year','By Year'],['month','By Month'],['range','Custom Date Range'],['year-vs-year','Year vs Year'],['month-vs-month','Month vs Month'],['date-vs-date','Date vs Date']]);
-    if(!document.getElementById('calib-overall-comparison')){
-      const host=document.querySelector('#module-calibration .grid.grid-cols-1.md\\:grid-cols-2');
-      const panel=document.createElement('div');panel.id='calib-overall-comparison';panel.className='bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 hidden';
-      panel.innerHTML='<h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i> Calibration Overall Comparison</h4><div id="calib-comparison-content" class="pas-compare-grid"></div>';
-      if(host) host.parentElement.insertBefore(panel,host.nextSibling);
-    }
-    // Calendar month filter.
-    const calTitle=document.getElementById('calendar-month-year');
-    if(calTitle&&!document.getElementById('calendar-filter-month')){
-      const inp=document.createElement('input');inp.type='month';inp.id='calendar-filter-month';inp.className='bg-slate-900 border border-slate-700 text-white text-xs rounded-lg px-2 py-1 no-print';inp.value=ym(calendarDate);inp.onchange=()=>{const [y,m]=inp.value.split('-').map(Number);if(y&&m){calendarDate=new Date(y,m-1,1);renderCalendarModule();}};
-      calTitle.parentElement.appendChild(inp);
-    }
-    // Downtime comparison detail above historical records.
-    if(!document.getElementById('downtime-date-comparison')){
-      const hist=document.querySelector('#module-uptime h3')?.closest('.bg-slate-800\\/90');
-      const candidate=Array.from(document.querySelectorAll('#module-uptime > div')).find(x=>x.querySelector?.('#dt-history-search'));
-      const panel=document.createElement('div');panel.id='downtime-date-comparison';panel.className='bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 hidden';
-      panel.innerHTML='<div class="flex items-center justify-between"><h3 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i> Downtime Details — Date vs Date</h3><span id="downtime-compare-period" class="text-[10px] text-cyan-300 font-bold"></span></div><div id="downtime-compare-grid" class="pas-compare-grid"></div>';
-      if(candidate) candidate.parentElement.insertBefore(panel,candidate); else document.getElementById('module-uptime')?.appendChild(panel);
-    }
-    // Projects filters and comparison controls.
-    const projHeader=document.querySelector('#module-projects .no-print');
-    if(projHeader&&!document.getElementById('projects-enhanced-controls')){
-      const wrap=document.createElement('div');wrap.id='projects-enhanced-controls';wrap.className='pas-date-controls no-print';
-      wrap.innerHTML=`<label>Date Filter</label><select id="projects2-date-filter-type"><option value="all">All Dates</option><option value="year">By Year</option><option value="month">By Month</option><option value="range">Custom Date Range</option></select><input id="projects2-date-a" type="number" min="2000" max="2100" placeholder="YYYY" class="hidden"><input id="projects2-date-a-month" type="month" class="hidden"><input id="projects2-range-from" type="date" class="hidden"><span id="projects2-range-label" class="text-slate-500 font-bold hidden">to</span><input id="projects2-range-to" type="date" class="hidden"><label class="ml-2">Overall Comparison</label><select id="projects2-compare-type"><option value="off">Off</option><option value="year-vs-year">Year vs Year</option><option value="month-vs-month">Month vs Month</option><option value="date-vs-date">Date vs Date</option></select><input id="projects2-c1" type="number" min="2000" max="2100" placeholder="YYYY" class="hidden"><input id="projects2-c2" type="number" min="2000" max="2100" placeholder="YYYY" class="hidden"><input id="projects2-m1" type="month" class="hidden"><input id="projects2-m2" type="month" class="hidden"><input id="projects2-d1" type="date" class="hidden"><input id="projects2-d2" type="date" class="hidden">`;
-      projHeader.insertBefore(wrap,projHeader.firstChild);
-      const now=new Date();
-      document.getElementById('projects2-date-filter-type').onchange=()=>{updateProjectsUI();renderProjectsModule();};
-      ['projects2-date-a','projects2-date-a-month','projects2-range-from','projects2-range-to'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderProjectsModule));
-      document.getElementById('projects2-compare-type').onchange=()=>{updateProjectsUI();renderProjectsModule();};
-      ['projects2-c1','projects2-c2','projects2-m1','projects2-m2','projects2-d1','projects2-d2'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderProjectsModule));
-      document.getElementById('projects2-c1').value=now.getFullYear();document.getElementById('projects2-c2').value=now.getFullYear()-1;
-      document.getElementById('projects2-m1').value=ym(now);document.getElementById('projects2-m2').value=`${now.getFullYear()-1}-${String(now.getMonth()+1).padStart(2,'0')}`;
-      document.getElementById('projects2-d1').value=ymd(now);const prev=new Date(now);prev.setDate(prev.getDate()-1);document.getElementById('projects2-d2').value=ymd(prev);
-      updateProjectsUI();
-      // Hide the older fixed-year control so there is one clear date control.
-      const old=document.getElementById('projects-year-filter')?.closest('div.flex.items-center'); if(old)old.classList.add('hidden');
-    }
-    if(!document.getElementById('projects-overall-comparison')){
-      const panel=document.createElement('div');panel.id='projects-overall-comparison';panel.className='bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 hidden';panel.innerHTML='<h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-code-compare text-cyan-400 mr-1"></i> Automation Project Overall Comparison</h4><div id="projects-overall-comparison-content" class="pas-compare-grid"></div>';
-      const graph=document.getElementById('chart-projects-mill')?.closest('.bg-slate-800\\/90');if(graph)graph.parentElement.insertBefore(panel,graph); else document.getElementById('module-projects')?.insertBefore(panel,document.getElementById('projects-container'));
-    }
-  }
-  function updateProjectsUI(){
-    const type=document.getElementById('projects2-date-filter-type')?.value||'all';
-    ['projects2-date-a','projects2-date-a-month','projects2-range-from','projects2-range-to'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
-    document.getElementById('projects2-range-label')?.classList.add('hidden');
-    if(type==='year')document.getElementById('projects2-date-a')?.classList.remove('hidden');
-    if(type==='month')document.getElementById('projects2-date-a-month')?.classList.remove('hidden');
-    if(type==='range'){document.getElementById('projects2-range-from')?.classList.remove('hidden');document.getElementById('projects2-range-to')?.classList.remove('hidden');document.getElementById('projects2-range-label')?.classList.remove('hidden');}
-    const c=document.getElementById('projects2-compare-type')?.value||'off';
-    ['projects2-c1','projects2-c2','projects2-m1','projects2-m2','projects2-d1','projects2-d2'].forEach(id=>document.getElementById(id)?.classList.add('hidden'));
-    if(c==='year-vs-year'){document.getElementById('projects2-c1')?.classList.remove('hidden');document.getElementById('projects2-c2')?.classList.remove('hidden');}
-    if(c==='month-vs-month'){document.getElementById('projects2-m1')?.classList.remove('hidden');document.getElementById('projects2-m2')?.classList.remove('hidden');}
-    if(c==='date-vs-date'){document.getElementById('projects2-d1')?.classList.remove('hidden');document.getElementById('projects2-d2')?.classList.remove('hidden');}
-  }
-
-  function projectFilterControl(){
-    const type=document.getElementById('projects2-date-filter-type')?.value||'all';
-    if(type==='year')return {type:'year',a:document.getElementById('projects2-date-a')?.value||''};
-    if(type==='month')return {type:'month',a:document.getElementById('projects2-date-a-month')?.value||''};
-    if(type==='range')return {type:'range',a:document.getElementById('projects2-range-from')?.value||'',b:document.getElementById('projects2-range-to')?.value||''};
-    return {type:'all'};
-  }
-  function projectCompareControls(){
-    const t=document.getElementById('projects2-compare-type')?.value||'off';
-    if(t==='year-vs-year')return {type:'year',a:document.getElementById('projects2-c1')?.value||'',b:document.getElementById('projects2-c2')?.value||'',label1:document.getElementById('projects2-c1')?.value||'Date 1',label2:document.getElementById('projects2-c2')?.value||'Date 2'};
-    if(t==='month-vs-month')return {type:'month',a:document.getElementById('projects2-m1')?.value||'',b:document.getElementById('projects2-m2')?.value||'',label1:document.getElementById('projects2-m1')?.value||'Date 1',label2:document.getElementById('projects2-m2')?.value||'Date 2'};
-    if(t==='date-vs-date')return {type:'date',a:document.getElementById('projects2-d1')?.value||'',b:document.getElementById('projects2-d2')?.value||'',label1:document.getElementById('projects2-d1')?.value||'Date 1',label2:document.getElementById('projects2-d2')?.value||'Date 2'};
-    return null;
-  }
-  function applyProjectsCards(list){
-    // Reuse the original renderer with a temporary filtered dataset and ALL year so custom filters work.
-    const oldList=projectsList, oldYear=document.getElementById('projects-year-filter')?.value;
-    projectsList=list;
-    if(document.getElementById('projects-year-filter'))document.getElementById('projects-year-filter').value='ALL';
-    try{origRenderProjectsModule();}finally{projectsList=oldList;if(oldYear!=null)document.getElementById('projects-year-filter').value=oldYear;}
-  }
-
-  window.renderSummaryModule=function(){
-    ensureEnhancementUI();
-    origRenderSummaryModule();
-    // Rebuild the project graph using the exact same plant/date comparison structure as the project module.
-    const f=document.getElementById('summary-filter-type')?.value||'all';
-    let primary={type:'all',a:'',label:'All Dates'},secondary=null;
-    if(f==='year'){primary={type:'year',a:document.getElementById('summary-year-filter')?.value||''};primary.label=primary.a;}
-    if(f==='month'){primary={type:'month',a:document.getElementById('summary-month-filter')?.value||''};primary.label=primary.a;}
-    if(f==='compare-year'){primary={type:'year',a:document.getElementById('summary-year-filter')?.value||''};secondary={type:'year',a:document.getElementById('summary-compare-year')?.value||''};}
-    if(f==='compare-month'){primary={type:'month',a:document.getElementById('summary-month-filter')?.value||''};secondary={type:'month',a:document.getElementById('summary-compare-month')?.value||''};}
-    const pList=projectsList.filter(pr=>(currentPlant==='ALL'||normalizePlant(pr.plant)===normalizePlant(currentPlant))&&periodMatch(pr.date,primary.type,primary.a,''));
-    const sList=secondary?projectsList.filter(pr=>(currentPlant==='ALL'||normalizePlant(pr.plant)===normalizePlant(currentPlant))&&periodMatch(pr.date,secondary.type,secondary.a,'')):[];
-    drawProjectPlantChart('chart-summary-projects',pList,sList,primary.label||'All Dates',secondary?.a||'',!!secondary);
-    // Summary top equipment: original table for normal mode, side-by-side only for date comparison.
-    const primaryDt=downtimeLogs.filter(dt=>(currentPlant==='ALL'||normalizePlant(dt.plant)===normalizePlant(currentPlant))&&periodMatch(dt.start,primary.type,primary.a,''));
-    const secondDt=secondary?downtimeLogs.filter(dt=>(currentPlant==='ALL'||normalizePlant(dt.plant)===normalizePlant(currentPlant))&&periodMatch(dt.start,secondary.type,secondary.a,'')):[];
-    renderSummaryTopEquipment(primaryDt,secondDt,secondary?.a||'',!!secondary);
-  };
-
-  function topByLine(logs){
-    const lineMap={};
-    logs.forEach(dt=>{const line=String(dt.line||'Unclassified Line').trim().replace(/\s+/g,' ');const eq=String(dt.equipment||'Unclassified Equipment').trim().replace(/\s+/g,' ');const cat=String(dt.category||'Unclassified').trim().replace(/\s+/g,' ');const s=dObj(dt.start),e=dObj(dt.end);const dur=s&&e?Math.max(0,(e-s)/3600000):0;if(!lineMap[line])lineMap[line]={};const k=eq+'|||'+cat;if(!lineMap[line][k])lineMap[line][k]={line,equipment:eq,category:cat,duration:0};lineMap[line][k].duration+=dur;});
-    return Object.values(lineMap).map(g=>Object.values(g).sort((a,b)=>b.duration-a.duration)[0]).filter(Boolean).sort((a,b)=>b.duration-a.duration);
-  }
-  function topRowsHtml(rows){
-    if(!rows.length)return '<div class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</div>';
-    return `<div class="overflow-x-auto rounded-xl border border-slate-700/50"><table class="w-full text-left text-xs text-slate-300"><thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60"><tr><th class="py-2 px-2">Line</th><th class="py-2 px-2">Equipment</th><th class="py-2 px-2">Failure Category</th><th class="py-2 px-2 text-center">Downtime</th><th class="py-2 px-2 text-center">Line Total</th></tr></thead><tbody class="divide-y divide-slate-700/40">${rows.map(r=>{const total=rows.filter(x=>x.line===r.line).reduce((a,x)=>a+x.duration,0);return `<tr class="hover:bg-slate-800/50"><td class="py-2 px-2 font-semibold text-white">${esc(r.line)}</td><td class="py-2 px-2 text-slate-200">${esc(r.equipment)}</td><td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${esc(r.category)}</span></td><td class="py-2 px-2 text-center text-red-400 font-bold">${r.duration.toFixed(1)} hrs</td><td class="py-2 px-2 text-center text-amber-300 font-bold">${total.toFixed(1)} hrs</td></tr>`;}).join('')}</tbody></table></div>`;
-  }
-  function renderSummaryTopEquipment(primary,secondary,label,compare){
-    const old=document.getElementById('summary-top5-downtime-body');
-    const wrap=old?.closest('.space-y-2');if(!wrap)return;
-    const head=wrap.querySelector('h5');
-    let originalHost=document.getElementById('summary-top5-enhanced-host');
-    if(!originalHost){
-      originalHost=document.createElement('div');originalHost.id='summary-top5-enhanced-host';
-      old.closest('table').parentElement.replaceWith(originalHost);
-    }
-    const primaryRows=topByLine(primary);
-    const makeTable=(rows)=>rows.length?`<div class="overflow-x-auto rounded-xl border border-slate-700/50"><table class="w-full text-left text-xs text-slate-300"><thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60"><tr><th class="py-2 px-2">Line</th><th class="py-2 px-2">Equipment</th><th class="py-2 px-2">Failure Category</th><th class="py-2 px-2 text-center">Downtime</th><th class="py-2 px-2 text-center">Line Total</th></tr></thead><tbody class="divide-y divide-slate-700/40">${rows.map(r=>{const total=rows.filter(x=>x.line===r.line).reduce((a,x)=>a+x.duration,0);return `<tr class="hover:bg-slate-800/50"><td class="py-2 px-2 font-semibold text-white">${esc(r.line)}</td><td class="py-2 px-2 text-slate-200">${esc(r.equipment)}</td><td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${esc(r.category)}</span></td><td class="py-2 px-2 text-center text-red-400 font-bold">${r.duration.toFixed(1)} hrs</td><td class="py-2 px-2 text-center text-amber-300 font-bold">${total.toFixed(1)} hrs</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="text-center py-4 text-slate-500 italic">No downtime records found for this period.</div>';
-    let box=document.getElementById('summary-top5-compare-enhanced');
-    if(compare){
-      head.textContent='Top Equipment by Line — Highest Downtime Only • Date vs Date';
-      if(!box){box=document.createElement('div');box.id='summary-top5-compare-enhanced';wrap.appendChild(box);}
-      originalHost.classList.add('hidden');box.className='pas-compare-grid';
-      const secondaryLabel=document.getElementById('summary-compare-year')?.value||document.getElementById('summary-compare-month')?.value||'Date 2';
-      box.innerHTML=`<div class="pas-compare-card"><div class="pas-compare-title">${esc(label||'Date 1')}</div>${makeTable(primaryRows)}</div><div class="pas-compare-card"><div class="pas-compare-title">${esc(secondaryLabel)}</div>${makeTable(topByLine(secondary))}</div>`;
-    }else{
-      head.textContent='Top Equipment by Line — Highest Downtime Only';
-      originalHost.classList.remove('hidden');
-      if(box)box.remove();
-      originalHost.innerHTML=makeTable(primaryRows);
-    }
-  }
-
-  window.renderCalibModule=function(){
-    ensureEnhancementUI();
-    const ctype=document.getElementById('calib-date-filter-type')?.value||'all';
-    const primary=controlValue('calib','primary');
-    const secondary=isCompareControl('calib')?controlValue('calib','secondary'):null;
-    const base=equipmentList;
-    const primaryList=base.filter(eq=>(currentPlant==='ALL'||normalizePlant(eq.plant)===normalizePlant(currentPlant))&&periodMatch(firstDateOfRecord(eq,'calib'),primary.type,primary.a,primary.b));
-    const oldList=equipmentList;
-    equipmentList=primaryList;
-    try{origRenderCalibModule();}finally{equipmentList=oldList;}
-    // Make filtered values readable and show comparison only in compare mode.
-    document.getElementById('calib-overall-comparison')?.classList.toggle('hidden',!secondary);
-    if(secondary){
-      const secondList=base.filter(eq=>(currentPlant==='ALL'||normalizePlant(eq.plant)===normalizePlant(currentPlant))&&periodMatch(firstDateOfRecord(eq,'calib'),secondary.type,secondary.a,secondary.b));
-      const stats=list=>{let s=0,d=0,od=0,p=0,st=0;list.forEach(eq=>{[getSubCalibStatus(eq.extSched,eq.extCalib),getSubCalibStatus(eq.intSched,eq.intCalib)].forEach(x=>{if(x==='NA')return;s++;if(x==='DONE'||x==='OVERDUE, DONE')d++;if(x==='OVERDUE')od++;if(x==='OVERDUE, DONE')od++;if(x==='PENDING')p++;if(x==='STSOK')st++;});});return{scheduled:s,done:d,compliance:s?Math.round(d/s*100):0,overdue:od,pending:p,stsok:st};};
-      const a=stats(primaryList),b=stats(secondList);
-      const content=document.getElementById('calib-comparison-content');if(content)content.innerHTML=[['Date 1',a,periodText(primary)],['Date 2',b,periodText(secondary)]].map(x=>`<div class="pas-compare-card"><div class="pas-compare-title">${x[0]} — ${esc(x[2])}</div><div class="grid grid-cols-2 gap-2 text-[10px]"><span class="text-slate-400">Scheduled</span><strong class="text-white text-right">${x[1].scheduled}</strong><span class="text-slate-400">Completed</span><strong class="text-emerald-400 text-right">${x[1].done}</strong><span class="text-slate-400">Compliance</span><strong class="text-cyan-300 text-right">${x[1].compliance}%</strong><span class="text-slate-400">Overdue</span><strong class="text-red-400 text-right">${x[1].overdue}</strong><span class="text-slate-400">Pending</span><strong class="text-amber-400 text-right">${x[1].pending}</strong><span class="text-slate-400">STSOK</span><strong class="text-blue-400 text-right">${x[1].stsok}</strong></div></div>`).join('');
-    }
-  };
-
-  window.renderDowntimeModule=function(){
-    ensureEnhancementUI();
-    // Keep the original uptime filter controls functional, but add a full Date/Year/Month/Range/Date-vs-Date layer.
-    const host=document.querySelector('#module-uptime .flex.items-center.gap-2.flex-wrap.no-print');
-    ensureDateControls('uptime2',host,[['all','All Dates'],['year','By Year'],['month','By Month'],['range','Custom Date Range'],['year-vs-year','Year vs Year'],['month-vs-month','Month vs Month'],['date-vs-date','Date vs Date']]);
-    const primary=controlValue('uptime2','primary'), secondary=isCompareControl('uptime2')?controlValue('uptime2','secondary'):null;
-    const base=downtimeLogs;
-    const pLogs=filteredRecords(base,primary,'downtime');
-    const oldLogs=downtimeLogs, oldType=document.getElementById('uptime-filter-type')?.value;
-    downtimeLogs=pLogs;
-    try{
-      const oldSearch=document.getElementById('dt-history-search')?.value||'';
-      // Make original renderer render exactly the primary records, independent of its older filter controls.
-      if(document.getElementById('uptime-filter-type'))document.getElementById('uptime-filter-type').value='all-enhanced';
-      origRenderDowntimeModule();
-      if(document.getElementById('dt-history-search'))document.getElementById('dt-history-search').value=oldSearch;
-    }finally{downtimeLogs=oldLogs;if(document.getElementById('uptime-filter-type')&&oldType!=null)document.getElementById('uptime-filter-type').value=oldType;}
-    const panel=document.getElementById('downtime-date-comparison');
-    if(panel)panel.classList.toggle('hidden',!secondary);
-    if(secondary){
-      const sLogs=filteredRecords(base,secondary,'downtime');
-      const aggregate=logs=>{const map={};logs.forEach(dt=>{const k=`${dt.plant}|${dt.line}|${dt.equipment}|${dt.category}`;const s=dObj(dt.start),e=dObj(dt.end);const dur=s&&e?Math.max(0,(e-s)/3600000):0;if(!map[k])map[k]={plant:normalizePlant(dt.plant),line:dt.line,equipment:dt.equipment,category:dt.category,duration:0,count:0};map[k].duration+=dur;map[k].count++;});return Object.values(map).sort((a,b)=>b.duration-a.duration);};
-      const render=logs=>{const rows=aggregate(logs);if(!rows.length)return '<div class="text-xs text-slate-500 italic py-4">No downtime records found.</div>';return `<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="text-slate-500 border-b border-slate-700"><tr><th class="text-left py-1.5">Plant / Line</th><th class="text-left py-1.5">Equipment</th><th class="text-left py-1.5">Failure Category</th><th class="text-center py-1.5">Downtime</th><th class="text-center py-1.5">Events</th></tr></thead><tbody>${rows.map(r=>`<tr class="border-b border-slate-700/40"><td class="py-1.5 text-white">${esc(r.plant)} / ${esc(r.line)}</td><td class="py-1.5 text-slate-200">${esc(r.equipment)}</td><td class="py-1.5 text-slate-300">${esc(r.category)}</td><td class="py-1.5 text-center text-red-400 font-bold">${r.duration.toFixed(1)} hrs</td><td class="py-1.5 text-center text-cyan-300">${r.count}</td></tr>`).join('')}</tbody></table></div>`;};
-      document.getElementById('downtime-compare-period').textContent=`${periodText(primary)} vs ${periodText(secondary)}`;
-      document.getElementById('downtime-compare-grid').innerHTML=`<div class="pas-compare-card"><div class="pas-compare-title">Date 1 — ${esc(periodText(primary))}</div>${render(pLogs)}</div><div class="pas-compare-card"><div class="pas-compare-title">Date 2 — ${esc(periodText(secondary))}</div>${render(sLogs)}</div>`;
-    }
-  };
-
-  window.renderCalendarModule=function(){
-    ensureEnhancementUI();
-    origRenderCalendarModule();
-    const inp=document.getElementById('calendar-filter-month');if(inp)inp.value=ym(calendarDate);
-  };
-
-  window.renderProjectsModule=function(){
-    ensureEnhancementUI();
-    updateProjectsUI();
-    const primary=projectFilterControl(), cmp=projectCompareControls();
-    const base=projectsList;
-    const pList=filteredRecords(base,primary,'project');
-    // Render project cards using the primary filter. The original chart is then replaced with the common comparison chart.
-    applyProjectsCards(pList);
-    const c1=cmp?base.filter(pr=>(currentPlant==='ALL'||normalizePlant(pr.plant)===normalizePlant(currentPlant))&&periodMatch(pr.date,cmp.type,cmp.a,'')):pList;
-    const c2=cmp?base.filter(pr=>(currentPlant==='ALL'||normalizePlant(pr.plant)===normalizePlant(currentPlant))&&periodMatch(pr.date,cmp.type,cmp.b,'')):[];
-    const label1=cmp?.label1||periodText(primary),label2=cmp?.label2||'';
-    drawProjectPlantChart('chart-projects-mill',c1,c2,label1,label2,!!cmp);
-    const badge=document.getElementById('projects-chart-year-badge');if(badge)badge.textContent=cmp?`${label1} vs ${label2}`:periodText(primary);
-    const panel=document.getElementById('projects-overall-comparison');if(panel)panel.classList.toggle('hidden',!cmp);
-    if(cmp){
-      const stats=list=>{const c=projectCounts(list);return{total:list.length,rows:plants.map(p=>({plant:p,...c[p]}))};};
-      const a=stats(c1),b=stats(c2);const cont=document.getElementById('projects-overall-comparison-content');
-      if(cont)cont.innerHTML=[['Date 1',a,label1],['Date 2',b,label2]].map(x=>`<div class="pas-compare-card"><div class="pas-compare-title">${x[0]} — ${esc(x[2])}</div><div class="text-[10px] text-slate-400 mb-2">Total Projects: <strong class="text-white">${x[1].total}</strong></div><div class="overflow-x-auto"><table class="w-full text-[10px]"><thead class="text-slate-500 border-b border-slate-700"><tr><th class="text-left py-1">Plant</th><th>In Progress</th><th>Planning</th><th>On Hold</th><th>Completed</th></tr></thead><tbody>${x[1].rows.map(r=>`<tr class="border-b border-slate-700/40"><td class="py-1.5 text-white font-semibold">${esc(r.plant)}</td><td class="text-center text-blue-400">${r['In Progress']}</td><td class="text-center text-amber-400">${r.Planning}</td><td class="text-center text-red-400">${r['On Hold']}</td><td class="text-center text-emerald-400">${r.Completed}</td></tr>`).join('')}</tbody></table></div></div>`).join('');
-    }
-  };
-
-  window.onPlantChange=function(){ if(origOnPlantChange)origOnPlantChange(); ensureEnhancementUI(); };
-  window.onSummaryFilterTypeChange=function(){ if(origOnSummaryFilterTypeChange)origOnSummaryFilterTypeChange(); ensureEnhancementUI(); };
-  window.onUptimeFilterTypeChange=function(){ if(origOnUptimeFilterTypeChange)origOnUptimeFilterTypeChange(); ensureEnhancementUI(); };
-  window.changeMonth=function(direction){ calendarDate.setMonth(calendarDate.getMonth()+direction); renderCalendarModule(); };
-  window.resetToCurrentMonth=function(){ calendarDate=new Date(); renderCalendarModule(); };
-
-  window.initApp=function(){
-    if(origInitApp)origInitApp();
-    setTimeout(()=>{ensureEnhancementUI();renderSummaryModule();renderCalibModule();renderDowntimeModule();renderCalendarModule();renderProjectsModule();},0);
-  };
-
-  // The existing auth flow calls these render functions after login, so initialize the extra UI once the DOM exists.
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(ensureEnhancementUI,0));
-})();
-</script>
 </body>
 </html>
