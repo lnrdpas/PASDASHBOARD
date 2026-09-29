@@ -298,6 +298,7 @@ window.CloudSync = (() => {
         equipment: "suite_equipment_categories",
         downtime: "suite_downtime_categories",
         uptime_equipment: "suite_uptime_equipment_categories",
+        uptime_equipment_base_hours: "suite_uptime_equipment_base_hours",
         line: "suite_line_categories"
     };
 
@@ -440,6 +441,12 @@ window.CloudSync = (() => {
                 pullDataset("projects"),
                 pullCategories()
             ]);
+            // Refresh the in-memory base-hour map after cloud category data loads.
+            const savedBaseHours = readArray("suite_uptime_equipment_base_hours");
+            if (Array.isArray(savedBaseHours)) {
+                uptimeEquipmentBaseHours = {};
+                savedBaseHours.forEach(v => { const [name, hours] = String(v).split("::"); if (name) uptimeEquipmentBaseHours[name] = Number(hours) || 720; });
+            }
             ready = true;
             status("Cloud data loaded", true);
             return { ok: true };
@@ -1895,7 +1902,8 @@ window.addEventListener("cloudsync:status", (event) => {
             </div>
             <div class="space-y-3">
                 <div class="flex gap-2">
-                    <input type="text" id="new-uptime-eq-category-input" placeholder="New equipment category..." class="flex-1 bg-slate-900 border border-slate-700 text-xs rounded-xl px-3 py-2 text-white outline-none">
+                    <input type="text" id="new-uptime-eq-category-input" placeholder="Equipment category..." class="flex-1 bg-slate-900 border border-slate-700 text-xs rounded-xl px-3 py-2 text-white outline-none">
+                    <input type="number" id="new-uptime-eq-base-hours-input" min="0" step="0.1" value="720" placeholder="Base hr" title="Base available hours per individual equipment" class="w-24 bg-slate-900 border border-slate-700 text-xs rounded-xl px-3 py-2 text-white outline-none">
                     <button type="button" onclick="addNewUptimeEquipCategory()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition">Add</button>
                 </div>
                 <div class="max-h-60 overflow-y-auto space-y-2 pr-1" id="uptime-eq-categories-list-container">
@@ -2509,6 +2517,16 @@ window.addEventListener("cloudsync:status", (event) => {
             "Sensor"
         ];
 
+        let uptimeEquipmentBaseHours = {
+            "Conveyor": 720,
+            "VFD": 720,
+            "Motor": 720,
+            "PLC Cabinet": 720,
+            "Weight Scale": 720,
+            "Pneumatic Valve": 720,
+            "Sensor": 720
+        };
+
         let lineCategories = [
             "Packing Line 1",
             "Packing Line 2",
@@ -2591,6 +2609,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const savedCats = localStorage.getItem("suite_equipment_categories");
             const savedDtCats = localStorage.getItem("suite_downtime_categories");
             const savedUptimeEqCats = localStorage.getItem("suite_uptime_equipment_categories");
+            const savedUptimeEqBaseHours = localStorage.getItem("suite_uptime_equipment_base_hours");
             const savedLineCats = localStorage.getItem("suite_line_categories");
 
             if (savedEq) equipmentList = JSON.parse(savedEq);
@@ -2599,6 +2618,12 @@ window.addEventListener("cloudsync:status", (event) => {
             if (savedCats) equipmentCategories = JSON.parse(savedCats);
             if (savedDtCats) downtimeCategories = JSON.parse(savedDtCats);
             if (savedUptimeEqCats) uptimeEquipmentCategories = JSON.parse(savedUptimeEqCats);
+            if (savedUptimeEqBaseHours) {
+                const rows = JSON.parse(savedUptimeEqBaseHours);
+                if (Array.isArray(rows)) rows.forEach(v => { const [name, hours] = String(v).split("::"); if (name) uptimeEquipmentBaseHours[name] = Number(hours) || 720; });
+            }
+            uptimeEquipmentCategories = uptimeEquipmentCategories.map(v => typeof v === "string" ? v : String(v?.name || "")).filter(Boolean);
+            uptimeEquipmentCategories.forEach(cat => { if (!(cat in uptimeEquipmentBaseHours)) uptimeEquipmentBaseHours[cat] = 720; });
             if (savedLineCats) lineCategories = JSON.parse(savedLineCats);
         }
 
@@ -2609,6 +2634,7 @@ window.addEventListener("cloudsync:status", (event) => {
             localStorage.setItem("suite_equipment_categories", JSON.stringify(equipmentCategories));
             localStorage.setItem("suite_downtime_categories", JSON.stringify(downtimeCategories));
             localStorage.setItem("suite_uptime_equipment_categories", JSON.stringify(uptimeEquipmentCategories));
+            localStorage.setItem("suite_uptime_equipment_base_hours", JSON.stringify(Object.entries(uptimeEquipmentBaseHours).map(([name, hours]) => `${name}::${hours}`)));
             localStorage.setItem("suite_line_categories", JSON.stringify(lineCategories));
         }
 
@@ -2742,15 +2768,17 @@ window.addEventListener("cloudsync:status", (event) => {
             const container = document.getElementById("uptime-eq-categories-list-container");
             container.innerHTML = "";
             uptimeEquipmentCategories.forEach((cat, idx) => {
+                const base = Number(uptimeEquipmentBaseHours[cat] ?? 720);
                 const item = document.createElement("div");
-                item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl text-xs";
+                item.className = "bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl text-xs";
                 item.innerHTML = `
-                    <span class="font-semibold text-white">${escapeHtml(cat)}</span>
-                    <div class="flex items-center gap-2">
-                        <button onclick="editUptimeEquipCategory(${idx})" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-1"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="deleteUptimeEquipCategory(${idx})" class="text-red-400 hover:text-red-300 font-semibold px-2 py-1"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                `;
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="min-w-0"><span class="font-semibold text-white">${escapeHtml(cat)}</span><span class="ml-2 text-[9px] text-slate-500">Base: ${base} hr / equipment</span></div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button onclick="editUptimeEquipCategory(${idx})" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-1"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteUptimeEquipCategory(${idx})" class="text-red-400 hover:text-red-300 font-semibold px-2 py-1"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>`;
                 container.appendChild(item);
             });
         }
@@ -2831,14 +2859,16 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function addNewUptimeEquipCategory() {
             const input = document.getElementById("new-uptime-eq-category-input");
+            const hoursInput = document.getElementById("new-uptime-eq-base-hours-input");
             const val = input.value.trim();
+            const hours = Number(hoursInput.value);
             if (!val) return;
-            if (uptimeEquipmentCategories.includes(val)) {
-                alert("Category already exists!");
-                return;
-            }
+            if (!Number.isFinite(hours) || hours < 0) { alert("Please enter a valid Base Hours value."); return; }
+            if (uptimeEquipmentCategories.includes(val)) { alert("Category already exists!"); return; }
             uptimeEquipmentCategories.push(val);
+            uptimeEquipmentBaseHours[val] = hours;
             input.value = "";
+            hoursInput.value = "720";
             saveStorage();
             renderUptimeEquipCategoriesList();
             populateUptimeEquipCategoryDropdowns();
@@ -2847,17 +2877,27 @@ window.addEventListener("cloudsync:status", (event) => {
         function editUptimeEquipCategory(idx) {
             const oldVal = uptimeEquipmentCategories[idx];
             const newVal = prompt("Edit equipment category name:", oldVal);
-            if (newVal !== null && newVal.trim() !== "") {
-                uptimeEquipmentCategories[idx] = newVal.trim();
-                saveStorage();
-                renderUptimeEquipCategoriesList();
-                populateUptimeEquipCategoryDropdowns();
-            }
+            if (newVal === null || !newVal.trim()) return;
+            const trimmed = newVal.trim();
+            const currentHours = Number(uptimeEquipmentBaseHours[oldVal] ?? 720);
+            const hoursText = prompt("Base available hours per individual equipment:", String(currentHours));
+            if (hoursText === null) return;
+            const hours = Number(hoursText);
+            if (!Number.isFinite(hours) || hours < 0) { alert("Please enter a valid Base Hours value."); return; }
+            if (trimmed !== oldVal && uptimeEquipmentCategories.includes(trimmed)) { alert("Category already exists!"); return; }
+            uptimeEquipmentCategories[idx] = trimmed;
+            delete uptimeEquipmentBaseHours[oldVal];
+            uptimeEquipmentBaseHours[trimmed] = hours;
+            saveStorage();
+            renderUptimeEquipCategoriesList();
+            populateUptimeEquipCategoryDropdowns();
         }
 
         function deleteUptimeEquipCategory(idx) {
-            if (confirm("Delete this equipment category?")) {
+            const cat = uptimeEquipmentCategories[idx];
+            if (confirm(`Delete equipment category "${cat}"?`)) {
                 uptimeEquipmentCategories.splice(idx, 1);
+                delete uptimeEquipmentBaseHours[cat];
                 saveStorage();
                 renderUptimeEquipCategoriesList();
                 populateUptimeEquipCategoryDropdowns();
@@ -4229,6 +4269,23 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 2: PROCESS AUTOMATION UPTIME / DOWNTIME ---
+        function getUptimeEquipmentBaseHours(category) {
+            const n = Number(uptimeEquipmentBaseHours?.[category]);
+            return Number.isFinite(n) && n >= 0 ? n : 720;
+        }
+
+        function calculateAvailableHours(logs) {
+            const equipmentMap = new Map();
+            (logs || []).forEach(dt => {
+                const code = String(dt?.code || dt?.equipmentId || dt?.equipmentCode || dt?.assetId || dt?.equipment || "").trim();
+                if (!code) return;
+                if (!equipmentMap.has(code)) equipmentMap.set(code, dt?.equipment || "");
+            });
+            let total = 0;
+            equipmentMap.forEach(category => { total += getUptimeEquipmentBaseHours(category); });
+            return total || 0;
+        }
+
         function onUptimeFilterTypeChange() {
             const fType=document.getElementById("uptime-filter-type").value;
             const monthInput=document.getElementById("uptime-month-filter"), yearInput=document.getElementById("uptime-year-filter");
@@ -4279,8 +4336,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (diff > 0) totalHrs += diff;
             });
 
-            const availHours = (primaryLogs.length > 0 ? primaryLogs.length : 1) * 720;
-            const uptimePct = Math.max(0, Math.min(100, parseFloat(((1 - (totalHrs / availHours)) * 100).toFixed(1))));
+            const availHours = calculateAvailableHours(primaryLogs);
+            const effectiveAvailHours = availHours > 0 ? availHours : 720;
+            const uptimePct = Math.max(0, Math.min(100, parseFloat(((1 - (totalHrs / effectiveAvailHours)) * 100).toFixed(1))));
             const mtbf = primaryLogs.length > 0 ? (720 / primaryLogs.length).toFixed(1) : "0";
             const mttr = primaryLogs.length > 0 ? Math.round((totalHrs / primaryLogs.length) * 60) : 0;
 
@@ -4292,7 +4350,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const compCard=document.getElementById("comparison-result-card");
             if(isCompare){
                 compCard.classList.remove("hidden");
-                const calc=list=>{let h=0;list.forEach(dt=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000;if(d>0)h+=d;});const up=Math.max(0,Math.min(100,Number(((1-h/((list.length||1)*720))*100).toFixed(1))));return {h,up};};
+                const calc=list=>{let h=0;list.forEach(dt=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000;if(d>0)h+=d;});const ah=calculateAvailableHours(list)||720;const up=Math.max(0,Math.min(100,Number(((1-h/ah)*100).toFixed(1))));return {h,up,ah};};
                 const cp=calc(primaryLogs),cc=calc(compareLogs),dp=(cp.up-cc.up).toFixed(1),dh=(cp.h-cc.h).toFixed(1);
                 document.getElementById("comparison-result-text").innerHTML=`Comparing <strong>${primaryValue}</strong> (${cp.up}% uptime, ${cp.h.toFixed(1)} hrs downtime) against <strong>${compareValue}</strong> (${cc.up}% uptime, ${cc.h.toFixed(1)} hrs downtime).<br>Uptime Variance: <strong class="${dp>=0?'text-emerald-400':'text-red-400'}">${dp>=0?'+':''}${dp}%</strong> | Downtime Variance: <strong class="${dh<=0?'text-emerald-400':'text-red-400'}">${dh<=0?'':'+'}${dh} hrs</strong>.`;
             }else compCard.classList.add("hidden");
