@@ -3197,7 +3197,8 @@ window.addEventListener("cloudsync:status", (event) => {
             };
             const calcDowntime = list => {
                 let hrs=0; (list||[]).forEach(dt=>{ const d=(new Date(dt.end)-new Date(dt.start))/3600000; if(d>0) hrs+=d; });
-                const avail=((list||[]).length||1)*720;
+                const equipmentCount = new Set((list||[]).map(x => String(x?.code ?? x?.equipmentId ?? x?.equipmentCode ?? x?.equipment ?? x?.id ?? "").trim()).filter(Boolean)).size || 1;
+                const avail=equipmentCount*720;
                 const uptime=Math.max(0,Math.min(100,Number(((1-hrs/avail)*100).toFixed(1))));
                 return {hrs,uptime};
             };
@@ -4146,31 +4147,76 @@ window.addEventListener("cloudsync:status", (event) => {
             const content = document.getElementById("calibration-history-content");
             if (!content) return;
 
-            content.innerHTML = group.map(record => {
-                const rows = calibrationHistoryRows(record);
-                const hasPast = rows.length > 1;
-                const body = rows.map(r => {
-                    const extStatus = getSubCalibStatus(r.extSched, r.extCalib);
-                    const intStatus = getSubCalibStatus(r.intSched, r.intCalib);
-                    return `<tr class="border-t border-slate-700/50 ${r.current ? 'bg-blue-500/5' : ''}">
-                        <td class="px-2.5 py-2 text-center font-bold ${r.current ? 'text-blue-300' : 'text-slate-400'}">${r.current ? 'CURRENT' : 'HISTORY '+r.cycle}</td>
-                        <td class="px-2.5 py-2 font-mono text-[10px]">${escapeHtml(r.pr || '-')}<br><span class="text-purple-300">${escapeHtml(r.po || '-')}</span></td>
-                        <td class="px-2.5 py-2 text-center">${escapeHtml(r.extSched || '-')}<br>${escapeHtml(r.extCalib || '-')}<br><span class="text-slate-400">${escapeHtml(r.extBy || '-')}</span></td>
-                        <td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${extStatus}</span></td>
-                        <td class="px-2.5 py-2 text-center">${escapeHtml(r.intSched || '-')}<br>${escapeHtml(r.intCalib || '-')}<br><span class="text-slate-400">${escapeHtml(r.intBy || '-')}</span></td>
-                        <td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${intStatus}</span></td>
-                    </tr>`;
-                }).join('');
-                return `<div class="mb-4 border border-slate-700/60 rounded-xl overflow-hidden">
-                    <div class="px-3 py-2 bg-slate-900/70 flex items-center justify-between">
-                        <div><span class="text-xs font-bold text-white">${escapeHtml(record.code || '-')}</span><span class="ml-2 text-[9px] text-slate-500">${hasPast ? rows.length + ' calibration cycles recorded' : 'Current cycle only'}</span></div>
-                    </div>
-                    <div class="overflow-x-auto"><table class="w-full text-[10px] text-slate-300">
-                        <thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2.5 py-2">Cycle</th><th class="px-2.5 py-2">PR / PO</th><th class="px-2.5 py-2">External<br>Sched / Calib / By</th><th class="px-2.5 py-2">Ext Status</th><th class="px-2.5 py-2">Internal<br>Sched / Calib / By</th><th class="px-2.5 py-2">Int Status</th></tr></thead>
-                        <tbody>${body}</tbody>
-                    </table></div>
-                </div>`;
+            // History is displayed by calibration DATE, not by equipment code/cycle.
+            // If one date was applied to several codes, those codes appear together on one row.
+            // If a later date was applied to only one code, only that code appears on that date.
+            const dateGroups = new Map();
+            const addDateGroup = (date, source, code) => {
+                const d = String(date || '').trim();
+                if (!d) return;
+                const key = d;
+                if (!dateGroups.has(key)) {
+                    dateGroups.set(key, {
+                        date: d, codes: new Set(), pr: source.pr || '', po: source.po || '',
+                        extSched: source.extSched || '', extCalib: source.extCalib || '', extBy: source.extBy || '',
+                        intSched: source.intSched || '', intCalib: source.intCalib || '', intBy: source.intBy || ''
+                    });
+                }
+                const g = dateGroups.get(key);
+                if (code) g.codes.add(code);
+                g.pr = g.pr || source.pr || ''; g.po = g.po || source.po || '';
+                g.extSched = g.extSched || source.extSched || ''; g.extCalib = g.extCalib || source.extCalib || ''; g.extBy = g.extBy || source.extBy || '';
+                g.intSched = g.intSched || source.intSched || ''; g.intCalib = g.intCalib || source.intCalib || ''; g.intBy = g.intBy || source.intBy || '';
+            };
+
+            group.forEach(record => {
+                const code = String(record.code || '').trim();
+                const history = Array.isArray(record.calibrationHistory) ? record.calibrationHistory : [];
+                history.forEach(h => {
+                    const extDate = h.extCalib || (Array.isArray(h.externalCalibrations) ? (latestCalibrationCycle(h.externalCalibrations).calib || '') : '');
+                    const intDate = h.intCalib || (Array.isArray(h.internalCalibrations) ? (latestCalibrationCycle(h.internalCalibrations).calib || '') : '');
+                    // Prefer the actual calibration date. If both sides have different dates, show both dates.
+                    if (extDate) addDateGroup(extDate, {...h, extSched:h.extSched || '', extCalib:extDate}, code);
+                    if (intDate && intDate !== extDate) addDateGroup(intDate, {...h, intSched:h.intSched || '', intCalib:intDate}, code);
+                });
+
+                // Current/latest values are also shown once for the selected group.
+                const extDate = record.extCalib || '';
+                const intDate = record.intCalib || '';
+                if (extDate) addDateGroup(extDate, record, code);
+                if (intDate && intDate !== extDate) addDateGroup(intDate, record, code);
+            });
+
+            const rows = Array.from(dateGroups.values()).sort((a,b) => String(b.date).localeCompare(String(a.date)));
+            if (!rows.length) {
+                content.innerHTML = `<div class="p-5 text-center text-xs text-slate-400">No calibration dates recorded yet.</div>`;
+                document.getElementById("modal-calibration-history").classList.remove("hidden");
+                return;
+            }
+
+            const body = rows.map((r, idx) => {
+                const extStatus = getSubCalibStatus(r.extSched, r.extCalib);
+                const intStatus = getSubCalibStatus(r.intSched, r.intCalib);
+                const codes = Array.from(r.codes).join(', ');
+                return `<tr class="border-t border-slate-700/50">
+                    <td class="px-2.5 py-2 font-bold text-blue-300 whitespace-nowrap">${escapeHtml(r.date)}</td>
+                    <td class="px-2.5 py-2 font-mono text-[10px]">${escapeHtml(codes || '-')}</td>
+                    <td class="px-2.5 py-2 font-mono text-[10px]">${escapeHtml(r.pr || '-')}<br><span class="text-purple-300">${escapeHtml(r.po || '-')}</span></td>
+                    <td class="px-2.5 py-2 text-center">${escapeHtml(r.extSched || '-')}<br>${escapeHtml(r.extCalib || '-')}<br><span class="text-slate-400">${escapeHtml(r.extBy || '-')}</span><br><span class="text-[9px] font-bold">${extStatus}</span></td>
+                    <td class="px-2.5 py-2 text-center">${escapeHtml(r.intSched || '-')}<br>${escapeHtml(r.intCalib || '-')}<br><span class="text-slate-400">${escapeHtml(r.intBy || '-')}</span><br><span class="text-[9px] font-bold">${intStatus}</span></td>
+                </tr>`;
             }).join('');
+
+            content.innerHTML = `<div class="mb-3 px-3 py-2 bg-slate-900/70 rounded-xl border border-slate-700/60">
+                <div class="text-xs font-bold text-white">Calibration History by Date</div>
+                <div class="text-[9px] text-slate-400 mt-0.5">One date = one history entry. Codes listed together shared that calibration date; a code listed alone was updated separately.</div>
+            </div>
+            <div class="overflow-x-auto border border-slate-700/60 rounded-xl">
+                <table class="w-full text-[10px] text-slate-300">
+                    <thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2.5 py-2 text-left">Calibration Date</th><th class="px-2.5 py-2 text-left">Equipment Code(s)</th><th class="px-2.5 py-2 text-left">PR / PO</th><th class="px-2.5 py-2 text-center">External<br>Sched / Calib / By / Status</th><th class="px-2.5 py-2 text-center">Internal<br>Sched / Calib / By / Status</th></tr></thead>
+                    <tbody>${body}</tbody>
+                </table>
+            </div>`;
 
             document.getElementById("modal-calibration-history").classList.remove("hidden");
         }
@@ -4250,7 +4296,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (diff > 0) totalHrs += diff;
             });
 
-            const availHours = (primaryLogs.length > 0 ? primaryLogs.length : 1) * 720;
+            const uniqueEquipmentIds = new Set(primaryLogs.map(dt => String(dt?.code ?? dt?.equipmentId ?? dt?.equipmentCode ?? dt?.equipment ?? dt?.assetId ?? "").trim()).filter(Boolean));
+            const equipmentCount = uniqueEquipmentIds.size || 1;
+            const availHours = equipmentCount * 720;
             const uptimePct = Math.max(0, Math.min(100, parseFloat(((1 - (totalHrs / availHours)) * 100).toFixed(1))));
             const mtbf = primaryLogs.length > 0 ? (720 / primaryLogs.length).toFixed(1) : "0";
             const mttr = primaryLogs.length > 0 ? Math.round((totalHrs / primaryLogs.length) * 60) : 0;
