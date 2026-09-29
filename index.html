@@ -19,7 +19,6 @@
    SECURITY: Never place a Supabase Secret Key, service_role key, or
    database password in this file.
    ============================================================ */
-// SECURITY HARDENED: authentication is cloud-only; no local password fallback.
 window.CLOUD_CONFIG = {
     // Set true after you replace the publishable-key placeholder below.
     enabled: true,
@@ -47,7 +46,7 @@ window.CloudAuth = (() => {
         client = window.supabase.createClient(
             window.CLOUD_CONFIG.projectUrl,
             window.CLOUD_CONFIG.publishableKey,
-            { auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false } }
+            { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } }
         );
         return true;
     }
@@ -368,7 +367,7 @@ window.CloudSync = (() => {
 
     function readArray(key) {
         try {
-            const raw = sessionStorage.getItem(key);
+            const raw = localStorage.getItem(key);
             const parsed = raw ? JSON.parse(raw) : [];
             return Array.isArray(parsed) ? parsed : [];
         } catch {
@@ -377,7 +376,7 @@ window.CloudSync = (() => {
     }
 
     function writeArray(key, value) {
-        sessionStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+        localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
     }
 
     function rowId(value, index) {
@@ -673,15 +672,15 @@ window.CloudSync = (() => {
             ...Object.values(CATEGORIES)
         ]);
 
-        const originalSet = sessionStorage.setItem.bind(sessionStorage);
-        const originalRemove = sessionStorage.removeItem.bind(sessionStorage);
+        const originalSet = localStorage.setItem.bind(localStorage);
+        const originalRemove = localStorage.removeItem.bind(localStorage);
 
-        sessionStorage.setItem = function(key, value) {
+        localStorage.setItem = function(key, value) {
             originalSet(key, value);
             if (watched.has(key)) schedulePush();
         };
 
-        sessionStorage.removeItem = function(key) {
+        localStorage.removeItem = function(key) {
             originalRemove(key);
             if (watched.has(key)) schedulePush();
         };
@@ -693,8 +692,8 @@ window.CloudSync = (() => {
         // In cloud mode, browser localStorage must never be allowed to become
         // the source of truth. Remove the old browser cache before pulling
         // the authoritative dataset from Supabase.
-        Object.values(DATASETS).forEach(cfg => sessionStorage.removeItem(cfg.key));
-        Object.values(CATEGORIES).forEach(key => sessionStorage.removeItem(key));
+        Object.values(DATASETS).forEach(cfg => localStorage.removeItem(cfg.key));
+        Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
 
         // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
         // the pull itself can trigger a save of stale/partial browser data.
@@ -706,19 +705,8 @@ window.CloudSync = (() => {
         return result;
     }
 
-    function clearClientCache() {
-        Object.values(DATASETS).forEach(cfg => sessionStorage.removeItem(cfg.key));
-        Object.values(CATEGORIES).forEach(key => sessionStorage.removeItem(key));
-        Object.keys(lastSynced).forEach(key => {
-            if (Array.isArray(lastSynced[key])) lastSynced[key] = [];
-            else lastSynced[key] = {};
-        });
-        ready = false;
-    }
-
     return {
         start,
-        clearClientCache,
         pull,
         push,
         refresh: refreshIfClean,
@@ -1698,8 +1686,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 space-y-3">
                     <div class="flex items-center gap-2">
                         <i class="fa-solid fa-layer-group text-blue-400"></i>
-                        <span class="font-bold text-blue-300">Shared Calibration Information</span>
-                        <span class="text-[9px] text-slate-400">applies to all codes below</span>
+                        <span class="font-bold text-blue-300">Calibration Entry Groups</span>
+                        <span class="text-[9px] text-slate-400">multiple codes can share one date</span>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1721,42 +1709,24 @@ window.addEventListener("cloudsync:status", (event) => {
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                            <label class="block text-slate-300 font-semibold mb-1">PO No.</label>
-                            <input type="text" id="eq-shared-po" placeholder="PO Reference" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                        </div>
-                        <div class="bg-slate-950/40 p-2.5 rounded-xl border border-slate-700/40 space-y-1.5 md:col-span-2">
-                            <span class="text-[11px] font-bold text-blue-300">EXTERNAL CALIBRATION</span>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                                <div><label class="block text-slate-400 text-[10px]">Date Sched</label><input type="date" id="eq-shared-ext-sched" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[11px]"></div>
-                                <div><label class="block text-slate-400 text-[10px]">Date Calib</label><input type="date" id="eq-shared-ext-calib" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[11px]"></div>
-                                <div><label class="block text-slate-400 text-[10px]">Calibrated By</label><input type="text" id="eq-shared-ext-by" placeholder="Vendor / SGS" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[11px]"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-slate-950/40 p-2.5 rounded-xl border border-slate-700/40 space-y-1.5">
-                        <span class="text-[11px] font-bold text-purple-300">INTERNAL CALIBRATION</span>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                            <div><label class="block text-slate-400 text-[10px]">Date Sched</label><input type="date" id="eq-shared-int-sched" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[11px]"></div>
-                            <div><label class="block text-slate-400 text-[10px]">Date Calib</label><input type="date" id="eq-shared-int-calib" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[11px]"></div>
-                            <div><label class="block text-slate-400 text-[10px]">Calibrated By</label><input type="text" id="eq-shared-int-by" placeholder="Technician" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[11px]"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="multiple-entry-toolbar" class="flex items-center justify-between bg-slate-900/80 p-2.5 rounded-xl border border-slate-700">
                     <div>
-                        <span class="font-semibold text-slate-300"><i class="fa-solid fa-barcode text-blue-400 mr-1.5"></i> Equipment Codes</span>
-                        <p class="text-[9px] text-slate-500 mt-0.5">Add as many codes as needed; each code becomes one instrument count.</p>
+                        <label class="block text-slate-300 font-semibold mb-1">PO No.</label>
+                        <input type="text" id="eq-shared-po" placeholder="PO Reference" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
                     </div>
-                    <button type="button" onclick="addEquipmentRow()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1">
-                        <i class="fa-solid fa-plus text-[10px]"></i> Add Code
-                    </button>
-                </div>
 
-                <div id="equipment-rows-container" class="space-y-2"></div>
+                    <div class="bg-slate-950/30 border border-blue-500/20 rounded-xl p-2.5">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <div>
+                                <span class="text-[11px] font-bold text-blue-300">DATE / EQUIPMENT CODE GROUPS</span>
+                                <p class="text-[9px] text-slate-500">Example: one date → PI-01, PI-02, PI-03. Add another group when the date is different.</p>
+                            </div>
+                            <button type="button" onclick="addCalibrationGroup()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-lg text-xs font-bold transition whitespace-nowrap">
+                                <i class="fa-solid fa-plus text-[10px]"></i> Add Date Group
+                            </button>
+                        </div>
+                        <div id="calibration-groups-container" class="space-y-3"></div>
+                    </div>
+                </div>
 
                 <div id="equipment-count-preview" class="bg-slate-900/60 border border-slate-700/50 rounded-xl px-3 py-2 text-[10px] text-slate-400">
                     Instrument Count after save: <strong id="equipment-count-number" class="text-white">0</strong>
@@ -1778,15 +1748,25 @@ window.addEventListener("cloudsync:status", (event) => {
                 <button onclick="closeUserManagementModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
 
-            <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-2">
-                <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-shield-halved text-emerald-400 mr-1.5"></i> Secure Authentication</h4>
-                <p class="text-[11px] text-slate-400">Passwords are managed by Supabase Auth / the approved administrator process. PASDASHBOARD does not store passwords in the browser, localStorage, or dashboard database.</p>
+            <!-- CHANGE PASSWORD SECTION (Main Account Only) -->
+            <div id="main-account-password-section" class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
+                <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-key text-amber-400 mr-1.5"></i> Change Main Account Password</h4>
+                <div id="pass-update-msg" class="hidden text-xs p-2.5 rounded-lg text-center font-medium"></div>
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-1">New Password</label>
+                        <input type="password" id="new-main-password" placeholder="Enter new password" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
+                    </div>
+                    <button type="button" onclick="updateMainPassword()" class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-4 rounded-xl transition shadow-md">
+                        Update Password
+                    </button>
+                </div>
             </div>
 
             <!-- ADD / MANAGE SUB-USERS SECTION (Main Account Authority) -->
             <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 space-y-3">
                 <h4 class="text-xs font-bold text-white uppercase tracking-wider"><i class="fa-solid fa-user-plus text-emerald-400 mr-1.5"></i> Authorized Operators / Users</h4>
-                <p class="text-[11px] text-slate-400">Additional accounts are created through the secure Supabase Auth service. Passwords are never stored by this dashboard.</p>
+                <p class="text-[11px] text-slate-400">Create additional accounts using a username and password only. The Main Account continues to use its email address.</p>
 
                 <form onsubmit="handleAddUserSubmit(event)" class="space-y-3 text-xs pt-1">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1809,7 +1789,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                     <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
                         <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
-                        <p class="text-[10px] text-slate-500">The Main Account selects which pages this user can open. Role controls whether the user can edit records. Database RLS independently enforces these permissions.</p>
+                        <p class="text-[10px] text-slate-500">The Main Account selects which pages this user can open. Role controls whether the user can edit records.</p>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="summary" checked> Executive Summary</label>
                             <label class="flex items-center gap-2"><input type="checkbox" class="new-page-access" value="calibration"> Calibration Tracker</label>
@@ -1863,7 +1843,7 @@ window.addEventListener("cloudsync:status", (event) => {
             </div>
             <div class="bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-2">
                 <div class="text-[11px] font-bold uppercase tracking-wider text-slate-300">View Authority</div>
-                <p class="text-[10px] text-slate-500">The Main Account selects which pages this account can open. Role controls whether the user can edit records. Database RLS independently enforces these permissions.</p>
+                <p class="text-[10px] text-slate-500">The Main Account selects which pages this account can open. Role controls whether the user can edit records.</p>
                 <div class="grid grid-cols-2 gap-2 text-xs">
                     <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="summary"> Executive Summary</label>
                     <label class="flex items-center gap-2"><input type="checkbox" class="edit-page-access" value="calibration"> Calibration Tracker</label>
@@ -2049,6 +2029,9 @@ window.addEventListener("cloudsync:status", (event) => {
     </div>
 
     <script>
+        let AUTH_USER = "PAS";
+        let AUTH_PASS = "PASPASPAS";
+        let additionalUsers = [];
         let CURRENT_ROLE = "admin";
         let CURRENT_IS_MAIN = false;
         let CURRENT_ACCESS_PAGES = ["summary", "calibration", "uptime", "calendar", "projects"];
@@ -2140,18 +2123,12 @@ window.addEventListener("cloudsync:status", (event) => {
         async function checkAuth() {
             const isAuth = sessionStorage.getItem("authenticated") === "true";
             const loggedUser = sessionStorage.getItem("logged_user");
-            const loggedRole = sessionStorage.getItem("logged_role") || "viewer";
+            const loggedRole = sessionStorage.getItem("logged_role") || (loggedUser === AUTH_USER ? "admin" : "viewer");
             const loggedIsMain = sessionStorage.getItem("logged_is_main") === "true";
             try { CURRENT_ACCESS_PAGES = JSON.parse(sessionStorage.getItem("logged_access_pages") || "[]"); } catch (_) { CURRENT_ACCESS_PAGES = []; }
             if (!Array.isArray(CURRENT_ACCESS_PAGES) || !CURRENT_ACCESS_PAGES.length) CURRENT_ACCESS_PAGES = ["summary", "projects"];
 
             if (isAuth) {
-                if (!window.CLOUD_CONFIG?.enabled || !window.CloudAuth?.getClient?.()) {
-                    sessionStorage.clear();
-                    document.getElementById("login-screen").classList.remove("hidden");
-                    document.getElementById("app-content").classList.add("hidden");
-                    return;
-                }
                 CURRENT_ROLE = loggedRole;
                 CURRENT_IS_MAIN = loggedIsMain;
                 document.getElementById("login-screen").classList.add("hidden");
@@ -2220,8 +2197,30 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            err.textContent = "Secure cloud authentication is unavailable. Please contact the dashboard administrator.";
-            err.classList.remove("hidden");
+            loadSavedUsers();
+            let isValid = false;
+            let role = "viewer";
+            if (u === AUTH_USER && p === AUTH_PASS) { isValid = true; role = "admin"; }
+            else {
+                const foundSub = additionalUsers.find(sub => sub.username === u && sub.password === p);
+                if (foundSub) { isValid = true; role = foundSub.role || "viewer"; }
+            }
+            if (isValid) {
+                sessionStorage.setItem("authenticated", "true");
+                sessionStorage.setItem("logged_user", u);
+                sessionStorage.setItem("logged_role", role);
+                sessionStorage.setItem("logged_is_main", u === AUTH_USER ? "true" : "false");
+                const localPages = role === "admin" ? ["summary", "calibration", "uptime", "calendar", "projects"] : (foundSub?.access_pages || ["summary", "projects"]);
+                sessionStorage.setItem("logged_access_pages", JSON.stringify(localPages));
+                CURRENT_ACCESS_PAGES = localPages;
+                CURRENT_ROLE = role;
+                CURRENT_IS_MAIN = u === AUTH_USER;
+                err.classList.add("hidden");
+                await checkAuth();
+            } else {
+                err.textContent = "Invalid username or password!";
+                err.classList.remove("hidden");
+            }
         }
 
         async function handleLogout() {
@@ -2231,12 +2230,27 @@ window.addEventListener("cloudsync:status", (event) => {
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
             sessionStorage.removeItem("logged_access_pages");
-            (window.CloudSync?.clearClientCache?.());
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
             document.getElementById("login-username").value = "";
             document.getElementById("login-password").value = "";
             checkAuth();
+        }
+
+        function loadSavedUsers() {
+            const savedMainPass = localStorage.getItem("suite_main_password");
+            const savedSubUsers = localStorage.getItem("suite_sub_users");
+            if (savedMainPass) AUTH_PASS = savedMainPass;
+            if (savedSubUsers) {
+                try {
+                    additionalUsers = JSON.parse(savedSubUsers).map(u => ({
+                        ...u,
+                        role: u.role === "admin" ? "admin" : "viewer"
+                    }));
+                } catch (e) {
+                    additionalUsers = [];
+                }
+            }
         }
 
         async function openUserManagementModal() {
@@ -2247,7 +2261,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const loggedUser = sessionStorage.getItem("logged_user") || "";
             const mainPassSection = document.getElementById("main-account-password-section");
             if (mainPassSection) {
-                mainPassSection.classList.add("hidden");
+                const cloudMode = !!window.CLOUD_CONFIG?.enabled;
+                mainPassSection.classList.toggle("hidden", cloudMode || loggedUser !== AUTH_USER);
             }
 
             await renderSubUsersList();
@@ -2273,7 +2288,21 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function updateMainPassword() {
-            alert("Main Account password changes are handled by Supabase Auth / the approved administrator process. The dashboard never stores passwords.");
+            if (!isAdminUser() || (sessionStorage.getItem("logged_user") || "") !== AUTH_USER) return;
+            const newPass = document.getElementById("new-main-password").value.trim();
+            const msg = document.getElementById("pass-update-msg");
+            if (!newPass) {
+                msg.className = "text-xs p-2.5 rounded-lg text-center font-medium bg-red-500/10 border border-red-500/20 text-red-400";
+                msg.innerText = "Please enter a valid password!";
+                msg.classList.remove("hidden");
+                return;
+            }
+            AUTH_PASS = newPass;
+            localStorage.setItem("suite_main_password", AUTH_PASS);
+            msg.className = "text-xs p-2.5 rounded-lg text-center font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400";
+            msg.innerText = "Main account password updated successfully!";
+            msg.classList.remove("hidden");
+            document.getElementById("new-main-password").value = "";
         }
 
         async function handleAddUserSubmit(e) {
@@ -2300,7 +2329,15 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            alert("Secure cloud authentication is unavailable. No local account will be created.");
+            if (username === AUTH_USER || additionalUsers.some(u => u.username === username)) {
+                alert("Username already exists or is reserved."); return;
+            }
+            additionalUsers.push({ username, password: upass, role });
+            localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
+            document.getElementById("new-user-name").value = "";
+            document.getElementById("new-user-pass").value = "";
+            if (roleEl) roleEl.value = "viewer";
+            renderSubUsersList();
         }
 
         async function renderSubUsersList() {
@@ -2342,7 +2379,18 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
 
-            container.innerHTML = `<p class="text-[11px] text-slate-500 italic">User management is available only through secure cloud authentication.</p>`;
+            if (additionalUsers.length === 0) {
+                container.innerHTML = `<p class="text-[11px] text-slate-500 italic">No custom user accounts added yet.</p>`;
+                return;
+            }
+            additionalUsers.forEach((usr, idx) => {
+                if (!usr || usr.username === AUTH_USER) return;
+                const isFull = (usr.role || "viewer") === "admin";
+                const item = document.createElement("div");
+                item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2 rounded-xl text-xs gap-2";
+                item.innerHTML = `<div class="min-w-0"><div class="font-semibold text-white truncate"><i class="fa-solid fa-user mr-1.5 text-blue-400"></i> ${escapeHtml(usr.username)}</div><div class="text-[9px] ${isFull ? "text-emerald-400" : "text-amber-400"} ml-5 font-bold">${isFull ? "Full Access" : "View Only"}</div></div><div class="flex items-center gap-1"><button type="button" onclick="toggleSubUserRole(${idx})" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-0.5" title="Change access"><i class="fa-solid fa-user-shield"></i></button><button type="button" onclick="deleteSubUser(${idx})" class="text-red-400 hover:text-red-300 font-semibold px-2 py-0.5" title="Remove access"><i class="fa-solid fa-trash"></i></button></div>`;
+                container.appendChild(item);
+            });
         }
 
         async function openEditCloudUser(userId) {
@@ -2414,6 +2462,22 @@ window.addEventListener("cloudsync:status", (event) => {
             const result = await window.CloudAuth.setRole(userId, next);
             if (!result.ok) alert(result.error || "Unable to change role.");
             await renderSubUsersList();
+        }
+
+        function toggleSubUserRole(idx) {
+            if (!isAdminUser() || !additionalUsers[idx]) return;
+            additionalUsers[idx].role = (additionalUsers[idx].role || "viewer") === "admin" ? "viewer" : "admin";
+            localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
+            renderSubUsersList();
+        }
+
+        function deleteSubUser(idx) {
+            if (CURRENT_ROLE !== "admin") return;
+            if (confirm("Are you sure you want to remove access for this user?")) {
+                additionalUsers.splice(idx, 1);
+                localStorage.setItem("suite_sub_users", JSON.stringify(additionalUsers));
+                renderSubUsersList();
+            }
         }
 
         let currentPlant = "ALL";
@@ -2496,9 +2560,9 @@ window.addEventListener("cloudsync:status", (event) => {
             sessionStorage.removeItem("logged_role");
             sessionStorage.removeItem("logged_is_main");
             sessionStorage.removeItem("logged_access_pages");
-            window.CloudSync?.clearClientCache?.();
             CURRENT_ROLE = "viewer";
             CURRENT_IS_MAIN = false;
+            loadSavedUsers();
             checkAuth();
         };
 
@@ -2516,13 +2580,13 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function loadSavedStorage() {
-            const savedEq = sessionStorage.getItem("suite_equipment_data");
-            const savedDt = sessionStorage.getItem("suite_downtime_data");
-            const savedPr = sessionStorage.getItem("suite_projects_data");
-            const savedCats = sessionStorage.getItem("suite_equipment_categories");
-            const savedDtCats = sessionStorage.getItem("suite_downtime_categories");
-            const savedUptimeEqCats = sessionStorage.getItem("suite_uptime_equipment_categories");
-            const savedLineCats = sessionStorage.getItem("suite_line_categories");
+            const savedEq = localStorage.getItem("suite_equipment_data");
+            const savedDt = localStorage.getItem("suite_downtime_data");
+            const savedPr = localStorage.getItem("suite_projects_data");
+            const savedCats = localStorage.getItem("suite_equipment_categories");
+            const savedDtCats = localStorage.getItem("suite_downtime_categories");
+            const savedUptimeEqCats = localStorage.getItem("suite_uptime_equipment_categories");
+            const savedLineCats = localStorage.getItem("suite_line_categories");
 
             if (savedEq) equipmentList = JSON.parse(savedEq);
             if (savedDt) downtimeLogs = JSON.parse(savedDt);
@@ -2534,13 +2598,13 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function saveStorage() {
-            sessionStorage.setItem("suite_equipment_data", JSON.stringify(equipmentList));
-            sessionStorage.setItem("suite_downtime_data", JSON.stringify(downtimeLogs));
-            sessionStorage.setItem("suite_projects_data", JSON.stringify(projectsList));
-            sessionStorage.setItem("suite_equipment_categories", JSON.stringify(equipmentCategories));
-            sessionStorage.setItem("suite_downtime_categories", JSON.stringify(downtimeCategories));
-            sessionStorage.setItem("suite_uptime_equipment_categories", JSON.stringify(uptimeEquipmentCategories));
-            sessionStorage.setItem("suite_line_categories", JSON.stringify(lineCategories));
+            localStorage.setItem("suite_equipment_data", JSON.stringify(equipmentList));
+            localStorage.setItem("suite_downtime_data", JSON.stringify(downtimeLogs));
+            localStorage.setItem("suite_projects_data", JSON.stringify(projectsList));
+            localStorage.setItem("suite_equipment_categories", JSON.stringify(equipmentCategories));
+            localStorage.setItem("suite_downtime_categories", JSON.stringify(downtimeCategories));
+            localStorage.setItem("suite_uptime_equipment_categories", JSON.stringify(uptimeEquipmentCategories));
+            localStorage.setItem("suite_line_categories", JSON.stringify(lineCategories));
         }
 
         function escapeHtml(str) {
@@ -3654,19 +3718,13 @@ window.addEventListener("cloudsync:status", (event) => {
             return diffDays <= 90 ? "PENDING" : "STSOK";
         }
 
-        // Equipment Modal & Batch Entry handlers
+        // Equipment Modal & Calibration Group Entry handlers
         function clearEquipmentSharedFields() {
             const defaults = {
                 "eq-shared-plant": "Plant 1",
                 "eq-shared-type": equipmentCategories[0] || "",
                 "eq-shared-pr": "",
-                "eq-shared-po": "",
-                "eq-shared-ext-sched": "",
-                "eq-shared-ext-calib": "",
-                "eq-shared-ext-by": "",
-                "eq-shared-int-sched": "",
-                "eq-shared-int-calib": "",
-                "eq-shared-int-by": ""
+                "eq-shared-po": ""
             };
             Object.entries(defaults).forEach(([id, value]) => {
                 const el = document.getElementById(id);
@@ -3675,35 +3733,133 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function syncEquipmentCountPreview() {
-            const n = document.querySelectorAll("#equipment-rows-container .equip-code-row").length;
+            const n = document.querySelectorAll("#calibration-groups-container input[name='eq-code']").length;
             const el = document.getElementById("equipment-count-number");
             if (el) el.innerText = n;
         }
 
-        function makeEquipmentCodeRow(code = "") {
+        function escapeAttr(value) {
+            return escapeHtml(String(value ?? ""));
+        }
+
+        function makeCalibrationCodeRow(code = "") {
             const row = document.createElement("div");
-            row.className = "equip-code-row flex items-center gap-2 bg-slate-900/50 p-2.5 rounded-xl border border-slate-700/50";
+            row.className = "calib-code-row flex items-center gap-2";
             row.innerHTML = `
-                <span class="row-counter-label w-8 text-center font-bold text-blue-400">1</span>
-                <input type="text" name="eq-code" required value="${escapeHtml(code)}" placeholder="Equipment Code (e.g. PI-56)" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                <button type="button" onclick="removeEquipmentRow(this)" class="text-red-400 hover:text-red-300 px-2" title="Remove code">
-                    <i class="fa-solid fa-trash-can"></i>
+                <span class="code-counter w-6 text-center text-[10px] font-bold text-blue-400"></span>
+                <input type="text" name="eq-code" required value="${escapeAttr(code)}" placeholder="Equipment Code (e.g. PI-56)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white outline-none text-[11px]">
+                <button type="button" onclick="removeCalibrationCodeRow(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove code">
+                    <i class="fa-solid fa-trash-can text-[10px]"></i>
                 </button>
             `;
             return row;
+        }
+
+        function makeCalibrationGroup(group = {}) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "calibration-group bg-slate-900/60 border border-slate-700/60 rounded-xl p-2.5 space-y-2";
+            wrapper.innerHTML = `
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="group-number text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5">Date Group</span>
+                        <span class="text-[9px] text-slate-500">All codes in this group use the same calibration dates.</span>
+                    </div>
+                    <button type="button" onclick="removeCalibrationGroup(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove date group">
+                        <i class="fa-solid fa-trash-can text-[10px]"></i>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40 space-y-1.5">
+                        <span class="text-[10px] font-bold text-blue-300">EXTERNAL CALIBRATION</span>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                            <div><label class="block text-slate-400 text-[9px]">Date Sched</label><input type="date" class="group-ext-sched w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]"></div>
+                            <div><label class="block text-slate-400 text-[9px]">Date Calib</label><input type="date" class="group-ext-calib w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]"></div>
+                            <div><label class="block text-slate-400 text-[9px]">Calibrated By</label><input type="text" class="group-ext-by w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]" placeholder="Vendor / SGS"></div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40 space-y-1.5">
+                        <span class="text-[10px] font-bold text-purple-300">INTERNAL CALIBRATION</span>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                            <div><label class="block text-slate-400 text-[9px]">Date Sched</label><input type="date" class="group-int-sched w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]"></div>
+                            <div><label class="block text-slate-400 text-[9px]">Date Calib</label><input type="date" class="group-int-calib w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]"></div>
+                            <div><label class="block text-slate-400 text-[9px]">Calibrated By</label><input type="text" class="group-int-by w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]" placeholder="Technician"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[10px] font-bold text-slate-300"><i class="fa-solid fa-barcode text-blue-400 mr-1"></i>Equipment Codes for This Date</span>
+                        <button type="button" onclick="addCalibrationCodeRow(this)" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded-lg">+ Add Code</button>
+                    </div>
+                    <div class="calibration-code-list space-y-1.5"></div>
+                </div>
+            `;
+            const list = wrapper.querySelector(".calibration-code-list");
+            (group.codes && group.codes.length ? group.codes : [""]).forEach(code => list.appendChild(makeCalibrationCodeRow(code)));
+            wrapper.querySelector(".group-ext-sched").value = group.extSched || "";
+            wrapper.querySelector(".group-ext-calib").value = group.extCalib || "";
+            wrapper.querySelector(".group-ext-by").value = group.extBy || "";
+            wrapper.querySelector(".group-int-sched").value = group.intSched || "";
+            wrapper.querySelector(".group-int-calib").value = group.intCalib || "";
+            wrapper.querySelector(".group-int-by").value = group.intBy || "";
+            return wrapper;
+        }
+
+        function addCalibrationGroup(group = {}) {
+            if (!isAdminUser()) return;
+            const container = document.getElementById("calibration-groups-container");
+            if (!container) return;
+            container.appendChild(makeCalibrationGroup(group));
+            renumberCalibrationGroups();
+        }
+
+        function removeCalibrationGroup(btn) {
+            if (!isAdminUser()) return;
+            const group = btn.closest(".calibration-group");
+            if (group) group.remove();
+            const container = document.getElementById("calibration-groups-container");
+            if (!container.children.length) addCalibrationGroup();
+            renumberCalibrationGroups();
+        }
+
+        function addCalibrationCodeRow(btn) {
+            if (!isAdminUser()) return;
+            const group = btn.closest(".calibration-group");
+            const list = group?.querySelector(".calibration-code-list");
+            if (list) list.appendChild(makeCalibrationCodeRow());
+            renumberCalibrationGroups();
+        }
+
+        function removeCalibrationCodeRow(btn) {
+            if (!isAdminUser()) return;
+            const group = btn.closest(".calibration-group");
+            const row = btn.closest(".calib-code-row");
+            if (row) row.remove();
+            const list = group?.querySelector(".calibration-code-list");
+            if (list && !list.children.length) list.appendChild(makeCalibrationCodeRow());
+            renumberCalibrationGroups();
+        }
+
+        function renumberCalibrationGroups() {
+            document.querySelectorAll("#calibration-groups-container .calibration-group").forEach((group, gidx) => {
+                const label = group.querySelector(".group-number");
+                if (label) label.innerText = `Date Group ${gidx + 1}`;
+                group.querySelectorAll(".calib-code-row").forEach((row, idx) => {
+                    const counter = row.querySelector(".code-counter");
+                    if (counter) counter.innerText = `${idx + 1}.`;
+                });
+            });
+            syncEquipmentCountPreview();
         }
 
         function openEquipModal() {
             if (!isAdminUser()) return;
             document.getElementById("eq-id").value = "";
             document.getElementById("modal-equip-title").innerText = "Add Calibration Entries";
-            document.getElementById("multiple-entry-toolbar").classList.remove("hidden");
             clearEquipmentSharedFields();
-
-            const container = document.getElementById("equipment-rows-container");
+            const container = document.getElementById("calibration-groups-container");
             container.innerHTML = "";
-            container.appendChild(makeEquipmentCodeRow());
-            syncEquipmentCountPreview();
+            addCalibrationGroup();
             document.getElementById("modal-equipment").classList.remove("hidden");
         }
 
@@ -3711,29 +3867,16 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("modal-equipment").classList.add("hidden");
         }
 
-        function addEquipmentRow() {
-            if (!isAdminUser()) return;
-            const container = document.getElementById("equipment-rows-container");
-            container.appendChild(makeEquipmentCodeRow());
-            renumberEquipmentRows();
-        }
-
-        function removeEquipmentRow(btn) {
-            if (!isAdminUser()) return;
-            const row = btn.closest(".equip-code-row");
-            if (row) row.remove();
-            if (!document.querySelector("#equipment-rows-container .equip-code-row")) {
-                document.getElementById("equipment-rows-container").appendChild(makeEquipmentCodeRow());
-            }
-            renumberEquipmentRows();
-        }
-
-        function renumberEquipmentRows() {
-            document.querySelectorAll("#equipment-rows-container .equip-code-row").forEach((row, idx) => {
-                const label = row.querySelector(".row-counter-label");
-                if (label) label.innerText = idx + 1;
-            });
-            syncEquipmentCountPreview();
+        function collectCalibrationGroups() {
+            return [...document.querySelectorAll("#calibration-groups-container .calibration-group")].map(group => ({
+                extSched: group.querySelector(".group-ext-sched")?.value || "",
+                extCalib: group.querySelector(".group-ext-calib")?.value || "",
+                extBy: group.querySelector(".group-ext-by")?.value.trim() || "",
+                intSched: group.querySelector(".group-int-sched")?.value || "",
+                intCalib: group.querySelector(".group-int-calib")?.value || "",
+                intBy: group.querySelector(".group-int-by")?.value.trim() || "",
+                codes: [...group.querySelectorAll("input[name='eq-code']")].map(i => i.value.trim()).filter(Boolean)
+            })).filter(g => g.codes.length);
         }
 
         function getSharedEquipmentData() {
@@ -3741,13 +3884,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 plant: document.getElementById("eq-shared-plant").value,
                 type: document.getElementById("eq-shared-type").value,
                 pr: document.getElementById("eq-shared-pr").value.trim(),
-                po: document.getElementById("eq-shared-po").value.trim(),
-                extSched: document.getElementById("eq-shared-ext-sched").value,
-                extCalib: document.getElementById("eq-shared-ext-calib").value,
-                extBy: document.getElementById("eq-shared-ext-by").value.trim(),
-                intSched: document.getElementById("eq-shared-int-sched").value,
-                intCalib: document.getElementById("eq-shared-int-calib").value,
-                intBy: document.getElementById("eq-shared-int-by").value.trim()
+                po: document.getElementById("eq-shared-po").value.trim()
             };
         }
 
@@ -3757,46 +3894,141 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const editId = document.getElementById("eq-id").value;
             const shared = getSharedEquipmentData();
-            const codeInputs = [...document.querySelectorAll("#equipment-rows-container input[name='eq-code']")];
-            const codes = codeInputs.map(i => i.value.trim()).filter(Boolean);
+            const groups = collectCalibrationGroups();
+            const codes = groups.flatMap(g => g.codes);
 
             if (!codes.length) {
                 alert("Please enter at least one equipment code.");
                 return;
             }
 
-            if (editId) {
-                const ids = editId.split(",").map(v => Number(v)).filter(Boolean);
-                const existing = ids.map(id => equipmentList.find(item => item.id === id)).filter(Boolean);
+            /*
+             * IMPORTANT CALIBRATION HISTORY RULE
+             * -----------------------------------
+             * One equipment code = one instrument record.
+             * Every new Internal/External date entered for an existing code is
+             * stored in that instrument's calibrationHistory before the new
+             * dates become the current dates. This prevents the instrument
+             * count from increasing just because another calibration date was
+             * added.
+             */
+            const nowIso = new Date().toISOString();
+            const workingIds = editId
+                ? editId.split(",").map(v => Number(v)).filter(Boolean)
+                : [];
+            const selectedExisting = new Set(workingIds);
+            const touchedCodes = new Set();
 
-                // Editing a grouped record keeps all codes together and updates the shared data for the group.
-                codes.forEach((code, index) => {
-                    if (existing[index]) {
-                        Object.assign(existing[index], shared, { code });
+            function snapshotCalibration(record) {
+                return {
+                    recordedAt: nowIso,
+                    extSched: record.extSched || "",
+                    extCalib: record.extCalib || "",
+                    extBy: record.extBy || "",
+                    intSched: record.intSched || "",
+                    intCalib: record.intCalib || "",
+                    intBy: record.intBy || ""
+                };
+            }
+
+            function addHistory(record) {
+                if (!record) return;
+                if (!Array.isArray(record.calibrationHistory)) record.calibrationHistory = [];
+                const previous = snapshotCalibration(record);
+                const last = record.calibrationHistory[record.calibrationHistory.length - 1];
+                if (!last || JSON.stringify(last) !== JSON.stringify(previous)) {
+                    record.calibrationHistory.push(previous);
+                }
+                // Keep the history bounded so the dashboard remains lightweight.
+                if (record.calibrationHistory.length > 100) {
+                    record.calibrationHistory = record.calibrationHistory.slice(-100);
+                }
+            }
+
+            function hasValue(value) {
+                return String(value ?? "").trim() !== "";
+            }
+
+            groups.forEach(group => {
+                group.codes.forEach(code => {
+                    const cleanCode = String(code || "").trim();
+                    if (!cleanCode) return;
+                    touchedCodes.add(cleanCode.toLowerCase());
+
+                    // When editing an existing grouped entry, use that exact
+                    // record. For a new date group, locate the existing
+                    // instrument by plant + type + equipment code.
+                    let record = null;
+                    if (editId) {
+                        record = equipmentList.find(item =>
+                            selectedExisting.has(item.id) &&
+                            String(item.code || "").trim().toLowerCase() === cleanCode.toLowerCase()
+                        );
+                    }
+                    if (!record) {
+                        record = equipmentList.find(item =>
+                            normalizePlant(item.plant) === normalizePlant(shared.plant) &&
+                            String(item.type || "").trim() === String(shared.type || "").trim() &&
+                            String(item.code || "").trim().toLowerCase() === cleanCode.toLowerCase()
+                        );
+                    }
+
+                    if (record) {
+                        addHistory(record);
+
+                        record.plant = shared.plant;
+                        record.type = shared.type;
+                        if (hasValue(shared.pr)) record.pr = shared.pr;
+                        if (hasValue(shared.po)) record.po = shared.po;
+
+                        // Only replace a side when that side was actually
+                        // entered. This allows a new External date to be added
+                        // without erasing the instrument's existing Internal
+                        // calibration status, and vice versa.
+                        if (hasValue(group.extSched) || hasValue(group.extCalib) || hasValue(group.extBy)) {
+                            record.extSched = group.extSched || record.extSched || "";
+                            record.extCalib = group.extCalib || "";
+                            record.extBy = group.extBy || record.extBy || "";
+                        }
+                        if (hasValue(group.intSched) || hasValue(group.intCalib) || hasValue(group.intBy)) {
+                            record.intSched = group.intSched || record.intSched || "";
+                            record.intCalib = group.intCalib || "";
+                            record.intBy = group.intBy || record.intBy || "";
+                        }
                     } else {
                         equipmentList.push({
-                            id: Date.now() + index + Math.floor(Math.random() * 1000),
+                            id: Date.now() + Math.floor(Math.random() * 1000000),
                             ...shared,
-                            code
+                            code: cleanCode,
+                            extSched: group.extSched || "",
+                            extCalib: group.extCalib || "",
+                            extBy: group.extBy || "",
+                            intSched: group.intSched || "",
+                            intCalib: group.intCalib || "",
+                            intBy: group.intBy || "",
+                            calibrationHistory: []
                         });
                     }
                 });
+            });
 
-                // If a code was removed while editing, remove its old record as well.
-                if (existing.length > codes.length) {
-                    const keepIds = new Set(existing.slice(0, codes.length).map(item => item.id));
-                    const removeIds = new Set(existing.slice(codes.length).map(item => item.id));
-                    equipmentList = equipmentList.filter(item => !removeIds.has(item.id) || keepIds.has(item.id));
+            // If this was an edit of a selected group, remove only selected
+            // duplicate records that are no longer represented by the form.
+            if (editId) {
+                const representedIds = new Set();
+                groups.forEach(group => group.codes.forEach(code => {
+                    const match = equipmentList.find(item =>
+                        selectedExisting.has(item.id) &&
+                        String(item.code || "").trim().toLowerCase() === String(code || "").trim().toLowerCase()
+                    );
+                    if (match) representedIds.add(match.id);
+                }));
+                const removeIds = new Set(
+                    workingIds.filter(id => !representedIds.has(id))
+                );
+                if (removeIds.size) {
+                    equipmentList = equipmentList.filter(item => !removeIds.has(item.id));
                 }
-            } else {
-                const timestampBase = Date.now();
-                codes.forEach((code, index) => {
-                    equipmentList.push({
-                        id: timestampBase + index + Math.floor(Math.random() * 1000),
-                        ...shared,
-                        code
-                    });
-                });
             }
 
             saveStorage();
@@ -3816,29 +4048,23 @@ window.addEventListener("cloudsync:status", (event) => {
 
             document.getElementById("eq-id").value = group.map(item => item.id).join(",");
             document.getElementById("modal-equip-title").innerText = group.length > 1 ? "Edit Calibration Record / Equipment Codes" : "Edit Calibration Entry";
-            document.getElementById("multiple-entry-toolbar").classList.remove("hidden");
+            clearEquipmentSharedFields();
+            document.getElementById("eq-shared-plant").value = selected.plant || "Plant 1";
+            document.getElementById("eq-shared-type").value = selected.type || "";
+            document.getElementById("eq-shared-pr").value = selected.pr || "";
+            document.getElementById("eq-shared-po").value = selected.po || "";
 
-            const map = {
-                "eq-shared-plant": selected.plant || "Plant 1",
-                "eq-shared-type": selected.type || "",
-                "eq-shared-pr": selected.pr || "",
-                "eq-shared-po": selected.po || "",
-                "eq-shared-ext-sched": selected.extSched || "",
-                "eq-shared-ext-calib": selected.extCalib || "",
-                "eq-shared-ext-by": selected.extBy || "",
-                "eq-shared-int-sched": selected.intSched || "",
-                "eq-shared-int-calib": selected.intCalib || "",
-                "eq-shared-int-by": selected.intBy || ""
-            };
-            Object.entries(map).forEach(([fieldId, value]) => {
-                const el = document.getElementById(fieldId);
-                if (el) el.value = value;
-            });
-
-            const container = document.getElementById("equipment-rows-container");
+            const container = document.getElementById("calibration-groups-container");
             container.innerHTML = "";
-            group.forEach(eq => container.appendChild(makeEquipmentCodeRow(eq.code || "")));
-            renumberEquipmentRows();
+            addCalibrationGroup({
+                extSched: selected.extSched,
+                extCalib: selected.extCalib,
+                extBy: selected.extBy,
+                intSched: selected.intSched,
+                intCalib: selected.intCalib,
+                intBy: selected.intBy,
+                codes: group.map(item => item.code || "")
+            });
             document.getElementById("modal-equipment").classList.remove("hidden");
         }
 
