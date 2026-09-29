@@ -1690,7 +1690,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <span class="text-[9px] text-slate-400">multiple codes can share one date</span>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                             <label class="block text-slate-300 font-semibold mb-1">Plant Allocation *</label>
                             <select id="eq-shared-plant" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
@@ -1703,15 +1703,6 @@ window.addEventListener("cloudsync:status", (event) => {
                             <label class="block text-slate-300 font-semibold mb-1">Instrument / Equipment Class *</label>
                             <select id="eq-shared-type" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none category-select-dropdown"></select>
                         </div>
-                        <div>
-                            <label class="block text-slate-300 font-semibold mb-1">PR No.</label>
-                            <input type="text" id="eq-shared-pr" placeholder="PR Reference" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-slate-300 font-semibold mb-1">PO No.</label>
-                        <input type="text" id="eq-shared-po" placeholder="PO Reference" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none">
                     </div>
 
                     <div class="bg-slate-950/30 border border-blue-500/20 rounded-xl p-2.5">
@@ -3722,9 +3713,7 @@ window.addEventListener("cloudsync:status", (event) => {
         function clearEquipmentSharedFields() {
             const defaults = {
                 "eq-shared-plant": "Plant 1",
-                "eq-shared-type": equipmentCategories[0] || "",
-                "eq-shared-pr": "",
-                "eq-shared-po": ""
+                "eq-shared-type": equipmentCategories[0] || ""
             };
             Object.entries(defaults).forEach(([id, value]) => {
                 const el = document.getElementById(id);
@@ -3762,11 +3751,21 @@ window.addEventListener("cloudsync:status", (event) => {
                 <div class="flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
                         <span class="group-number text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5">Date Group</span>
-                        <span class="text-[9px] text-slate-500">All codes in this group use the same calibration dates.</span>
+                        <span class="text-[9px] text-slate-500">All codes in this group use the same dates and PR/PO.</span>
                     </div>
                     <button type="button" onclick="removeCalibrationGroup(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove date group">
                         <i class="fa-solid fa-trash-can text-[10px]"></i>
                     </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-slate-400 text-[9px]">PR No. <span class="text-slate-600">(this date group)</span></label>
+                        <input type="text" class="group-pr w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="PR Reference">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 text-[9px]">PO No. <span class="text-slate-600">(this date group)</span></label>
+                        <input type="text" class="group-po w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="PO Reference">
+                    </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40 space-y-1.5">
@@ -3796,6 +3795,8 @@ window.addEventListener("cloudsync:status", (event) => {
             `;
             const list = wrapper.querySelector(".calibration-code-list");
             (group.codes && group.codes.length ? group.codes : [""]).forEach(code => list.appendChild(makeCalibrationCodeRow(code)));
+            wrapper.querySelector(".group-pr").value = group.pr || "";
+            wrapper.querySelector(".group-po").value = group.po || "";
             wrapper.querySelector(".group-ext-sched").value = group.extSched || "";
             wrapper.querySelector(".group-ext-calib").value = group.extCalib || "";
             wrapper.querySelector(".group-ext-by").value = group.extBy || "";
@@ -3869,6 +3870,8 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function collectCalibrationGroups() {
             return [...document.querySelectorAll("#calibration-groups-container .calibration-group")].map(group => ({
+                pr: group.querySelector(".group-pr")?.value.trim() || "",
+                po: group.querySelector(".group-po")?.value.trim() || "",
                 extSched: group.querySelector(".group-ext-sched")?.value || "",
                 extCalib: group.querySelector(".group-ext-calib")?.value || "",
                 extBy: group.querySelector(".group-ext-by")?.value.trim() || "",
@@ -3882,9 +3885,7 @@ window.addEventListener("cloudsync:status", (event) => {
         function getSharedEquipmentData() {
             return {
                 plant: document.getElementById("eq-shared-plant").value,
-                type: document.getElementById("eq-shared-type").value,
-                pr: document.getElementById("eq-shared-pr").value.trim(),
-                po: document.getElementById("eq-shared-po").value.trim()
+                type: document.getElementById("eq-shared-type").value
             };
         }
 
@@ -3922,6 +3923,8 @@ window.addEventListener("cloudsync:status", (event) => {
             function snapshotCalibration(record) {
                 return {
                     recordedAt: nowIso,
+                    pr: record.pr || "",
+                    po: record.po || "",
                     extSched: record.extSched || "",
                     extCalib: record.extCalib || "",
                     extBy: record.extBy || "",
@@ -3978,8 +3981,8 @@ window.addEventListener("cloudsync:status", (event) => {
 
                         record.plant = shared.plant;
                         record.type = shared.type;
-                        if (hasValue(shared.pr)) record.pr = shared.pr;
-                        if (hasValue(shared.po)) record.po = shared.po;
+                        if (hasValue(group.pr)) record.pr = group.pr;
+                        if (hasValue(group.po)) record.po = group.po;
 
                         // Only replace a side when that side was actually
                         // entered. This allows a new External date to be added
@@ -3999,6 +4002,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         equipmentList.push({
                             id: Date.now() + Math.floor(Math.random() * 1000000),
                             ...shared,
+                            pr: group.pr || "",
+                            po: group.po || "",
                             code: cleanCode,
                             extSched: group.extSched || "",
                             extCalib: group.extCalib || "",
@@ -4051,12 +4056,12 @@ window.addEventListener("cloudsync:status", (event) => {
             clearEquipmentSharedFields();
             document.getElementById("eq-shared-plant").value = selected.plant || "Plant 1";
             document.getElementById("eq-shared-type").value = selected.type || "";
-            document.getElementById("eq-shared-pr").value = selected.pr || "";
-            document.getElementById("eq-shared-po").value = selected.po || "";
 
             const container = document.getElementById("calibration-groups-container");
             container.innerHTML = "";
             addCalibrationGroup({
+                pr: selected.pr || "",
+                po: selected.po || "",
                 extSched: selected.extSched,
                 extCalib: selected.extCalib,
                 extBy: selected.extBy,
