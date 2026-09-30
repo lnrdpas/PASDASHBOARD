@@ -384,6 +384,76 @@ window.CloudSync = (() => {
         return String(id ?? `${Date.now()}-${index}`);
     }
 
+    function calibrationFieldNames() {
+        return [
+            "calibrationCycles",
+            "externalCalibrations",
+            "internalCalibrations",
+            "extSched", "extCalib", "extBy",
+            "intSched", "intCalib", "intBy"
+        ];
+    }
+
+    function hasCalibrationPayload(record) {
+        if (!record || typeof record !== "object") return false;
+        return calibrationFieldNames().some(key => {
+            const value = record[key];
+            if (Array.isArray(value)) return value.length > 0;
+            return value !== undefined && value !== null && String(value) !== "";
+        });
+    }
+
+    function mergeCalibrationPayload(localRecord, remoteRecord) {
+        const localHas = hasCalibrationPayload(localRecord);
+        const remoteHas = hasCalibrationPayload(remoteRecord);
+        const localHasRichCycles = Array.isArray(localRecord?.calibrationCycles) && localRecord.calibrationCycles.length > 0;
+        const remoteHasRichCycles = Array.isArray(remoteRecord?.calibrationCycles) && remoteRecord.calibrationCycles.length > 0;
+        if (!localHas || (remoteHas && (!localHasRichCycles || remoteHasRichCycles))) return remoteRecord;
+        const merged = { ...(remoteRecord || {}) };
+        calibrationFieldNames().forEach(key => {
+            if (localRecord[key] !== undefined && localRecord[key] !== null &&
+                (!(key in merged) || merged[key] === "" || (Array.isArray(merged[key]) && !merged[key].length))) {
+                merged[key] = localRecord[key];
+            }
+        });
+        return merged;
+    }
+
+    function mergeEquipmentCloudRows(localRows, remoteRows) {
+        const local = Array.isArray(localRows) ? localRows : [];
+        const remote = Array.isArray(remoteRows) ? remoteRows : [];
+        const byId = new Map(local.filter(Boolean).map(row => [String(row?.id), row]));
+        const byCode = new Map();
+        local.filter(Boolean).forEach(row => {
+            const key = `${normalizePlant(row?.plant)}||${String(row?.code || "").trim().toLowerCase()}`;
+            if (key.endsWith("||")) return;
+            if (!byCode.has(key)) byCode.set(key, row);
+        });
+
+        const merged = [];
+        const remoteMatchedLocalIds = new Set();
+        remote.filter(Boolean).forEach(remoteRow => {
+            const codeKey = `${normalizePlant(remoteRow?.plant)}||${String(remoteRow?.code || "").trim().toLowerCase()}`;
+            const localRow = byId.get(String(remoteRow?.id)) || byCode.get(codeKey);
+            if (localRow) {
+                remoteMatchedLocalIds.add(String(localRow?.id));
+                merged.push(mergeCalibrationPayload(localRow, remoteRow));
+            } else {
+                merged.push(remoteRow);
+            }
+        });
+
+        // If a calibration/equipment record exists only in this browser, do not
+        // erase it merely because the cloud table is missing that row.
+        local.filter(Boolean).forEach(localRow => {
+            if (!remoteMatchedLocalIds.has(String(localRow?.id))) {
+                merged.push(localRow);
+            }
+        });
+
+        return merged;
+    }
+
     async function pullDataset(dataset) {
         const cfg = DATASETS[dataset];
         const { data, error } = await client
@@ -393,7 +463,12 @@ window.CloudSync = (() => {
 
         if (error) throw error;
 
-        const rows = (data || []).map(row => row.data).filter(Boolean);
+        const remoteRows = (data || []).map(row => row.data).filter(Boolean);
+        const localRows = readArray(cfg.key);
+        const rows = dataset === "equipment"
+            ? mergeEquipmentCloudRows(localRows, remoteRows)
+            : remoteRows;
+
         writeArray(cfg.key, rows);
         lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
         return rows;
@@ -689,16 +764,27 @@ window.CloudSync = (() => {
     async function start() {
         if (!init()) return { ok: false, configured: false };
 
-        // In cloud mode, browser localStorage must never be allowed to become
-        // the source of truth. Remove the old browser cache before pulling
-        // the authoritative dataset from Supabase.
-        Object.values(DATASETS).forEach(cfg => localStorage.removeItem(cfg.key));
+        // Keep the browser's existing equipment/calibration snapshot available
+        // while the cloud data is loaded. The equipment pull merges calibration
+        // fields and calibration-only local rows instead of deleting them.
+        // This prevents a refresh from making the Calibration Tracker empty
+        // when Executive Summary can still read the same equipment dataset.
         Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
 
         // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
         // the pull itself can trigger a save of stale/partial browser data.
         const result = await pull();
         if (result.ok) {
+            // If local calibration data had to be merged back into the equipment
+            // dataset, persist that repaired combined dataset to Supabase now.
+            // This makes the next browser refresh receive the same calibration
+            // records instead of depending on localStorage again.
+            const equipment = readArray(DATASETS.equipment.key);
+            const remoteEquipment = await fetchRemoteDataset("equipment");
+            if (JSON.stringify(equipment) !== JSON.stringify(remoteEquipment)) {
+                await replaceDataset("equipment", equipment);
+                lastSynced.equipment = JSON.parse(JSON.stringify(equipment));
+            }
             installStorageWatcher();
             startBackgroundRefresh();
         }
