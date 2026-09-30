@@ -3947,14 +3947,14 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
                                 <div class="text-[9px] uppercase tracking-wider font-black text-blue-300 mb-2">External Calibration</div>
-                                <div class="text-xs font-black">${badge(extStatus)}</div>
+                                <div class="flex items-center justify-between gap-2"><div class="text-xs font-black">${badge(extStatus)}</div><span class="text-[9px] font-bold text-blue-300">${(normalizeSharedCalibrationCycles(eq).reduce((n,c)=>n+(Array.isArray(c.external)?c.external.length:0),0))} occurrence${(normalizeSharedCalibrationCycles(eq).reduce((n,c)=>n+(Array.isArray(c.external)?c.external.length:0),0))===1?'':'s'}</span></div>
                             </div>
                             <div class="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
                                 <div class="text-[9px] uppercase tracking-wider font-black text-purple-300 mb-2">Internal Calibration</div>
-                                <div class="text-xs font-black">${badge(intStatus)}</div>
+                                <div class="flex items-center justify-between gap-2"><div class="text-xs font-black">${badge(intStatus)}</div><span class="text-[9px] font-bold text-purple-300">${(normalizeSharedCalibrationCycles(eq).reduce((n,c)=>n+(Array.isArray(c.internal)?c.internal.length:0),0))} occurrence${(normalizeSharedCalibrationCycles(eq).reduce((n,c)=>n+(Array.isArray(c.internal)?c.internal.length:0),0))===1?'':'s'}</span></div>
                             </div>
                         </div>
-                        <div class="mt-3 text-[9px] text-slate-500">1 equipment code = 1 tracker count. External and Internal are calculated separately for this code.</div>
+                        <div class="mt-3 text-[9px] text-slate-500">1 equipment code = 1 tracker count. Every added External/Internal date is retained as a separate calibration occurrence; it does not replace the previous date.</div>
                     </div>`;
                 cards.appendChild(card);
             });
@@ -4349,7 +4349,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         const entryId = String(entry.id || '');
                         const existingIndex = entryId ? existingEntries.findIndex(x => String(x.id || '') === entryId) : -1;
                         if (existingIndex >= 0) existingEntries[existingIndex] = entry;
-                        else existingEntries.push(entry);
+                        else existingEntries.push(entry); // NEW DATE = NEW OCCURRENCE; never replace another occurrence.
                     });
                     target[type] = existingEntries;
                 });
@@ -4553,11 +4553,10 @@ window.addEventListener("cloudsync:status", (event) => {
             const cycle = cycles.find(c => String(c.id) === String(cycleId));
             if (!cycle) return;
             const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
-            const entry = entries[Number(entryIndex)];
-            if (!entry) return;
-
             const entryIndex = Number.isFinite(Number(entryRef)) && String(entryRef).match(/^\d+$/) ? Number(entryRef) : entries.findIndex(e => String(e.id || '') === String(entryRef));
             if (entryIndex < 0) return;
+            const entry = entries[entryIndex];
+            if (!entry) return;
             const entryId = String(entries[entryIndex]?.id || entryRef || '');
             calibrationOccurrenceEditState = { ids, cycleId:String(cycleId), type, entryIndex, entryId };
             const typeSelect = document.getElementById('cal-edit-type');
@@ -4742,7 +4741,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                 <div class="flex flex-wrap items-start justify-between gap-2">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <span class="text-[9px] uppercase tracking-wider font-black ${r.type==='external'?'text-blue-300':'text-purple-300'}">${r.type.toUpperCase()} CALIBRATION · ENTRY ${r.entryIndex + 1}</span>
+                                            <span class="text-[9px] uppercase tracking-wider font-black ${r.type==='external'?'text-blue-300':'text-purple-300'}">${r.type.toUpperCase()} CALIBRATION · OCCURRENCE ${r.entryIndex + 1}</span>
                                             <span class="px-1.5 py-0.5 rounded border text-[8px] font-black ${statusClass(status)}">${escapeHtml(status)}</span>
                                         </div>
                                         <div class="text-[10px] text-slate-300 mt-1"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ') || '-'}</strong></div>
