@@ -3987,7 +3987,7 @@ window.addEventListener("cloudsync:status", (event) => {
             // One card = Instrument Type + its Equipment Codes.
             // Codes remain the counting unit; calibration occurrences stay inside the same card.
             const cardGroups = new Map();
-            codeRecordsForKpi.forEach(eq => {
+            filtered.forEach(eq => {
                 // IMPORTANT: visual grouping is Instrument Type + Plant only.
                 // Equipment Code is displayed inside that card; calibration dates
                 // and occurrences must never create another top-level card.
@@ -4027,20 +4027,23 @@ window.addEventListener("cloudsync:status", (event) => {
                 // there is no separate History button/modal.
                 const instrumentCodes = [...new Set(group.map(eq => String(eq.code || '').trim()).filter(Boolean))];
                 const occurrenceMap = new Map();
-                group.forEach(eq => {
-                    collectGroupCalibrationCycles(group).forEach((cycle, cycleIndex) => {
-                        if (eq !== group[0]) return;
-                        const cycleId = cycleHistoryKey(cycle, cycleIndex);
-                        ['external','internal'].forEach(type => {
-                            (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
-                                const entryId = String(entry.id || `${type}-${entryIndex}-${entry.sched || ''}-${entry.calib || ''}`);
-                                const key = `${cycleId}||${type}||${entryId}`;
-                                if (!occurrenceMap.has(key)) occurrenceMap.set(key, {
-                                    cycleId, cycle: cycleIndex + 1, type, entry, entryIndex, recordIds: [], codes: []
-                                });
-                                const item = occurrenceMap.get(key);
-                                if (!item.recordIds.includes(eq.id)) item.recordIds.push(eq.id);
-                                if (eq.code && !item.codes.includes(eq.code)) item.codes.push(eq.code);
+                const mergedCycles = collectGroupCalibrationCycles(group);
+                mergedCycles.forEach((cycle, cycleIndex) => {
+                    const cycleId = cycleHistoryKey(cycle, cycleIndex);
+                    ['external','internal'].forEach(type => {
+                        (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
+                            const entryId = String(entry.id || `${type}-${entryIndex}-${entry.sched || ''}-${entry.calib || ''}`);
+                            const key = `${cycleId}||${type}||${entryId}`;
+                            occurrenceMap.set(key, {
+                                cycleId, cycle: cycleIndex + 1, type, entry, entryIndex,
+                                recordIds: group.filter(r => {
+                                    const rc = String(r.code || '').trim().toLowerCase();
+                                    const assigned = Array.isArray(entry.codes) ? entry.codes.map(x => String(x || '').trim().toLowerCase()) : [];
+                                    return !assigned.length || assigned.includes(rc);
+                                }).map(r => r.id),
+                                codes: Array.isArray(entry.codes) && entry.codes.length
+                                    ? entry.codes.filter(c => group.some(r => String(r.code || '').trim().toLowerCase() === String(c).trim().toLowerCase()))
+                                    : instrumentCodes
                             });
                         });
                     });
