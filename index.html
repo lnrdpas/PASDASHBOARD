@@ -3372,9 +3372,12 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // The first period drives the normal KPI/supporting details. Compare mode
             // additionally computes a second period for the Pareto comparison.
+            // Calibration date filtering is done per occurrence inside calcCalib().
+            // Do not filter the record by only its legacy/latest date fields, because
+            // that would hide older/newer occurrences from the selected period.
             const filteredEq = equipmentList.filter(eq => {
                 if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
-                return matchesSummaryDate(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, primaryType, primaryValue);
+                return true;
             });
             const filteredDt = downtimeLogs.filter(dt => {
                 if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
@@ -3387,7 +3390,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const comparisonEq = isCompare ? equipmentList.filter(eq => {
                 if (currentPlant !== "ALL" && normalizePlant(eq.plant) !== normalizePlant(currentPlant)) return false;
-                return matchesSummaryDate(eq.extCalib || eq.extSched || eq.intCalib || eq.intSched, compareType, compareValue);
+                return true;
             }) : [];
             const comparisonPr = isCompare ? projectsList.filter(pr => {
                 if (currentPlant !== "ALL" && normalizePlant(pr.plant) !== normalizePlant(currentPlant)) return false;
@@ -3440,47 +3443,42 @@ window.addEventListener("cloudsync:status", (event) => {
                 return [...map.values()];
             };
 
-            const calcCalib = list => {
-                // Calibration workload is counted as CODE x CALIBRATION OCCURRENCE.
-                // A new code increases the count for every applicable occurrence.
-                // A new occurrence increases the count by the number of codes assigned to it.
+            const calcCalib = (list, dateType='all', dateValue='') => {
+                // CALIBRATION WORKLOAD LOGIC:
+                // Every calibration occurrence is one requirement PER equipment code
+                // assigned to that occurrence. 3 codes x 3 occurrences = 9.
+                // Adding a code increases every applicable occurrence. Adding an
+                // occurrence increases the total by the codes assigned to it.
                 let done=0, overdue=0, pending=0, stsok=0, na=0;
-                const records = uniqueEquipmentCodes(list);
-                records.forEach(eq => {
-                    const cycles = normalizeSharedCalibrationCycles(eq);
-                    const codeCount = 1;
-                    cycles.forEach(cycle => {
-                        ['external','internal'].forEach(type => {
-                            const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
-                            entries.forEach(entry => {
-                                // Each saved occurrence represents one requirement for this code.
-                                const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
-                                if (st === 'DONE' || st === 'OVERDUE, DONE') done += codeCount;
-                                else if (st === 'OVERDUE') overdue += codeCount;
-                                else if (st === 'PENDING') pending += codeCount;
-                                else if (st === 'STSOK') stsok += codeCount;
-                                else na += codeCount;
-                            });
-                        });
-                    });
-                });
-                // If records are grouped by card and one record contains multiple codes,
-                // use the group's code count when the occurrence is shared across that card.
-                const seenGroups = new Map();
+                const groups = new Map();
                 (list || []).forEach(eq => {
-                    const key = `${normalizePlant(eq.plant)}||${String(eq.type||'').trim().toLowerCase()}`;
-                    if (!seenGroups.has(key)) seenGroups.set(key, []);
-                    seenGroups.get(key).push(eq);
+                    const plant = normalizePlant(eq.plant);
+                    const type = String(eq.type || '').trim().toLowerCase();
+                    const key = `${plant}||${type}`;
+                    if (!groups.has(key)) groups.set(key, []);
+                    groups.get(key).push(eq);
                 });
-                // Recalculate from logical cards so shared occurrences count once per code.
-                done=overdue=pending=stsok=na=0;
-                seenGroups.forEach(group => {
-                    const codes = new Set(group.map(x=>String(x.code||'').trim().toLowerCase()).filter(Boolean));
-                    const codeCount = codes.size || 1;
+                const matchesDate = (entry) => {
+                    if (dateType === 'all' || !dateValue) return true;
+                    const a = entry?.sched || entry?.dateSched || '';
+                    const b = entry?.calib || entry?.dateCalib || '';
+                    return matchesSummaryDate(a, dateType, dateValue) || matchesSummaryDate(b, dateType, dateValue);
+                };
+                groups.forEach(group => {
+                    const groupCodes = [...new Set(group.map(x=>String(x.code||'').trim()).filter(Boolean))];
+                    const groupCodeSet = new Set(groupCodes.map(x=>x.toLowerCase()));
                     const representative = group[0];
                     const cycles = normalizeSharedCalibrationCycles(representative);
                     cycles.forEach(cycle => ['external','internal'].forEach(type => {
-                        (Array.isArray(cycle[type]) ? cycle[type] : []).forEach(entry => {
+                        const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
+                        entries.forEach(entry => {
+                            if (!matchesDate(entry)) return;
+                            const assigned = Array.isArray(entry?.codes) ? entry.codes.map(x=>String(x||'').trim()).filter(Boolean) : [];
+                            const applicableCodes = assigned.length
+                                ? assigned.filter(c=>groupCodeSet.has(c.toLowerCase()))
+                                : groupCodes;
+                            const codeCount = applicableCodes.length;
+                            if (!codeCount) return;
                             const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
                             if (st === 'DONE' || st === 'OVERDUE, DONE') done += codeCount;
                             else if (st === 'OVERDUE') overdue += codeCount;
@@ -3500,9 +3498,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 const uptime=Math.max(0,Math.min(100,Number(((1-hrs/avail)*100).toFixed(1))));
                 return {hrs,uptime};
             };
-            const primaryCalib=calcCalib(filteredEq), compareCalib=isCompare?calcCalib(comparisonEq):null;
+            const primaryCalib=calcCalib(filteredEq, primaryType, primaryValue), compareCalib=isCompare?calcCalib(comparisonEq, compareType, compareValue):null;
             const calibChartIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
-            const calibChartPrimary = calibChartIgnoreFilter ? calcCalib(equipmentList) : primaryCalib;
+            const calibChartPrimary = calibChartIgnoreFilter ? calcCalib(equipmentList, primaryType, primaryValue) : primaryCalib;
             const calibChartCompare = (!calibChartIgnoreFilter && isCompare) ? compareCalib : null;
             window._summaryCompareCalib = calibChartCompare?.compliance || 0;
             const primaryDown=calcDowntime(filteredDt), compareDown=isCompare?calcDowntime(comparisonDt):null;
@@ -3901,46 +3899,46 @@ window.addEventListener("cloudsync:status", (event) => {
                 return true;
             });
 
-            // CURRENT-CYCLE KPIs are calculated PER EQUIPMENT CODE.
-            // Instrument type/card is only a visual grouping; it must never be
-            // used as the calculation unit. If duplicate records with the same
-            // Plant + Equipment Code exist, only one record is counted.
-            const codeMapForKpi = new Map();
-            filtered.forEach(eq => {
-                const code = String(eq.code || '').trim();
-                if (!code) return;
-                const key = `${normalizePlant(eq.plant)}||${code.toLowerCase()}`;
-                if (!codeMapForKpi.has(key)) codeMapForKpi.set(key, eq);
-            });
-            const codeRecordsForKpi = [...codeMapForKpi.values()];
+            // KPI COUNTS = EQUIPMENT CODE x CALIBRATION OCCURRENCE.
+            // Example: 3 codes and 3 occurrences = 9 total; 2 DONE occurrences
+            // = 6 DONE and 1 PENDING occurrence = 3 PENDING.
+            const workload = calcCalib(filtered, 'all', '');
+            const tTotal = workload.scheduled;
+            const tDone = workload.done;
+            const tOverdue = workload.overdue;
+            const tOverdueDone = 0;
+            const tPending = workload.pending;
+            const tStsok = workload.stsok;
+            const tNa = workload.na;
+            const tToCalibrate = workload.toCalibrate;
 
-            let tTotal = codeRecordsForKpi.length;
-            let tDone = 0, tOverdue = 0, tOverdueDone = 0, tPending = 0, tStsok = 0, tNa = 0;
-            let tToCalibrate = 0;
             const ext = { DONE:0, "OVERDUE, DONE":0, OVERDUE:0, PENDING:0, STSOK:0, NA:0 };
             const int = { DONE:0, "OVERDUE, DONE":0, OVERDUE:0, PENDING:0, STSOK:0, NA:0 };
-
-            codeRecordsForKpi.forEach(eq => {
-                const s = getCalibStatus(eq);
-                if (s === "DONE") tDone++;
-                else if (s === "OVERDUE") tOverdue++;
-                else if (s === "OVERDUE, DONE") tOverdueDone++;
-                else if (s === "PENDING") tPending++;
-                else if (s === "STSOK") tStsok++;
-                else tNa++;
-
-                const hasCurrent = !!getCurrentCalibrationCycle(eq);
-                if (hasCurrent && ["DONE","OVERDUE, DONE"].indexOf(s) < 0 && s !== "NO CALIB SCHED") tToCalibrate++;
-
-                const es = getSubCalibStatusForRecord(eq,'external');
-                const is = getSubCalibStatusForRecord(eq,'internal');
-                ext[es] = (ext[es] || 0) + 1;
-                int[is] = (int[is] || 0) + 1;
+            const groupedForBreakdown = new Map();
+            filtered.forEach(eq=>{
+                const key=`${normalizePlant(eq.plant)}||${String(eq.type||'').trim().toLowerCase()}`;
+                if(!groupedForBreakdown.has(key)) groupedForBreakdown.set(key,[]);
+                groupedForBreakdown.get(key).push(eq);
+            });
+            groupedForBreakdown.forEach(group=>{
+                const codes=[...new Set(group.map(x=>String(x.code||'').trim()).filter(Boolean))];
+                const codeSet=new Set(codes.map(x=>x.toLowerCase()));
+                const cycles=normalizeSharedCalibrationCycles(group[0]);
+                cycles.forEach(cycle=>['external','internal'].forEach(type=>{
+                    (Array.isArray(cycle[type])?cycle[type]:[]).forEach(entry=>{
+                        const assigned=Array.isArray(entry?.codes)?entry.codes.map(x=>String(x||'').trim()).filter(Boolean):[];
+                        const count=(assigned.length?assigned.filter(c=>codeSet.has(c.toLowerCase())):codes).length;
+                        if(!count)return;
+                        const st=getSubCalibStatus(entry?.sched||entry?.dateSched||'',entry?.calib||entry?.dateCalib||'');
+                        const target=type==='external'?ext:int;
+                        target[st]=(target[st]||0)+count;
+                    });
+                }));
             });
 
             document.getElementById("calib-kpi-total").innerText = tTotal;
             const totalNote = document.getElementById("calib-kpi-total-note");
-            if (totalNote) totalNote.innerText = `${tTotal} equipment code${tTotal === 1 ? "" : "s"} counted`;
+            if (totalNote) totalNote.innerText = `Code × calibration occurrence`;
             const toCalibrateEl = document.getElementById("calib-kpi-to-calibrate");
             if (toCalibrateEl) toCalibrateEl.innerText = tToCalibrate;
             document.getElementById("calib-kpi-done").innerText = tDone;
