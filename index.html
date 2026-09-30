@@ -785,6 +785,15 @@ window.CloudSync = (() => {
         // into the cloud rows and preserves local calibration-only records.
         const result = await pull();
         if (result.ok) {
+            // pull() hydrates the live dashboard arrays before any rendering.
+            // This prevents an empty/old in-memory list from hiding the cloud
+            // calibration data after F5 or a fresh login.
+            if (typeof renderSummaryModule === "function") renderSummaryModule();
+            if (typeof renderCalibModule === "function") renderCalibModule();
+            if (typeof renderDowntimeModule === "function") renderDowntimeModule();
+            if (typeof renderCalendarModule === "function") renderCalendarModule();
+            if (typeof renderProjectsModule === "function") renderProjectsModule();
+
             installStorageWatcher();
             startBackgroundRefresh();
             // If the pull had to preserve calibration fields that were absent from
