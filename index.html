@@ -3407,27 +3407,35 @@ window.addEventListener("cloudsync:status", (event) => {
                 return top.slice(0,4);
             };
 
-            const calcCalib = list => {
-                let done=0, overdue=0, pending=0, stsok=0;
-                const scheduledKeys = new Set();
-                (list||[]).forEach(eq => {
-                    const current = getCurrentCalibrationCycle(eq);
-                    if (!current) return;
-                    ['external','internal'].forEach(type => {
-                        const entries = Array.isArray(current[type]) ? current[type] : [];
-                        entries.forEach((entry, idx) => {
-                            const st = getSubCalibStatus(entry.sched, entry.calib);
-                            if (st === 'NA') return;
-                            const key = `${eq.id}|${type}|${idx}|${entry.sched}|${entry.calib}|${entry.by}`;
-                            scheduledKeys.add(key);
-                            if (st === 'DONE' || st === 'OVERDUE, DONE') done++;
-                            else if (st === 'OVERDUE') overdue++;
-                            else if (st === 'PENDING') pending++;
-                            else if (st === 'STSOK') stsok++;
-                        });
-                    });
+            const uniqueEquipmentCodes = list => {
+                const map = new Map();
+                (list || []).forEach(eq => {
+                    const code = String(eq?.code || '').trim();
+                    if (!code) return;
+                    const key = `${normalizePlant(eq.plant)}||${code.toLowerCase()}`;
+                    if (!map.has(key)) map.set(key, eq);
                 });
-                const scheduled = scheduledKeys.size;
+                return [...map.values()];
+            };
+
+            const calcCalib = list => {
+                // ALL calibration summary counts are per unique equipment code.
+                // External + Internal are evaluated for the same code, but a code
+                // is counted only once in the overall calibration totals.
+                let done=0, overdue=0, pending=0, stsok=0;
+                uniqueEquipmentCodes(list).forEach(eq => {
+                    const ext = getSubCalibStatusForRecord(eq, 'external');
+                    const int = getSubCalibStatusForRecord(eq, 'internal');
+                    const statuses = [ext, int].filter(st => st !== 'NA');
+                    if (!statuses.length) return;
+                    const status = getCalibStatus(eq);
+                    if (status === 'DONE') done++;
+                    else if (status === 'OVERDUE, DONE') done++;
+                    else if (status === 'OVERDUE') overdue++;
+                    else if (status === 'PENDING') pending++;
+                    else if (status === 'STSOK') stsok++;
+                });
+                const scheduled = done + overdue + pending + stsok;
                 return {done, scheduled, toCalibrate:Math.max(0, scheduled-done), overdue, pending, stsok, compliance:scheduled?Math.round(done/scheduled*100):0};
             };
             const calcDowntime = list => {
@@ -3609,17 +3617,15 @@ window.addEventListener("cloudsync:status", (event) => {
                 projectByPlant[p] = { "In Progress": 0, Planning: 0, "On Hold": 0, Completed: 0 };
             });
 
-            filteredEq.forEach(eq => {
+            // Supporting calibration details are counted once per unique equipment code.
+            uniqueEquipmentCodes(filteredEq).forEach(eq => {
                 const plant = normalizePlant(eq.plant);
                 if (!calibByPlant[plant]) return;
-                [
-                    getSubCalibStatusForRecord(eq,'external'),
-                    getSubCalibStatusForRecord(eq,'internal')
-                ].forEach(st => {
-                    if (st === "NA") return;
-                    calibByPlant[plant].scheduled++;
-                    if (st === "DONE" || st === "OVERDUE, DONE") calibByPlant[plant].done++;
-                });
+                const statuses = [getSubCalibStatusForRecord(eq,'external'), getSubCalibStatusForRecord(eq,'internal')].filter(st => st !== 'NA');
+                if (!statuses.length) return;
+                calibByPlant[plant].scheduled++;
+                const overall = getCalibStatus(eq);
+                if (overall === 'DONE' || overall === 'OVERDUE, DONE') calibByPlant[plant].done++;
             });
 
             filteredPr.forEach(pr => {
@@ -3631,13 +3637,13 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const compareCalibByPlant = {};
             allSummaryPlants.forEach(p => compareCalibByPlant[p] = {done:0, scheduled:0});
-            comparisonEq.forEach(eq => {
+            uniqueEquipmentCodes(comparisonEq).forEach(eq => {
                 const plant = normalizePlant(eq.plant); if (!compareCalibByPlant[plant]) return;
-                [getSubCalibStatusForRecord(eq,'external'), getSubCalibStatusForRecord(eq,'internal')].forEach(st => {
-                    if(st === 'NA') return;
-                    compareCalibByPlant[plant].scheduled++;
-                    if(st === 'DONE' || st === 'OVERDUE, DONE') compareCalibByPlant[plant].done++;
-                });
+                const statuses = [getSubCalibStatusForRecord(eq,'external'), getSubCalibStatusForRecord(eq,'internal')].filter(st => st !== 'NA');
+                if (!statuses.length) return;
+                compareCalibByPlant[plant].scheduled++;
+                const overall = getCalibStatus(eq);
+                if (overall === 'DONE' || overall === 'OVERDUE, DONE') compareCalibByPlant[plant].done++;
             });
             const calibSupp = document.getElementById("summary-per-plant-calib");
             calibSupp.innerHTML = isCompare ? `
@@ -3755,20 +3761,20 @@ window.addEventListener("cloudsync:status", (event) => {
             let extActive = 0, extDone = 0;
             let intActive = 0, intDone = 0;
 
-            filtered.forEach(eq => {
-                // IMPORTANT: gauges use CURRENT CYCLE only. A completed old cycle
-                // is history and does not remain in the current-cycle denominator.
-                const current = getCurrentCalibrationCycle(eq);
-                if (!current) return;
-
-                const extEntries = Array.isArray(current.external) ? current.external : [];
-                const intEntries = Array.isArray(current.internal) ? current.internal : [];
-                extEntries.forEach(entry => {
-                    if (entry.sched || entry.calib) { extActive++; if (entry.calib) extDone++; }
-                });
-                intEntries.forEach(entry => {
-                    if (entry.sched || entry.calib) { intActive++; if (entry.calib) intDone++; }
-                });
+            // Gauge counts are also per unique equipment code. Multiple
+            // calibration occurrences for one code remain in History, but never
+            // create extra equipment counts here.
+            uniqueEquipmentCodes(filtered).forEach(eq => {
+                const extStatus = getSubCalibStatusForRecord(eq, 'external');
+                const intStatus = getSubCalibStatusForRecord(eq, 'internal');
+                if (extStatus !== 'NA') {
+                    extActive++;
+                    if (extStatus === 'DONE' || extStatus === 'OVERDUE, DONE') extDone++;
+                }
+                if (intStatus !== 'NA') {
+                    intActive++;
+                    if (intStatus === 'DONE' || intStatus === 'OVERDUE, DONE') intDone++;
+                }
             });
 
             const extPct = extActive > 0 ? Math.round((extDone / extActive) * 100) : 0;
@@ -3800,9 +3806,8 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function getEquipmentGroupKey(eq) {
-            // Main tracker/history grouping is by Instrument Type/Class within Plant.
-            // Calibration dates and PR/PO belong to the history/cycle details and must
-            // not split the same instrument type into multiple main rows/cards.
+            // Visual cards remain grouped by instrument type, but ALL calibration
+            // calculations and status indications are per unique equipment code.
             return [normalizePlant(eq.plant), String(eq.type || '').trim().toLowerCase()].join("||");
         }
 
@@ -3824,24 +3829,26 @@ window.addEventListener("cloudsync:status", (event) => {
                 return true;
             });
 
-            // CURRENT-CYCLE KPIs: older completed cycles are history only.
-            // One physical instrument is counted once, even if it has multiple codes.
-            const physicalGroups = new Map();
+            // CURRENT-CYCLE KPIs are calculated PER EQUIPMENT CODE.
+            // Instrument type/card is only a visual grouping; it must never be
+            // used as the calculation unit. If duplicate records with the same
+            // Plant + Equipment Code exist, only one record is counted.
+            const codeMapForKpi = new Map();
             filtered.forEach(eq => {
-                const key = getEquipmentGroupKey(eq);
-                if (!physicalGroups.has(key)) physicalGroups.set(key, []);
-                physicalGroups.get(key).push(eq);
+                const code = String(eq.code || '').trim();
+                if (!code) return;
+                const key = `${normalizePlant(eq.plant)}||${code.toLowerCase()}`;
+                if (!codeMapForKpi.has(key)) codeMapForKpi.set(key, eq);
             });
+            const codeRecordsForKpi = [...codeMapForKpi.values()];
 
-            const uniqueCodesForKpi = new Set(filtered.map(eq => String(eq.code || '').trim().toLowerCase()).filter(Boolean));
-            let tTotal = uniqueCodesForKpi.size;
+            let tTotal = codeRecordsForKpi.length;
             let tDone = 0, tOverdue = 0, tOverdueDone = 0, tPending = 0, tStsok = 0, tNa = 0;
             let tToCalibrate = 0;
             const ext = { DONE:0, "OVERDUE, DONE":0, OVERDUE:0, PENDING:0, STSOK:0, NA:0 };
             const int = { DONE:0, "OVERDUE, DONE":0, OVERDUE:0, PENDING:0, STSOK:0, NA:0 };
 
-            physicalGroups.forEach(group => {
-                const eq = group[0];
+            codeRecordsForKpi.forEach(eq => {
                 const s = getCalibStatus(eq);
                 if (s === "DONE") tDone++;
                 else if (s === "OVERDUE") tOverdue++;
@@ -3861,7 +3868,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             document.getElementById("calib-kpi-total").innerText = tTotal;
             const totalNote = document.getElementById("calib-kpi-total-note");
-            if (totalNote) totalNote.innerText = `${tTotal} physical instrument${tTotal === 1 ? "" : "s"}`;
+            if (totalNote) totalNote.innerText = `${tTotal} equipment code${tTotal === 1 ? "" : "s"} counted`;
             const toCalibrateEl = document.getElementById("calib-kpi-to-calibrate");
             if (toCalibrateEl) toCalibrateEl.innerText = tToCalibrate;
             document.getElementById("calib-kpi-done").innerText = tDone;
@@ -3879,7 +3886,7 @@ window.addEventListener("cloudsync:status", (event) => {
             // Group the equipment codes that share the same calibration information
             // into ONE table record, while retaining each code as an individual instrument.
             const groups = new Map();
-            filtered.forEach(eq => {
+            uniqueEquipmentCodes(filtered).forEach(eq => {
                 const key = getEquipmentGroupKey(eq);
                 if (!groups.has(key)) groups.set(key, []);
                 groups.get(key).push(eq);
