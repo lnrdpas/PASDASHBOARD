@@ -4375,7 +4375,14 @@ window.addEventListener("cloudsync:status", (event) => {
                 let target = canonicalCycles.find(x => x.id === id);
                 if (!target) { target = {id, pr:c.pr||'', po:c.po||'', codes:[...codes], external:[], internal:[]}; canonicalCycles.push(target); }
                 target.pr = c.pr || target.pr; target.po = c.po || target.po;
-                ['external','internal'].forEach(type => (c[type]||[]).forEach(entry => { const n=normalizeCalibrationCycle(entry); if(!n.sched&&!n.calib&&!n.by)return; if(!target[type].some(x=>calibrationCycleKey(x)===calibrationCycleKey(n))) target[type].push(n); }));
+                ['external','internal'].forEach(type => (c[type]||[]).forEach(entry => {
+                    const n=normalizeCalibrationCycle(entry);
+                    if(!n.sched&&!n.calib&&!n.by)return;
+                    // Keep every entered calibration row. Multiple External/Internal
+                    // entries are valid within the same cycle, even when their
+                    // values happen to be identical.
+                    target[type].push(n);
+                }));
             });
             if (!canonicalCycles.length) return alert("Please enter at least one calibration cycle.");
             const groupPr=canonicalCycles.find(c=>c.pr)?.pr||'', groupPo=canonicalCycles.find(c=>c.po)?.po||'';
