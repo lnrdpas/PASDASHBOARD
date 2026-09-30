@@ -1562,6 +1562,28 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                 </div>
 
+                <div class="bg-slate-800/90 border border-amber-500/30 p-4 rounded-2xl space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-xs font-bold text-amber-300 uppercase tracking-wider"><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i> Equipment by Line — Highest Downtime Only</h3>
+                            <p id="uptime-top-equipment-filter-label" class="text-[9px] text-slate-500 mt-0.5">Based on the selected Uptime/Downtime filters</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto rounded-xl border border-slate-700/50">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead id="uptime-top-equipment-head" class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
+                                <tr>
+                                    <th class="py-2 px-3">Line Category</th>
+                                    <th class="py-2 px-3">Equipment</th>
+                                    <th class="py-2 px-3">Failure Category</th>
+                                    <th class="py-2 px-3 text-center">Downtime</th>
+                                </tr>
+                            </thead>
+                            <tbody id="uptime-top-equipment-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl space-y-3">
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
                         <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Historical Downtime Records</h3>
@@ -4523,6 +4545,50 @@ window.addEventListener("cloudsync:status", (event) => {
                 const metricCards=[['Uptime Percentage',`${cp.up.toFixed(1)}%`,`vs ${cc.up.toFixed(1)}%`,cp.up-cc.up,' pts'],['MTBF (Mean Time Between Failures)',`${cp.mtbf.toFixed(1)} hrs`,`vs ${cc.mtbf.toFixed(1)} hrs`,cp.mtbf-cc.mtbf,' hrs'],['Total Downtime Duration',`${cp.h.toFixed(1)} hrs`,`vs ${cc.h.toFixed(1)} hrs`,cc.h-cp.h,' hrs'],['MTTR (Mean Time To Repair)',`${cp.mttr.toFixed(0)} mins`,`vs ${cc.mttr.toFixed(0)} mins`,cc.mttr-cp.mttr,' mins']];
                 document.getElementById('uptime-comparison-metrics').innerHTML=metricCards.map(([label,val,vs,diff,unit])=>`<div class="bg-slate-900/60 border border-slate-700/60 rounded-lg p-2"><div class="text-[9px] text-slate-500 uppercase">${label}</div><div class="text-sm font-black text-white mt-1">${val}</div><div class="text-[9px] text-slate-400 mt-0.5">${vs}</div><div class="text-[9px] font-bold ${diff>=0?'text-emerald-400':'text-red-400'}">Variance: ${diff>=0?'+':''}${Number(diff).toFixed(1)}${unit}</div></div>`).join('');
             }else { compCard.classList.add("hidden"); const m=document.getElementById('uptime-comparison-metrics'); if(m) m.innerHTML=''; }
+
+            // Highest downtime equipment per line, using this module's own plant/date comparison filters.
+            const buildHighestEquipmentByLine = logs => {
+                const byLine = {};
+                (logs || []).forEach(dt => {
+                    const line = String(dt.line || 'Unclassified Line').trim() || 'Unclassified Line';
+                    const equipment = String(dt.equipment || dt.code || 'Unclassified Equipment').trim() || 'Unclassified Equipment';
+                    const category = String(dt.category || 'Unclassified').trim() || 'Unclassified';
+                    const duration = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+                    if (!byLine[line]) byLine[line] = {};
+                    const key = equipment + '||' + category;
+                    if (!byLine[line][key]) byLine[line][key] = { equipment, category, duration: 0 };
+                    byLine[line][key].duration += duration;
+                });
+                return Object.entries(byLine).map(([line, items]) => {
+                    const top = Object.values(items).sort((a,b) => b.duration - a.duration)[0];
+                    return { line, ...top };
+                }).sort((a,b) => b.duration - a.duration);
+            };
+            const uptimeTopPrimary = buildHighestEquipmentByLine(primaryLogs);
+            const uptimeTopCompare = isCompare ? buildHighestEquipmentByLine(compareLogs) : [];
+            const uptimeTopBody = document.getElementById('uptime-top-equipment-body');
+            const uptimeTopHead = document.getElementById('uptime-top-equipment-head');
+            const uptimeTopLabel = document.getElementById('uptime-top-equipment-filter-label');
+            if (uptimeTopLabel) uptimeTopLabel.textContent = isCompare ? `${primaryValue || 'Selected Period'} vs ${compareValue || 'Comparison'} • ${currentPlant === 'ALL' ? 'All Plants' : currentPlant}` : `${primaryValue || 'All Time'} • ${currentPlant === 'ALL' ? 'All Plants' : currentPlant}`;
+            if (uptimeTopBody && uptimeTopHead) {
+                if (isCompare) {
+                    uptimeTopHead.innerHTML = `<tr>
+                        <th class="py-2 px-3">Line Category</th>
+                        <th colspan="3" class="py-2 px-3 text-center text-amber-300 border-l border-slate-700/60">${escapeHtml(primaryValue || 'Selected Period')}</th>
+                        <th colspan="3" class="py-2 px-3 text-center text-blue-300 border-l border-slate-700/60">${escapeHtml(compareValue || 'Comparison')}</th>
+                    </tr><tr class="bg-slate-900/70 text-slate-500 text-[9px] uppercase">
+                        <th></th><th class="py-1 px-3">Equipment</th><th class="py-1 px-3">Failure Category</th><th class="py-1 px-3 text-center">Downtime</th>
+                        <th class="py-1 px-3">Equipment</th><th class="py-1 px-3">Failure Category</th><th class="py-1 px-3 text-center">Downtime</th>
+                    </tr>`;
+                    const pMap = new Map(uptimeTopPrimary.map(x => [x.line, x]));
+                    const cMap = new Map(uptimeTopCompare.map(x => [x.line, x]));
+                    const lines = [...new Set([...pMap.keys(), ...cMap.keys()])].sort((a,b) => (cMap.get(b)?.duration||0)+(pMap.get(b)?.duration||0)-(cMap.get(a)?.duration||0)-(pMap.get(a)?.duration||0));
+                    uptimeTopBody.innerHTML = lines.length ? lines.map(line => { const p=pMap.get(line), c=cMap.get(line); return `<tr class="hover:bg-slate-800/50"><td class="py-2 px-3 font-bold text-white">${escapeHtml(line)}</td><td class="py-2 px-3">${escapeHtml(p?.equipment||'—')}</td><td class="py-2 px-3">${escapeHtml(p?.category||'—')}</td><td class="py-2 px-3 text-center text-red-400 font-bold">${p?Number(p.duration).toFixed(1)+' hrs':'—'}</td><td class="py-2 px-3 border-l border-slate-700/60">${escapeHtml(c?.equipment||'—')}</td><td class="py-2 px-3">${escapeHtml(c?.category||'—')}</td><td class="py-2 px-3 text-center text-blue-300 font-bold">${c?Number(c.duration).toFixed(1)+' hrs':'—'}</td></tr>`; }).join('') : `<tr><td colspan="7" class="text-center py-5 text-slate-500 italic">No downtime records found for the selected comparison filters.</td></tr>`;
+                } else {
+                    uptimeTopHead.innerHTML = `<tr><th class="py-2 px-3">Line Category</th><th class="py-2 px-3">Equipment</th><th class="py-2 px-3">Failure Category</th><th class="py-2 px-3 text-center">Downtime</th></tr>`;
+                    uptimeTopBody.innerHTML = uptimeTopPrimary.length ? uptimeTopPrimary.map(x => `<tr class="hover:bg-slate-800/50"><td class="py-2 px-3 font-bold text-white">${escapeHtml(x.line)}</td><td class="py-2 px-3">${escapeHtml(x.equipment)}</td><td class="py-2 px-3">${escapeHtml(x.category)}</td><td class="py-2 px-3 text-center text-red-400 font-bold">${Number(x.duration).toFixed(1)} hrs</td></tr>`).join('') : `<tr><td colspan="4" class="text-center py-5 text-slate-500 italic">No downtime records found for the selected filter.</td></tr>`;
+                }
+            }
 
             // Render Downtime History Table
             const tbody = document.getElementById("downtime-table-body");
