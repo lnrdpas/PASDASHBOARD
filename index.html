@@ -3327,15 +3327,19 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function getCalibStatus(eq) {
-            const ext = getRecordCalibrationCycle(eq, 'external');
-            const int = getRecordCalibrationCycle(eq, 'internal');
-            const statuses = [getSubCalibStatus(ext.sched, ext.calib), getSubCalibStatus(int.sched, int.calib)].filter(s => s !== 'NA');
+            // OVERALL STATUS is per Equipment Code and evaluates ALL applicable
+            // External/Internal occurrences in the current calibration cycle.
+            // Adding another date never creates another equipment count; it can
+            // only change the status of the existing code.
+            const extStatus = getSubCalibStatusForRecord(eq, 'external');
+            const intStatus = getSubCalibStatusForRecord(eq, 'internal');
+            const statuses = [extStatus, intStatus].filter(s => s !== 'NA');
             if (!statuses.length) return 'NO CALIB SCHED';
             if (statuses.includes('OVERDUE')) return 'OVERDUE';
+            if (statuses.includes('PENDING')) return 'PENDING';
+            if (statuses.includes('STSOK')) return 'STSOK';
             if (statuses.includes('OVERDUE, DONE')) return 'OVERDUE, DONE';
             if (statuses.every(s => s === 'DONE')) return 'DONE';
-            if (statuses.includes('PENDING')) return 'PENDING';
-            if (statuses.every(s => s === 'STSOK' || s === 'DONE')) return 'STSOK';
             return 'PENDING';
         }
 
@@ -3849,6 +3853,10 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function renderCalibTable() {
+            // Collapse legacy duplicate rows before rendering. This does not change
+            // the visual style; it only guarantees one underlying record per
+            // Plant + Equipment Code while retaining all calibration occurrences.
+            dedupeEquipmentCodes();
             const search = document.getElementById("calib-search").value.toLowerCase();
             const statusFilter = document.getElementById("calib-filter-status").value;
 
@@ -3925,6 +3933,9 @@ window.addEventListener("cloudsync:status", (event) => {
             // Codes remain the counting unit; calibration occurrences stay inside the same card.
             const cardGroups = new Map();
             records.forEach(eq => {
+                // IMPORTANT: visual grouping is Instrument Type + Plant only.
+                // Equipment Code is displayed inside that card; calibration dates
+                // and occurrences must never create another top-level card.
                 const key = `${normalizePlant(eq.plant)}||${String(eq.type || '').trim().toLowerCase()}`;
                 if (!cardGroups.has(key)) cardGroups.set(key, []);
                 cardGroups.get(key).push(eq);
