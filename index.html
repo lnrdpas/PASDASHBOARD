@@ -401,7 +401,27 @@ window.CloudSync = (() => {
         if (error) throw error;
 
         const remoteRows = (data || []).map(row => row.data).filter(Boolean);
-        const rows = remoteRows.length ? remoteRows : localRows;
+        let rows = remoteRows.length ? remoteRows : localRows;
+
+        // Do not discard calibration information that already exists in this browser
+        // when an older/partial cloud equipment row does not contain those fields.
+        // Other cloud fields remain authoritative.
+        if (dataset === "equipment" && remoteRows.length && localRows.length) {
+            const localById = new Map(localRows.map(x => [String(x?.id), x]));
+            rows = remoteRows.map(remote => {
+                const local = localById.get(String(remote?.id));
+                if (!local) return remote;
+                const merged = { ...remote };
+                ["calibrationCycles","calibrationHistory","extSched","extCalib","extBy","intSched","intCalib","intBy","pr","po"].forEach(key => {
+                    const remoteValue = remote?.[key];
+                    const localValue = local?.[key];
+                    const remoteEmpty = remoteValue === undefined || remoteValue === null || remoteValue === "" || (Array.isArray(remoteValue) && remoteValue.length === 0);
+                    const localHasValue = localValue !== undefined && localValue !== null && localValue !== "" && (!Array.isArray(localValue) || localValue.length > 0);
+                    if (remoteEmpty && localHasValue) merged[key] = localValue;
+                });
+                return merged;
+            });
+        }
 
         // Keep both localStorage and the live application arrays synchronized.
         // Executive Summary, Calibration Tracker, Uptime/Downtime and Projects
@@ -3852,10 +3872,101 @@ window.addEventListener("cloudsync:status", (event) => {
             const title=document.getElementById('summary-pareto-title'); if(title) title.textContent=isCompare?`Downtime Pareto — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto — ${paretoComparison.primaryLabel}`;
         }
 
-        // --- MODULE 1: CALIBRATION TRACKER ---
+        // --- GLOBAL CALIBRATION CALCULATION HELPERS ---
+// These helpers are shared by the Calibration Tracker and Executive Summary.
+// Keep them outside renderSummaryModule so the Tracker can call them safely.
+function collectGroupCalibrationCycles(group) {
+    const merged = [];
+    const byCycleKey = new Map();
+    (group || []).forEach(record => {
+        const cycles = normalizeSharedCalibrationCycles(record);
+        cycles.forEach((cycle, cycleIndex) => {
+            const cycleKey = String(cycle.id || `cycle-${cycleIndex + 1}`);
+            let target = byCycleKey.get(cycleKey);
+            if (!target) {
+                target = { id: cycle.id || cycleKey, pr: cycle.pr || '', po: cycle.po || '', codes: [], external: [], internal: [] };
+                byCycleKey.set(cycleKey, target);
+                merged.push(target);
+            }
+            target.codes = [...new Set([...(target.codes || []), ...(Array.isArray(cycle.codes) ? cycle.codes : []), ...(record.code ? [record.code] : [])].map(v=>String(v||'').trim()).filter(Boolean))];
+            target.pr = target.pr || cycle.pr || '';
+            target.po = target.po || cycle.po || '';
+            ['external','internal'].forEach(type => {
+                const targetEntries = target[type];
+                (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
+                    const normalized = normalizeCalibrationCycle(entry);
+                    const entryId = String(normalized.id || '');
+                    const existing = entryId ? targetEntries.findIndex(x=>String(x.id||'')===entryId) : -1;
+                    if (existing >= 0) {
+                        targetEntries[existing] = { ...targetEntries[existing], ...normalized, codes:[...new Set([...(targetEntries[existing].codes||[]), ...(normalized.codes||[]), ...(record.code ? [record.code] : [])])] };
+                    } else {
+                        targetEntries.push({ ...normalized, id: entryId || `${cycleKey}-${type}-${entryIndex}-${normalized.sched||normalized.calib||''}`, codes:[...new Set([...(normalized.codes||[]), ...(record.code ? [record.code] : [])])] });
+                    }
+                });
+            });
+        });
+    });
+    return merged;
+}
+
+function calcCalib(list, dateType='all', dateValue='') {
+    let done=0, overdueDone=0, overdue=0, pending=0, stsok=0, na=0;
+    const groups = new Map();
+    (list || []).forEach(eq => {
+        const plant = normalizePlant(eq.plant);
+        const type = String(eq.type || '').trim().toLowerCase();
+        const key = `${plant}||${type}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(eq);
+    });
+    const matchesDate = (entry) => {
+        if (dateType === 'all' || !dateValue) return true;
+        const a = entry?.sched || entry?.dateSched || '';
+        const b = entry?.calib || entry?.dateCalib || '';
+        const match = value => {
+            if (!value) return false;
+            if (dateType === 'year') return String(value).slice(0,4) === String(dateValue);
+            if (dateType === 'month') return String(value).slice(0,7) === String(dateValue);
+            return true;
+        };
+        return match(a) || match(b);
+    };
+    groups.forEach(group => {
+        const groupCodes = [...new Set(group.map(x=>String(x.code||'').trim()).filter(Boolean))];
+        const groupCodeSet = new Set(groupCodes.map(x=>x.toLowerCase()));
+        const cycles = collectGroupCalibrationCycles(group);
+        cycles.forEach(cycle => ['external','internal'].forEach(type => {
+            const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
+            entries.forEach(entry => {
+                if (!matchesDate(entry)) return;
+                const assigned = Array.isArray(entry?.codes) ? entry.codes.map(x=>String(x||'').trim()).filter(Boolean) : [];
+                const applicableCodes = assigned.length ? assigned.filter(c=>groupCodeSet.has(c.toLowerCase())) : groupCodes;
+                const codeCount = applicableCodes.length;
+                if (!codeCount) return;
+                const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
+                if (st === 'DONE') done += codeCount;
+                else if (st === 'OVERDUE, DONE') { done += codeCount; overdueDone += codeCount; }
+                else if (st === 'OVERDUE') overdue += codeCount;
+                else if (st === 'PENDING') pending += codeCount;
+                else if (st === 'STSOK') stsok += codeCount;
+                else na += codeCount;
+            });
+        }));
+    });
+    const scheduled = done + overdue + pending + stsok;
+    return {done, overdueDone, scheduled, toCalibrate: overdue + pending + stsok, overdue, pending, stsok, na, compliance:scheduled?Math.round(done/scheduled*100):0};
+}
+
+// --- MODULE 1: CALIBRATION TRACKER ---
         function renderCalibModule() {
-            renderCalibGauges();
-            renderCalibTable();
+            try { renderCalibGauges(); } catch (err) {
+                console.error("Calibration gauges render error:", err);
+            }
+            try { renderCalibTable(); } catch (err) {
+                console.error("Calibration Tracker render error:", err);
+                const cards = document.getElementById("calib-table-body");
+                if (cards) cards.innerHTML = `<div class="text-center py-10 text-red-400 border border-red-500/20 rounded-2xl bg-red-500/5">Calibration Tracker could not render. Check browser console.</div>`;
+            }
         }
 
         function renderCalibGauges() {
@@ -3928,10 +4039,6 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function renderCalibTable() {
-            // Collapse legacy duplicate rows before rendering. This does not change
-            // the visual style; it only guarantees one underlying record per
-            // Plant + Equipment Code while retaining all calibration occurrences.
-            dedupeEquipmentCodes();
             const search = document.getElementById("calib-search").value.toLowerCase();
             const statusFilter = document.getElementById("calib-filter-status").value;
 
