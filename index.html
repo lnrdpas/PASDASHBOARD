@@ -3805,6 +3805,19 @@ window.addEventListener("cloudsync:status", (event) => {
             });
         }
 
+        // GLOBAL: every calibration count and tracker row is based on the unique Equipment Code.
+        // Instrument Type is descriptive only and must never be the counting unit.
+        function uniqueEquipmentCodes(list) {
+            const map = new Map();
+            (list || []).forEach(eq => {
+                const code = String(eq?.code || '').trim();
+                if (!code) return;
+                const key = `${normalizePlant(eq.plant)}||${code.toLowerCase()}`;
+                if (!map.has(key)) map.set(key, eq);
+            });
+            return [...map.values()];
+        }
+
         function getEquipmentGroupKey(eq) {
             // Visual cards remain grouped by instrument type, but ALL calibration
             // calculations and status indications are per unique equipment code.
