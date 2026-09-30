@@ -3298,8 +3298,32 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function getSubCalibStatusForRecord(eq, type) {
-            const c = getRecordCalibrationCycle(eq, type);
-            return getSubCalibStatus(c.sched, c.calib);
+            // A calibration type is COMPLETE only when every occurrence in the
+            // current cycle is complete. One DONE occurrence must not hide a
+            // second PENDING/OVERDUE occurrence.
+            const current = getCurrentCalibrationCycle(eq || {});
+            let entries = [];
+            if (current) {
+                entries = Array.isArray(current[type]) ? current[type] : [];
+            } else {
+                const arr = type === 'external' ? eq.externalCalibrations : eq.internalCalibrations;
+                entries = Array.isArray(arr) ? arr : [];
+            }
+            if (!entries.length) {
+                const c = getRecordCalibrationCycle(eq, type);
+                entries = (c && (c.sched || c.calib || c.by)) ? [c] : [];
+            }
+            const statuses = entries
+                .map(c => getSubCalibStatus(c?.sched || '', c?.calib || ''))
+                .filter(s => s !== 'NA');
+            if (!statuses.length) return 'NA';
+            if (statuses.includes('OVERDUE')) return 'OVERDUE';
+            if (statuses.includes('PENDING')) return 'PENDING';
+            if (statuses.every(s => s === 'DONE' || s === 'OVERDUE, DONE')) {
+                return statuses.includes('OVERDUE, DONE') ? 'OVERDUE, DONE' : 'DONE';
+            }
+            if (statuses.every(s => s === 'STSOK' || s === 'DONE' || s === 'OVERDUE, DONE')) return 'STSOK';
+            return 'PENDING';
         }
 
         function getCalibStatus(eq) {
@@ -3896,13 +3920,20 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("calib-kpi-stsok").innerText = tStsok;
             document.getElementById("calib-kpi-na").innerText = tNa;
 
-            // IMPORTANT: The visible Calibration Tracker is ONE ROW/CARD PER EQUIPMENT CODE.
-            // Instrument Type is descriptive only. It is never used to combine tracker rows.
-            const records = uniqueEquipmentCodes(filtered);
+            // CARD STRUCTURE: keep the previous card style.
+            // One card = Instrument Type + its Equipment Codes.
+            // Codes remain the counting unit; calibration occurrences stay inside the same card.
+            const cardGroups = new Map();
+            records.forEach(eq => {
+                const key = `${normalizePlant(eq.plant)}||${String(eq.type || '').trim().toLowerCase()}`;
+                if (!cardGroups.has(key)) cardGroups.set(key, []);
+                cardGroups.get(key).push(eq);
+            });
+
             const cards = document.getElementById("calib-table-body");
             cards.innerHTML = "";
 
-            if (records.length === 0) {
+            if (cardGroups.size === 0) {
                 cards.innerHTML = `<div class="text-center py-10 text-slate-500 italic border border-slate-700/50 rounded-2xl bg-slate-900/40">No equipment entries found matching criteria.</div>`;
                 return;
             }
@@ -3920,41 +3951,56 @@ window.addEventListener("cloudsync:status", (event) => {
                 return `<span class="inline-flex px-2 py-1 rounded border text-[8px] font-black ${cls}">${escapeHtml(status)}</span>`;
             };
 
-            records.forEach(eq => {
-                const extStatus = getSubCalibStatusForRecord(eq,'external');
-                const intStatus = getSubCalibStatusForRecord(eq,'internal');
-                const overall = getCalibStatus(eq);
-                const actionId = eq.id;
+            cardGroups.forEach(group => {
+                const first = group[0];
                 const card = document.createElement('div');
                 card.className = 'rounded-2xl border border-slate-700/60 bg-slate-900/65 overflow-hidden shadow-sm';
-                card.innerHTML = `
-                    <div class="p-4 border-b border-slate-700/50 bg-slate-900/80">
+
+                const codeRows = group.map(eq => {
+                    const extStatus = getSubCalibStatusForRecord(eq,'external');
+                    const intStatus = getSubCalibStatusForRecord(eq,'internal');
+                    const overall = getCalibStatus(eq);
+                    const cycles = normalizeSharedCalibrationCycles(eq);
+                    const extCount = cycles.reduce((n,c)=>n+(Array.isArray(c.external)?c.external.length:0),0);
+                    const intCount = cycles.reduce((n,c)=>n+(Array.isArray(c.internal)?c.internal.length:0),0);
+                    return `<div class="rounded-xl border border-slate-700/60 bg-slate-950/35 p-3">
                         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                            <div>
+                            <div class="min-w-0">
                                 <div class="text-[9px] uppercase tracking-wider font-black text-slate-500">Equipment Code</div>
-                                <h3 class="text-base font-black text-white mt-1">${escapeHtml(eq.code || '-')}</h3>
-                                <div class="text-[10px] text-slate-400 mt-0.5">Instrument Type: ${escapeHtml(eq.type || '-')} · ${escapeHtml(eq.plant || '-')}</div>
+                                <div class="flex flex-wrap items-center gap-2 mt-1">
+                                    <span class="text-base font-black text-blue-300">${escapeHtml(eq.code || '-')}</span>
+                                    <span class="text-[8px] uppercase font-black text-slate-500">Overall</span>${badge(overall)}
+                                </div>
                             </div>
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-[8px] uppercase font-black text-slate-500">Overall</span>${badge(overall)}
-                                <button type="button" onclick="viewCalibrationHistory(${actionId})" class="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px] font-bold">History</button>
-                                <button type="button" onclick="editEquipment(${actionId})" class="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px] font-bold">Edit</button>
-                                <button type="button" onclick="deleteEquipment(${actionId})" class="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-[10px] font-bold">Delete</button>
+                                <button type="button" onclick="viewCalibrationHistory(${eq.id})" class="px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[9px] font-bold">History</button>
+                                <button type="button" onclick="editEquipment(${eq.id})" class="px-2.5 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[9px] font-bold">Edit</button>
+                                <button type="button" onclick="deleteEquipment(${eq.id})" class="px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-[9px] font-bold">Delete</button>
                             </div>
                         </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                            <div class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2.5">
+                                <div class="text-[9px] uppercase tracking-wider font-black text-blue-300 mb-1.5">External Calibration</div>
+                                <div class="flex items-center justify-between gap-2"><div class="text-xs font-black">${badge(extStatus)}</div><span class="text-[9px] font-bold text-blue-300">${extCount} occurrence${extCount===1?'':'s'}</span></div>
+                            </div>
+                            <div class="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5">
+                                <div class="text-[9px] uppercase tracking-wider font-black text-purple-300 mb-1.5">Internal Calibration</div>
+                                <div class="flex items-center justify-between gap-2"><div class="text-xs font-black">${badge(intStatus)}</div><span class="text-[9px] font-bold text-purple-300">${intCount} occurrence${intCount===1?'':'s'}</span></div>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                card.innerHTML = `
+                    <div class="p-4 border-b border-slate-700/50 bg-slate-900/80">
+                        <div class="text-[9px] uppercase tracking-wider font-black text-slate-500">Instrument Type</div>
+                        <h3 class="text-base font-black text-white mt-1">${escapeHtml(first.type || '-')}</h3>
+                        <div class="text-[10px] text-slate-400 mt-0.5">${escapeHtml(first.plant || '-')} · ${group.length} equipment code${group.length===1?'':'s'}</div>
                     </div>
-                    <div class="p-4">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
-                                <div class="text-[9px] uppercase tracking-wider font-black text-blue-300 mb-2">External Calibration</div>
-                                <div class="flex items-center justify-between gap-2"><div class="text-xs font-black">${badge(extStatus)}</div><span class="text-[9px] font-bold text-blue-300">${(normalizeSharedCalibrationCycles(eq).reduce((n,c)=>n+(Array.isArray(c.external)?c.external.length:0),0))} occurrence${(normalizeSharedCalibrationCycles(eq).reduce((n,c)=>n+(Array.isArray(c.external)?c.external.length:0),0))===1?'':'s'}</span></div>
-                            </div>
-                            <div class="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
-                                <div class="text-[9px] uppercase tracking-wider font-black text-purple-300 mb-2">Internal Calibration</div>
-                                <div class="flex items-center justify-between gap-2"><div class="text-xs font-black">${badge(intStatus)}</div><span class="text-[9px] font-bold text-purple-300">${(normalizeSharedCalibrationCycles(eq).reduce((n,c)=>n+(Array.isArray(c.internal)?c.internal.length:0),0))} occurrence${(normalizeSharedCalibrationCycles(eq).reduce((n,c)=>n+(Array.isArray(c.internal)?c.internal.length:0),0))===1?'':'s'}</span></div>
-                            </div>
-                        </div>
-                        <div class="mt-3 text-[9px] text-slate-500">1 equipment code = 1 tracker count. Every added External/Internal date is retained as a separate calibration occurrence; it does not replace the previous date.</div>
+                    <div class="p-4 space-y-3">
+                        <div class="text-[9px] uppercase tracking-wider font-black text-slate-500">Code</div>
+                        ${codeRows}
+                        <div class="text-[9px] text-slate-500 pt-1">All calibration dates/occurrences remain inside this Instrument Type card. Adding another External or Internal date does not create another card or equipment count.</div>
                     </div>`;
                 cards.appendChild(card);
             });
