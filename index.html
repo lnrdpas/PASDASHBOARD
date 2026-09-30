@@ -3746,8 +3746,8 @@ window.addEventListener("cloudsync:status", (event) => {
             row.className = `calibration-cycle-row ${type}-cycle-row bg-slate-900/70 border border-slate-700/50 rounded-lg p-2 space-y-1.5`;
             row.innerHTML = `
                 <div class="flex items-center justify-between gap-2">
-                    <span class="cycle-number text-[10px] font-bold ${type === 'external' ? 'text-blue-300' : 'text-purple-300'}">Cycle ${index + 1}</span>
-                    <button type="button" onclick="removeCalibrationCycle(this,'${type}')" class="text-red-400 hover:text-red-300 px-1.5" title="Remove this calibration cycle">
+                    <span class="cycle-number text-[10px] font-bold ${type === 'external' ? 'text-blue-300' : 'text-purple-300'}">${type === 'external' ? 'External Entry' : 'Internal Entry'} ${index + 1}</span>
+                    <button type="button" onclick="removeCalibrationCycle(this,'${type}')" class="text-red-400 hover:text-red-300 px-1.5" title="Remove this calibration entry">
                         <i class="fa-solid fa-trash-can text-[9px]"></i>
                     </button>
                 </div>
@@ -3796,7 +3796,7 @@ window.addEventListener("cloudsync:status", (event) => {
             if (!section) return;
             section.querySelectorAll('.calibration-cycle-row').forEach((row, idx) => {
                 const label = row.querySelector('.cycle-number');
-                if (label) label.innerText = `Cycle ${idx + 1}`;
+                if (label) label.innerText = `${type === 'external' ? 'External Entry' : 'Internal Entry'} ${idx + 1}`;
             });
         }
 
@@ -4124,6 +4124,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 current: false,
                 recordedAt: h.recordedAt || "",
                 pr: h.pr || "", po: h.po || "",
+                externalCalibrations: Array.isArray(h.externalCalibrations) ? h.externalCalibrations.map(normalizeCalibrationCycle) : [],
+                internalCalibrations: Array.isArray(h.internalCalibrations) ? h.internalCalibrations.map(normalizeCalibrationCycle) : [],
                 extSched: h.extSched || "", extCalib: h.extCalib || "", extBy: h.extBy || "",
                 intSched: h.intSched || "", intCalib: h.intCalib || "", intBy: h.intBy || ""
             }));
@@ -4132,6 +4134,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 current: true,
                 recordedAt: "Current",
                 pr: record.pr || "", po: record.po || "",
+                externalCalibrations: Array.isArray(record.externalCalibrations) ? record.externalCalibrations.map(normalizeCalibrationCycle) : [],
+                internalCalibrations: Array.isArray(record.internalCalibrations) ? record.internalCalibrations.map(normalizeCalibrationCycle) : [],
                 extSched: record.extSched || "", extCalib: record.extCalib || "", extBy: record.extBy || "",
                 intSched: record.intSched || "", intCalib: record.intCalib || "", intBy: record.intBy || ""
             });
@@ -4146,13 +4150,11 @@ window.addEventListener("cloudsync:status", (event) => {
             const content = document.getElementById("calibration-history-content");
             if (!content) return;
 
-            // IMPORTANT: History is grouped by CALIBRATION CYCLE, not by equipment code.
-            // All equipment codes belonging to the same calibration group are shown
-            // together inside Cycle 1, Cycle 2, etc. Adding a cycle therefore does
-            // not create separate history cards for PI-01, PI-02, PI-03, etc.
+            // One calibration cycle contains BOTH External and Internal calibration.
+            // Multiple External entries and multiple Internal entries can be added
+            // inside that same cycle. History is therefore grouped by cycle only.
             const cycleRows = calibrationHistoryRows(group[0] || selected);
             const equipmentCodes = group.map(r => r.code).filter(Boolean);
-            const cycleCount = cycleRows.length;
 
             content.innerHTML = cycleRows.map((cycle, cycleIndex) => {
                 const cycleNo = cycleIndex + 1;
@@ -4162,8 +4164,34 @@ window.addEventListener("cloudsync:status", (event) => {
                     ? equipmentCodes.map(code => `<span class="inline-flex items-center px-2 py-1 mr-1 mb-1 rounded-md bg-slate-700/70 border border-slate-600/60 text-[10px] font-mono text-white">${escapeHtml(code)}</span>`).join('')
                     : '<span class="text-slate-500">-</span>';
 
-                const extStatus = getSubCalibStatus(cycle.extSched, cycle.extCalib);
-                const intStatus = getSubCalibStatus(cycle.intSched, cycle.intCalib);
+                const extEntries = cycle.externalCalibrations.length
+                    ? cycle.externalCalibrations
+                    : (cycle.extSched || cycle.extCalib || cycle.extBy ? [{sched:cycle.extSched, calib:cycle.extCalib, by:cycle.extBy}] : []);
+                const intEntries = cycle.internalCalibrations.length
+                    ? cycle.internalCalibrations
+                    : (cycle.intSched || cycle.intCalib || cycle.intBy ? [{sched:cycle.intSched, calib:cycle.intCalib, by:cycle.intBy}] : []);
+
+                const extRows = extEntries.length ? extEntries.map((entry, idx) => {
+                    const status = getSubCalibStatus(entry.sched, entry.calib);
+                    return `<tr class="border-t border-slate-700/50">
+                        <td class="px-2.5 py-2 text-center font-bold text-blue-300">${idx + 1}</td>
+                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.sched || '-')}</td>
+                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.calib || '-')}</td>
+                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.by || '-')}</td>
+                        <td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${status}</span></td>
+                    </tr>`;
+                }).join('') : `<tr><td colspan="5" class="px-2.5 py-3 text-center text-slate-500">No External Entry</td></tr>`;
+
+                const intRows = intEntries.length ? intEntries.map((entry, idx) => {
+                    const status = getSubCalibStatus(entry.sched, entry.calib);
+                    return `<tr class="border-t border-slate-700/50">
+                        <td class="px-2.5 py-2 text-center font-bold text-purple-300">${idx + 1}</td>
+                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.sched || '-')}</td>
+                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.calib || '-')}</td>
+                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.by || '-')}</td>
+                        <td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${status}</span></td>
+                    </tr>`;
+                }).join('') : `<tr><td colspan="5" class="px-2.5 py-3 text-center text-slate-500">No Internal Entry</td></tr>`;
 
                 return `<div class="mb-4 border border-slate-700/60 rounded-xl overflow-hidden">
                     <div class="px-3 py-2 bg-slate-900/70 flex items-center justify-between gap-3">
@@ -4178,28 +4206,23 @@ window.addEventListener("cloudsync:status", (event) => {
                             <div class="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-1.5">Equipment Codes in This Cycle</div>
                             <div>${codeList}</div>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-[10px] text-slate-300">
-                                <thead class="bg-slate-900 text-slate-500 uppercase">
-                                    <tr>
-                                        <th class="px-2.5 py-2 text-left">PR / PO</th>
-                                        <th class="px-2.5 py-2 text-center">External<br>Sched / Calib / By</th>
-                                        <th class="px-2.5 py-2 text-center">Ext Status</th>
-                                        <th class="px-2.5 py-2 text-center">Internal<br>Sched / Calib / By</th>
-                                        <th class="px-2.5 py-2 text-center">Int Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr class="border-t border-slate-700/50 ${cycle.current ? 'bg-blue-500/5' : ''}">
-                                        <td class="px-2.5 py-2 font-mono text-[10px]">${escapeHtml(cycle.pr || '-')}<br><span class="text-purple-300">${escapeHtml(cycle.po || '-')}</span></td>
-                                        <td class="px-2.5 py-2 text-center">${escapeHtml(cycle.extSched || '-')}<br>${escapeHtml(cycle.extCalib || '-')}<br><span class="text-slate-400">${escapeHtml(cycle.extBy || '-')}</span></td>
-                                        <td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${extStatus}</span></td>
-                                        <td class="px-2.5 py-2 text-center">${escapeHtml(cycle.intSched || '-')}<br>${escapeHtml(cycle.intCalib || '-')}<br><span class="text-slate-400">${escapeHtml(cycle.intBy || '-')}</span></td>
-                                        <td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${intStatus}</span></td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="overflow-x-auto rounded-lg border border-blue-500/20">
+                                <div class="px-2.5 py-1.5 bg-blue-950/30 text-[10px] font-bold text-blue-300">EXTERNAL CALIBRATION — ${extEntries.length} ${extEntries.length === 1 ? 'ENTRY' : 'ENTRIES'}</div>
+                                <table class="w-full text-[10px] text-slate-300">
+                                    <thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2 py-1.5">#</th><th class="px-2 py-1.5">Schedule</th><th class="px-2 py-1.5">Calibration</th><th class="px-2 py-1.5">Calibrated By</th><th class="px-2 py-1.5">Status</th></tr></thead>
+                                    <tbody>${extRows}</tbody>
+                                </table>
+                            </div>
+                            <div class="overflow-x-auto rounded-lg border border-purple-500/20">
+                                <div class="px-2.5 py-1.5 bg-purple-950/30 text-[10px] font-bold text-purple-300">INTERNAL CALIBRATION — ${intEntries.length} ${intEntries.length === 1 ? 'ENTRY' : 'ENTRIES'}</div>
+                                <table class="w-full text-[10px] text-slate-300">
+                                    <thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2 py-1.5">#</th><th class="px-2 py-1.5">Schedule</th><th class="px-2 py-1.5">Calibration</th><th class="px-2 py-1.5">Calibrated By</th><th class="px-2 py-1.5">Status</th></tr></thead>
+                                    <tbody>${intRows}</tbody>
+                                </table>
+                            </div>
                         </div>
+                        <div class="text-[9px] text-slate-500">PR: <span class="text-slate-300">${escapeHtml(cycle.pr || '-')}</span> &nbsp; PO: <span class="text-purple-300">${escapeHtml(cycle.po || '-')}</span></div>
                     </div>
                 </div>`;
             }).join('');
