@@ -384,16 +384,65 @@ window.CloudSync = (() => {
         return String(id ?? `${Date.now()}-${index}`);
     }
 
+    function hasCalibrationData(record) {
+        if (!record || typeof record !== "object") return false;
+        return !!((Array.isArray(record.calibrationCycles) && record.calibrationCycles.length) ||
+            (Array.isArray(record.externalCalibrations) && record.externalCalibrations.length) ||
+            (Array.isArray(record.internalCalibrations) && record.internalCalibrations.length) ||
+            record.extSched || record.extCalib || record.extBy || record.intSched || record.intCalib || record.intBy || record.pr || record.po);
+    }
+
+    function mergeCalibrationData(localRecord, remoteRecord) {
+        const local = localRecord && typeof localRecord === "object" ? localRecord : {};
+        const remote = remoteRecord && typeof remoteRecord === "object" ? remoteRecord : {};
+        const localCycles = typeof normalizeSharedCalibrationCycles === "function" ? normalizeSharedCalibrationCycles(local) : [];
+        const remoteCycles = typeof normalizeSharedCalibrationCycles === "function" ? normalizeSharedCalibrationCycles(remote) : [];
+        let mergedCycles = [];
+        if (typeof mergeSharedCalibrationCycles === "function") mergedCycles = mergeSharedCalibrationCycles(remoteCycles, localCycles);
+        else mergedCycles = remoteCycles.length ? remoteCycles : localCycles;
+        const result = { ...local, ...remote };
+        if (mergedCycles.length) {
+            result.calibrationCycles = mergedCycles;
+            if (typeof flattenSharedCalibrationCycles === "function") {
+                result.externalCalibrations = flattenSharedCalibrationCycles(mergedCycles, "external");
+                result.internalCalibrations = flattenSharedCalibrationCycles(mergedCycles, "internal");
+            }
+            if (typeof latestCalibrationCycle === "function") {
+                const ext = latestCalibrationCycle(result.externalCalibrations || []), int = latestCalibrationCycle(result.internalCalibrations || []);
+                result.extSched = ext.sched || remote.extSched || local.extSched || "";
+                result.extCalib = ext.calib || remote.extCalib || local.extCalib || "";
+                result.extBy = ext.by || remote.extBy || local.extBy || "";
+                result.intSched = int.sched || remote.intSched || local.intSched || "";
+                result.intCalib = int.calib || remote.intCalib || local.intCalib || "";
+                result.intBy = int.by || remote.intBy || local.intBy || "";
+            }
+        } else if (hasCalibrationData(local)) {
+            ["calibrationCycles","externalCalibrations","internalCalibrations","calibrationHistory","extSched","extCalib","extBy","intSched","intCalib","intBy","pr","po"].forEach(key => {
+                if (local[key] !== undefined && local[key] !== null && local[key] !== "") result[key] = local[key];
+            });
+        }
+        ["id","plant","type","code"].forEach(key => {
+            if ((result[key] === undefined || result[key] === null || result[key] === "") && local[key] !== undefined) result[key] = local[key];
+        });
+        return result;
+    }
+
+    function mergeEquipmentCloudRows(localRows, remoteRows) {
+        const localMap = new Map((Array.isArray(localRows) ? localRows : []).filter(Boolean).map(x => [String(x.id), x]));
+        const remote = Array.isArray(remoteRows) ? remoteRows : [];
+        const result = remote.map(row => { const local = localMap.get(String(row?.id)); return local ? mergeCalibrationData(local, row) : row; });
+        const remoteIds = new Set(remote.map(x => String(x?.id)));
+        localMap.forEach((row,id) => { if (!remoteIds.has(id) && row) result.push(row); });
+        return result;
+    }
+
     async function pullDataset(dataset) {
         const cfg = DATASETS[dataset];
-        const { data, error } = await client
-            .from(cfg.table)
-            .select("record_id,data,updated_at")
-            .eq("app_id", window.CLOUD_CONFIG.appId);
-
+        const { data, error } = await client.from(cfg.table).select("record_id,data,updated_at").eq("app_id", window.CLOUD_CONFIG.appId);
         if (error) throw error;
-
-        const rows = (data || []).map(row => row.data).filter(Boolean);
+        const remoteRows = (data || []).map(row => row.data).filter(Boolean);
+        const localRows = readArray(cfg.key);
+        const rows = dataset === "equipment" ? mergeEquipmentCloudRows(localRows, remoteRows) : remoteRows;
         writeArray(cfg.key, rows);
         lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
         return rows;
@@ -689,10 +738,9 @@ window.CloudSync = (() => {
     async function start() {
         if (!init()) return { ok: false, configured: false };
 
-        // In cloud mode, browser localStorage must never be allowed to become
-        // the source of truth. Remove the old browser cache before pulling
-        // the authoritative dataset from Supabase.
-        Object.values(DATASETS).forEach(cfg => localStorage.removeItem(cfg.key));
+        // Do NOT clear equipment/calibration data before the cloud pull.
+        // equipment_records contains calibration cycles and legacy calibration
+        // fields. pullDataset("equipment") merges them before writing the result.
         Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
 
         // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
@@ -3509,10 +3557,12 @@ window.addEventListener("cloudsync:status", (event) => {
                         const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
                         entries.forEach(entry => {
                             if (!matchesDate(entry)) return;
-                            const assigned = Array.isArray(entry?.codes) ? entry.codes.map(x=>String(x||'').trim()).filter(Boolean) : [];
-                            const applicableCodes = assigned.length
-                                ? assigned.filter(c=>groupCodeSet.has(c.toLowerCase()))
-                                : groupCodes;
+                            // CALIBRATION CARD RULE:
+                            // Every calibration occurrence created inside a card applies
+                            // to EVERY equipment code in that card.  The entry's codes
+                            // are only legacy/display metadata and must never reduce the
+                            // counting population. Example: 3 codes x 3 occurrences = 9.
+                            const applicableCodes = groupCodes;
                             const codeCount = applicableCodes.length;
                             if (!codeCount) return;
                             const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
@@ -3956,8 +4006,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 const cycles=collectGroupCalibrationCycles(group);
                 cycles.forEach(cycle=>['external','internal'].forEach(type=>{
                     (Array.isArray(cycle[type])?cycle[type]:[]).forEach(entry=>{
-                        const assigned=Array.isArray(entry?.codes)?entry.codes.map(x=>String(x||'').trim()).filter(Boolean):[];
-                        const count=(assigned.length?assigned.filter(c=>codeSet.has(c.toLowerCase())):codes).length;
+                        // Every occurrence belongs to every code in this instrument card.
+                        // Do not restrict the breakdown using legacy entry.codes metadata.
+                        const count=codes.length;
                         if(!count)return;
                         const st=getSubCalibStatus(entry?.sched||entry?.dateSched||'',entry?.calib||entry?.dateCalib||'');
                         const target=type==='external'?ext:int;
@@ -4036,14 +4087,10 @@ window.addEventListener("cloudsync:status", (event) => {
                             const key = `${cycleId}||${type}||${entryId}`;
                             occurrenceMap.set(key, {
                                 cycleId, cycle: cycleIndex + 1, type, entry, entryIndex,
-                                recordIds: group.filter(r => {
-                                    const rc = String(r.code || '').trim().toLowerCase();
-                                    const assigned = Array.isArray(entry.codes) ? entry.codes.map(x => String(x || '').trim().toLowerCase()) : [];
-                                    return !assigned.length || assigned.includes(rc);
-                                }).map(r => r.id),
-                                codes: Array.isArray(entry.codes) && entry.codes.length
-                                    ? entry.codes.filter(c => group.some(r => String(r.code || '').trim().toLowerCase() === String(c).trim().toLowerCase()))
-                                    : instrumentCodes
+                                // Occurrence is shared by the complete card/code set.
+                                recordIds: group.map(r => r.id),
+                                // A calibration occurrence applies to every code in the card.
+                                codes: instrumentCodes
                             });
                         });
                     });
