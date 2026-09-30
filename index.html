@@ -448,6 +448,85 @@ window.CloudSync = (() => {
         return rows;
     }
 
+    async function pullLegacyAppState() {
+        // Migration bridge for dashboards that were using the original
+        // single-row app_state table before the normalized tables were added.
+        // This is read-only: the old row is never deleted or modified here.
+        try {
+            const { data, error } = await client
+                .from("app_state")
+                .select("payload, updated_at")
+                .eq("app_id", window.CLOUD_CONFIG.appId)
+                .maybeSingle();
+            if (error || !data?.payload) return null;
+
+            const payload = data.payload;
+            const getPayloadArray = key => {
+                try {
+                    const raw = payload?.[key];
+                    if (Array.isArray(raw)) return raw;
+                    if (typeof raw === "string") {
+                        const parsed = JSON.parse(raw);
+                        return Array.isArray(parsed) ? parsed : [];
+                    }
+                } catch (_) {}
+                return [];
+            };
+
+            return {
+                equipment: getPayloadArray("suite_equipment_data"),
+                downtime: getPayloadArray("suite_downtime_data"),
+                projects: getPayloadArray("suite_projects_data"),
+                categories: {
+                    equipment: getPayloadArray("suite_equipment_categories"),
+                    downtime: getPayloadArray("suite_downtime_categories"),
+                    uptime_equipment: getPayloadArray("suite_uptime_equipment_categories"),
+                    line: getPayloadArray("suite_line_categories")
+                },
+                payload
+            };
+        } catch (_) {
+            // app_state may not exist in a newly created normalized project.
+            return null;
+        }
+    }
+
+    async function migrateLegacyIfNeeded(normalizedRows) {
+        const legacy = await pullLegacyAppState();
+        if (!legacy) return false;
+
+        let migrated = false;
+        const datasets = [
+            ["equipment", legacy.equipment],
+            ["downtime", legacy.downtime],
+            ["projects", legacy.projects]
+        ];
+
+        for (const [dataset, rows] of datasets) {
+            const cfg = DATASETS[dataset];
+            const current = Array.isArray(normalizedRows?.[dataset]) ? normalizedRows[dataset] : [];
+            // Only use legacy data when the normalized table has no records.
+            // This prevents an old snapshot from replacing newer cloud data.
+            if (!current.length && rows.length) {
+                writeArray(cfg.key, rows);
+                lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
+                try { await replaceDataset(dataset, rows); } catch (e) { console.warn("Legacy migration save:", dataset, e); }
+                migrated = true;
+            }
+        }
+
+        for (const [type, key] of Object.entries(CATEGORIES)) {
+            const rows = legacy.categories?.[type] || [];
+            if (rows.length && !readArray(key).length) {
+                writeArray(key, rows);
+                lastSynced.categories[type] = JSON.parse(JSON.stringify(rows));
+                migrated = true;
+            }
+        }
+
+        return migrated;
+    }
+
     async function pullCategories() {
         const { data, error } = await client
             .from("category_records")
@@ -483,14 +562,30 @@ window.CloudSync = (() => {
 
         try {
             syncing = true;
-            await Promise.all([
+            const pulled = await Promise.all([
                 pullDataset("equipment"),
                 pullDataset("downtime"),
                 pullDataset("projects"),
                 pullCategories()
             ]);
+
+            // IMPORTANT DATA-RECOVERY BRIDGE:
+            // Older PASDASHBOARD versions stored all browser data, including
+            // calibration cards/cycles, in public.app_state.payload. The new
+            // normalized tables do not automatically migrate that old row.
+            // If a normalized dataset is empty, recover it from app_state and
+            // immediately copy it into the new normalized table.
+            await migrateLegacyIfNeeded({
+                equipment: pulled[0] || [],
+                downtime: pulled[1] || [],
+                projects: pulled[2] || []
+            });
+
             ready = true;
-            status("Cloud data loaded", true);
+            const recovered = (readArray(DATASETS.equipment.key).length ||
+                               readArray(DATASETS.downtime.key).length ||
+                               readArray(DATASETS.projects.key).length);
+            status(recovered ? "Cloud data loaded" : "Cloud data loaded (no records found)", true);
             return { ok: true };
         } catch (error) {
             lastError = error?.message || String(error);
