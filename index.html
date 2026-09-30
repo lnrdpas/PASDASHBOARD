@@ -3970,15 +3970,73 @@ window.addEventListener("cloudsync:status", (event) => {
             return [c.sched || '', c.calib || '', c.by || ''].join('|').toLowerCase();
         }
 
-        function mergeCalibrationCycles(existing, incoming) {
-            const result = Array.isArray(existing) ? existing.map(normalizeCalibrationCycle) : [];
-            (incoming || []).map(normalizeCalibrationCycle).forEach(c => {
-                if (!c.sched && !c.calib && !c.by) return;
-                const key = calibrationCycleKey(c);
-                if (!result.some(x => calibrationCycleKey(x) === key)) result.push(c);
+        function calibrationEntryKey(c) {
+            c = normalizeCalibrationCycle(c || {});
+            return [c.sched || '', c.calib || '', c.by || ''].join('|').trim().toLowerCase();
+        }
+
+        function normalizeCalibrationCycleGroup(g = {}) {
+            return {
+                pr: String(g.pr || '').trim(),
+                po: String(g.po || '').trim(),
+                externalCalibrations: (Array.isArray(g.externalCalibrations) ? g.externalCalibrations : [])
+                    .map(normalizeCalibrationCycle).filter(c => c.sched || c.calib || c.by),
+                internalCalibrations: (Array.isArray(g.internalCalibrations) ? g.internalCalibrations : [])
+                    .map(normalizeCalibrationCycle).filter(c => c.sched || c.calib || c.by),
+                recordedAt: g.recordedAt || '',
+                codes: Array.isArray(g.codes) ? g.codes.filter(Boolean) : []
+            };
+        }
+
+        function calibrationCycleSignature(g) {
+            g = normalizeCalibrationCycleGroup(g);
+            const ext = g.externalCalibrations.map(calibrationEntryKey).sort().join('||');
+            const int = g.internalCalibrations.map(calibrationEntryKey).sort().join('||');
+            return [g.pr.toLowerCase(), g.po.toLowerCase(), ext, int].join('###');
+        }
+
+        // One cycle contains BOTH External and Internal entries.
+        // Older saved records used separate arrays/history snapshots, so migrate them
+        // into the new combined-cycle structure when they are first read.
+        function getCalibrationCycles(record) {
+            if (Array.isArray(record.calibrationCycles) && record.calibrationCycles.length) {
+                const seen = new Set();
+                return record.calibrationCycles.map(normalizeCalibrationCycleGroup).filter(c => {
+                    const k = calibrationCycleSignature(c);
+                    if (seen.has(k)) return false;
+                    seen.add(k); return true;
+                });
+            }
+
+            const candidates = [];
+            const history = Array.isArray(record.calibrationHistory) ? record.calibrationHistory : [];
+            history.forEach(h => {
+                candidates.push(normalizeCalibrationCycleGroup({
+                    pr:h.pr, po:h.po,
+                    externalCalibrations:h.externalCalibrations,
+                    internalCalibrations:h.internalCalibrations,
+                    recordedAt:h.recordedAt
+                }));
             });
-            result.sort((a,b) => String(b.sched || b.calib || '').localeCompare(String(a.sched || a.calib || '')));
-            return result;
+
+            const current = normalizeCalibrationCycleGroup({
+                pr:record.pr, po:record.po,
+                externalCalibrations:record.externalCalibrations,
+                internalCalibrations:record.internalCalibrations,
+                recordedAt:'Current'
+            });
+            if (current.externalCalibrations.length || current.internalCalibrations.length || current.pr || current.po) {
+                candidates.push(current);
+            }
+
+            // Remove exact duplicate snapshots created by previous edits.
+            const seen = new Set();
+            return candidates.filter(c => {
+                const k = calibrationCycleSignature(c);
+                if (!k.replace(/#/g,'')) return false;
+                if (seen.has(k)) return false;
+                seen.add(k); return true;
+            });
         }
 
         function latestCalibrationCycle(cycles) {
@@ -3987,27 +4045,42 @@ window.addEventListener("cloudsync:status", (event) => {
             return [...arr].sort((a,b) => String(b.sched || b.calib || '').localeCompare(String(a.sched || a.calib || '')))[0];
         }
 
+        function syncLegacyCalibrationFields(record, cycles) {
+            const current = cycles.length ? cycles[cycles.length - 1] : {};
+            record.pr = current.pr || record.pr || '';
+            record.po = current.po || record.po || '';
+            record.externalCalibrations = current.externalCalibrations || [];
+            record.internalCalibrations = current.internalCalibrations || [];
+            const latestExt = latestCalibrationCycle(record.externalCalibrations);
+            const latestInt = latestCalibrationCycle(record.internalCalibrations);
+            record.extSched = latestExt.sched || '';
+            record.extCalib = latestExt.calib || '';
+            record.extBy = latestExt.by || '';
+            record.intSched = latestInt.sched || '';
+            record.intCalib = latestInt.calib || '';
+            record.intBy = latestInt.by || '';
+        }
+
         function handleEquipSubmit(e) {
             e.preventDefault();
             if (!isAdminUser()) return;
 
             const editId = document.getElementById("eq-id").value;
             const shared = getSharedEquipmentData();
-            const groups = collectCalibrationGroups();
-            const codes = groups.flatMap(g => g.codes);
+            const groups = collectCalibrationGroups().map(normalizeCalibrationCycleGroup);
+            const codes = groups.flatMap(g => g.codes || []);
 
             if (!codes.length) {
                 alert("Please enter at least one equipment code.");
                 return;
             }
             if (!groups.length) {
-                alert("Please enter at least one calibration date/cycle or PR/PO group.");
+                alert("Please enter at least one calibration cycle.");
                 return;
             }
 
             const workingIds = editId ? editId.split(",").map(v => Number(v)).filter(Boolean) : [];
             const selectedExisting = new Set(workingIds);
-            const nowIso = new Date().toISOString();
 
             groups.forEach(group => {
                 group.codes.forEach(code => {
@@ -4016,67 +4089,60 @@ window.addEventListener("cloudsync:status", (event) => {
                     let record = null;
 
                     if (editId) {
-                        record = equipmentList.find(item =>
-                            selectedExisting.has(item.id) &&
-                            String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase()
-                        );
+                        record = equipmentList.find(item => selectedExisting.has(item.id) &&
+                            String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
                     }
                     if (!record) {
                         record = equipmentList.find(item =>
                             normalizePlant(item.plant) === normalizePlant(shared.plant) &&
                             String(item.type || '').trim() === String(shared.type || '').trim() &&
-                            String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase()
-                        );
+                            String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
                     }
 
                     if (!record) {
                         record = {
                             id: Date.now() + Math.floor(Math.random() * 1000000),
-                            ...shared,
-                            code: cleanCode,
-                            pr: group.pr || '',
-                            po: group.po || '',
-                            extSched: '', extCalib: '', extBy: '',
-                            intSched: '', intCalib: '', intBy: '',
-                            externalCalibrations: [],
-                            internalCalibrations: [],
-                            calibrationHistory: []
+                            ...shared, code: cleanCode,
+                            pr:'', po:'', extSched:'', extCalib:'', extBy:'', intSched:'', intCalib:'', intBy:'',
+                            externalCalibrations:[], internalCalibrations:[], calibrationHistory:[], calibrationCycles:[]
                         };
                         equipmentList.push(record);
                     }
-
                     record.plant = shared.plant;
                     record.type = shared.type;
-                    if (group.pr) record.pr = group.pr;
-                    if (group.po) record.po = group.po;
 
-                    const beforeExt = Array.isArray(record.externalCalibrations) ? record.externalCalibrations : [];
-                    const beforeInt = Array.isArray(record.internalCalibrations) ? record.internalCalibrations : [];
-                    record.externalCalibrations = mergeCalibrationCycles(beforeExt, group.externalCalibrations);
-                    record.internalCalibrations = mergeCalibrationCycles(beforeInt, group.internalCalibrations);
+                    // EDIT = replace the complete cycle list with exactly what is in the form.
+                    // ADD = append the new cycle(s). This prevents an edited Internal/External
+                    // entry from becoming a second entry.
+                    let cycles;
+                    if (editId) {
+                        cycles = groups.map(normalizeCalibrationCycleGroup);
+                    } else {
+                        const newCyclesForCode = groups.filter(g => (g.codes || []).some(c => String(c).trim().toLowerCase() === cleanCode.toLowerCase()));
+                        cycles = getCalibrationCycles(record).concat(newCyclesForCode);
+                    }
 
-                    // Keep the legacy fields synchronized with the latest cycle so
-                    // the existing tracker, filters, calendar and summary continue to work.
-                    const latestExt = latestCalibrationCycle(record.externalCalibrations);
-                    const latestInt = latestCalibrationCycle(record.internalCalibrations);
-                    record.extSched = latestExt.sched || '';
-                    record.extCalib = latestExt.calib || '';
-                    record.extBy = latestExt.by || '';
-                    record.intSched = latestInt.sched || '';
-                    record.intCalib = latestInt.calib || '';
-                    record.intBy = latestInt.by || '';
-
-                    if (!Array.isArray(record.calibrationHistory)) record.calibrationHistory = [];
-                    record.calibrationHistory.push({
-                        recordedAt: nowIso,
-                        pr: group.pr || record.pr || '',
-                        po: group.po || record.po || '',
-                        externalCalibrations: group.externalCalibrations || [],
-                        internalCalibrations: group.internalCalibrations || [],
-                        extSched: record.extSched, extCalib: record.extCalib, extBy: record.extBy,
-                        intSched: record.intSched, intCalib: record.intCalib, intBy: record.intBy
+                    const seen = new Set();
+                    cycles = cycles.filter(c => {
+                        const k = calibrationCycleSignature(c);
+                        if (seen.has(k)) return false;
+                        seen.add(k); return true;
                     });
-                    if (record.calibrationHistory.length > 100) record.calibrationHistory = record.calibrationHistory.slice(-100);
+
+                    record.calibrationCycles = cycles;
+                    syncLegacyCalibrationFields(record, cycles);
+                    record.calibrationHistory = cycles.slice(0, -1).map((c, idx) => ({
+                        recordedAt: c.recordedAt || '',
+                        pr:c.pr, po:c.po,
+                        externalCalibrations:c.externalCalibrations,
+                        internalCalibrations:c.internalCalibrations,
+                        extSched:latestCalibrationCycle(c.externalCalibrations).sched || '',
+                        extCalib:latestCalibrationCycle(c.externalCalibrations).calib || '',
+                        extBy:latestCalibrationCycle(c.externalCalibrations).by || '',
+                        intSched:latestCalibrationCycle(c.internalCalibrations).sched || '',
+                        intCalib:latestCalibrationCycle(c.internalCalibrations).calib || '',
+                        intBy:latestCalibrationCycle(c.internalCalibrations).by || ''
+                    }));
                 });
             });
 
@@ -4094,6 +4160,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const groupKey = getEquipmentGroupKey(selected);
             const group = equipmentList.filter(item => getEquipmentGroupKey(item) === groupKey);
+            const cycles = getCalibrationCycles(selected);
 
             document.getElementById("eq-id").value = group.map(item => item.id).join(",");
             document.getElementById("modal-equip-title").innerText = group.length > 1 ? "Edit Calibration Record / Equipment Codes" : "Edit Calibration Entry";
@@ -4103,13 +4170,13 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const container = document.getElementById("calibration-groups-container");
             container.innerHTML = "";
-            addCalibrationGroup({
-                pr: selected.pr || "",
-                po: selected.po || "",
-                externalCalibrations: selected.externalCalibrations || [{sched:selected.extSched, calib:selected.extCalib, by:selected.extBy}],
-                internalCalibrations: selected.internalCalibrations || [{sched:selected.intSched, calib:selected.intCalib, by:selected.intBy}],
-                codes: group.map(item => item.code || "")
-            });
+            cycles.forEach(cycle => addCalibrationGroup({
+                pr:cycle.pr, po:cycle.po,
+                externalCalibrations:cycle.externalCalibrations,
+                internalCalibrations:cycle.internalCalibrations,
+                codes:group.map(item => item.code || "")
+            }));
+            if (!cycles.length) addCalibrationGroup({codes:group.map(item => item.code || "")});
             document.getElementById("modal-equipment").classList.remove("hidden");
         }
 
@@ -4118,28 +4185,22 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function calibrationHistoryRows(record) {
-            const history = Array.isArray(record.calibrationHistory) ? record.calibrationHistory : [];
-            const rows = history.map((h, index) => ({
-                cycle: index + 1,
-                current: false,
-                recordedAt: h.recordedAt || "",
-                pr: h.pr || "", po: h.po || "",
-                externalCalibrations: Array.isArray(h.externalCalibrations) ? h.externalCalibrations.map(normalizeCalibrationCycle) : [],
-                internalCalibrations: Array.isArray(h.internalCalibrations) ? h.internalCalibrations.map(normalizeCalibrationCycle) : [],
-                extSched: h.extSched || "", extCalib: h.extCalib || "", extBy: h.extBy || "",
-                intSched: h.intSched || "", intCalib: h.intCalib || "", intBy: h.intBy || ""
+            const cycles = getCalibrationCycles(record);
+            // Current cycle is ALWAYS first; older cycles follow in reverse chronological order.
+            return cycles.slice().reverse().map((c, index) => ({
+                cycle: cycles.length - index,
+                current: index === 0,
+                recordedAt: index === 0 ? 'Current' : (c.recordedAt || ''),
+                pr:c.pr || '', po:c.po || '',
+                externalCalibrations:c.externalCalibrations,
+                internalCalibrations:c.internalCalibrations,
+                extSched:latestCalibrationCycle(c.externalCalibrations).sched || '',
+                extCalib:latestCalibrationCycle(c.externalCalibrations).calib || '',
+                extBy:latestCalibrationCycle(c.externalCalibrations).by || '',
+                intSched:latestCalibrationCycle(c.internalCalibrations).sched || '',
+                intCalib:latestCalibrationCycle(c.internalCalibrations).calib || '',
+                intBy:latestCalibrationCycle(c.internalCalibrations).by || ''
             }));
-            rows.push({
-                cycle: rows.length + 1,
-                current: true,
-                recordedAt: "Current",
-                pr: record.pr || "", po: record.po || "",
-                externalCalibrations: Array.isArray(record.externalCalibrations) ? record.externalCalibrations.map(normalizeCalibrationCycle) : [],
-                internalCalibrations: Array.isArray(record.internalCalibrations) ? record.internalCalibrations.map(normalizeCalibrationCycle) : [],
-                extSched: record.extSched || "", extCalib: record.extCalib || "", extBy: record.extBy || "",
-                intSched: record.intSched || "", intCalib: record.intCalib || "", intBy: record.intBy || ""
-            });
-            return rows;
         }
 
         function viewCalibrationHistory(id) {
@@ -4150,81 +4211,25 @@ window.addEventListener("cloudsync:status", (event) => {
             const content = document.getElementById("calibration-history-content");
             if (!content) return;
 
-            // One calibration cycle contains BOTH External and Internal calibration.
-            // Multiple External entries and multiple Internal entries can be added
-            // inside that same cycle. History is therefore grouped by cycle only.
-            const cycleRows = calibrationHistoryRows(group[0] || selected);
+            const cycleRows = calibrationHistoryRows(selected);
             const equipmentCodes = group.map(r => r.code).filter(Boolean);
 
-            content.innerHTML = cycleRows.map((cycle, cycleIndex) => {
-                const cycleNo = cycleIndex + 1;
-                const label = cycle.current ? 'CURRENT CYCLE' : 'CYCLE ' + cycleNo;
+            content.innerHTML = cycleRows.map(cycle => {
+                const label = cycle.current ? 'CURRENT CYCLE' : 'CYCLE ' + cycle.cycle;
                 const labelClass = cycle.current ? 'text-blue-300' : 'text-purple-300';
-                const codeList = equipmentCodes.length
-                    ? equipmentCodes.map(code => `<span class="inline-flex items-center px-2 py-1 mr-1 mb-1 rounded-md bg-slate-700/70 border border-slate-600/60 text-[10px] font-mono text-white">${escapeHtml(code)}</span>`).join('')
-                    : '<span class="text-slate-500">-</span>';
-
-                const extEntries = cycle.externalCalibrations.length
-                    ? cycle.externalCalibrations
-                    : (cycle.extSched || cycle.extCalib || cycle.extBy ? [{sched:cycle.extSched, calib:cycle.extCalib, by:cycle.extBy}] : []);
-                const intEntries = cycle.internalCalibrations.length
-                    ? cycle.internalCalibrations
-                    : (cycle.intSched || cycle.intCalib || cycle.intBy ? [{sched:cycle.intSched, calib:cycle.intCalib, by:cycle.intBy}] : []);
-
-                const extRows = extEntries.length ? extEntries.map((entry, idx) => {
+                const codeList = equipmentCodes.length ? equipmentCodes.map(code => `<span class="inline-flex items-center px-2 py-1 mr-1 mb-1 rounded-md bg-slate-700/70 border border-slate-600/60 text-[10px] font-mono text-white">${escapeHtml(code)}</span>`).join('') : '<span class="text-slate-500">-</span>';
+                const extEntries = cycle.externalCalibrations.length ? cycle.externalCalibrations : [];
+                const intEntries = cycle.internalCalibrations.length ? cycle.internalCalibrations : [];
+                const entryRows = (entries, color, statusFallback) => entries.length ? entries.map((entry, idx) => {
                     const status = getSubCalibStatus(entry.sched, entry.calib);
-                    return `<tr class="border-t border-slate-700/50">
-                        <td class="px-2.5 py-2 text-center font-bold text-blue-300">${idx + 1}</td>
-                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.sched || '-')}</td>
-                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.calib || '-')}</td>
-                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.by || '-')}</td>
-                        <td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${status}</span></td>
-                    </tr>`;
-                }).join('') : `<tr><td colspan="5" class="px-2.5 py-3 text-center text-slate-500">No External Entry</td></tr>`;
-
-                const intRows = intEntries.length ? intEntries.map((entry, idx) => {
-                    const status = getSubCalibStatus(entry.sched, entry.calib);
-                    return `<tr class="border-t border-slate-700/50">
-                        <td class="px-2.5 py-2 text-center font-bold text-purple-300">${idx + 1}</td>
-                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.sched || '-')}</td>
-                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.calib || '-')}</td>
-                        <td class="px-2.5 py-2 text-center">${escapeHtml(entry.by || '-')}</td>
-                        <td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${status}</span></td>
-                    </tr>`;
-                }).join('') : `<tr><td colspan="5" class="px-2.5 py-3 text-center text-slate-500">No Internal Entry</td></tr>`;
-
+                    return `<tr class="border-t border-slate-700/50"><td class="px-2.5 py-2 text-center font-bold ${color}">${idx+1}</td><td class="px-2.5 py-2 text-center">${escapeHtml(entry.sched || '-')}</td><td class="px-2.5 py-2 text-center">${escapeHtml(entry.calib || '-')}</td><td class="px-2.5 py-2 text-center">${escapeHtml(entry.by || '-')}</td><td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${status}</span></td></tr>`;
+                }).join('') : `<tr><td colspan="5" class="px-2.5 py-3 text-center text-slate-500">${statusFallback}</td></tr>`;
                 return `<div class="mb-4 border border-slate-700/60 rounded-xl overflow-hidden">
-                    <div class="px-3 py-2 bg-slate-900/70 flex items-center justify-between gap-3">
-                        <div>
-                            <span class="text-xs font-black ${labelClass}">${label}</span>
-                            <span class="ml-2 text-[9px] text-slate-500">${cycle.current ? 'Latest cycle controls current status' : 'Historical calibration cycle'}</span>
-                        </div>
-                        <span class="text-[9px] text-slate-500">${cycle.recordedAt && cycle.recordedAt !== 'Current' ? escapeHtml(cycle.recordedAt) : ''}</span>
-                    </div>
-                    <div class="p-3 space-y-3">
-                        <div>
-                            <div class="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-1.5">Equipment Codes in This Cycle</div>
-                            <div>${codeList}</div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div class="overflow-x-auto rounded-lg border border-blue-500/20">
-                                <div class="px-2.5 py-1.5 bg-blue-950/30 text-[10px] font-bold text-blue-300">EXTERNAL CALIBRATION — ${extEntries.length} ${extEntries.length === 1 ? 'ENTRY' : 'ENTRIES'}</div>
-                                <table class="w-full text-[10px] text-slate-300">
-                                    <thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2 py-1.5">#</th><th class="px-2 py-1.5">Schedule</th><th class="px-2 py-1.5">Calibration</th><th class="px-2 py-1.5">Calibrated By</th><th class="px-2 py-1.5">Status</th></tr></thead>
-                                    <tbody>${extRows}</tbody>
-                                </table>
-                            </div>
-                            <div class="overflow-x-auto rounded-lg border border-purple-500/20">
-                                <div class="px-2.5 py-1.5 bg-purple-950/30 text-[10px] font-bold text-purple-300">INTERNAL CALIBRATION — ${intEntries.length} ${intEntries.length === 1 ? 'ENTRY' : 'ENTRIES'}</div>
-                                <table class="w-full text-[10px] text-slate-300">
-                                    <thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2 py-1.5">#</th><th class="px-2 py-1.5">Schedule</th><th class="px-2 py-1.5">Calibration</th><th class="px-2 py-1.5">Calibrated By</th><th class="px-2 py-1.5">Status</th></tr></thead>
-                                    <tbody>${intRows}</tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div class="text-[9px] text-slate-500">PR: <span class="text-slate-300">${escapeHtml(cycle.pr || '-')}</span> &nbsp; PO: <span class="text-purple-300">${escapeHtml(cycle.po || '-')}</span></div>
-                    </div>
-                </div>`;
+                    <div class="px-3 py-2 bg-slate-900/70 flex items-center justify-between gap-3"><div><span class="text-xs font-black ${labelClass}">${label}</span><span class="ml-2 text-[9px] text-slate-500">${cycle.current ? 'Latest cycle controls current status' : 'Historical calibration cycle'}</span></div><span class="text-[9px] text-slate-500">${cycle.recordedAt && cycle.recordedAt !== 'Current' ? escapeHtml(cycle.recordedAt) : ''}</span></div>
+                    <div class="p-3 space-y-3"><div><div class="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-1.5">Equipment Codes in This Cycle</div><div>${codeList}</div></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div class="overflow-x-auto rounded-lg border border-blue-500/20"><div class="px-2.5 py-1.5 bg-blue-950/30 text-[10px] font-bold text-blue-300">EXTERNAL CALIBRATION — ${extEntries.length} ${extEntries.length===1?'ENTRY':'ENTRIES'}</div><table class="w-full text-[10px] text-slate-300"><thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2 py-1.5">#</th><th class="px-2 py-1.5">Schedule</th><th class="px-2 py-1.5">Calibration</th><th class="px-2 py-1.5">Calibrated By</th><th class="px-2 py-1.5">Status</th></tr></thead><tbody>${entryRows(extEntries,'text-blue-300','No External Entry')}</tbody></table></div>
+                    <div class="overflow-x-auto rounded-lg border border-purple-500/20"><div class="px-2.5 py-1.5 bg-purple-950/30 text-[10px] font-bold text-purple-300">INTERNAL CALIBRATION — ${intEntries.length} ${intEntries.length===1?'ENTRY':'ENTRIES'}</div><table class="w-full text-[10px] text-slate-300"><thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2 py-1.5">#</th><th class="px-2 py-1.5">Schedule</th><th class="px-2 py-1.5">Calibration</th><th class="px-2 py-1.5">Calibrated By</th><th class="px-2 py-1.5">Status</th></tr></thead><tbody>${entryRows(intEntries,'text-purple-300','No Internal Entry')}</tbody></table></div></div>
+                    <div class="text-[9px] text-slate-500">PR: <span class="text-slate-300">${escapeHtml(cycle.pr || '-')}</span> &nbsp; PO: <span class="text-purple-300">${escapeHtml(cycle.po || '-')}</span></div></div></div>`;
             }).join('');
 
             document.getElementById("modal-calibration-history").classList.remove("hidden");
