@@ -1251,6 +1251,11 @@ window.addEventListener("cloudsync:status", (event) => {
                         <span id="calib-kpi-total-note" class="block text-[9px] text-slate-500 mt-0.5">Each equipment code = 1 instrument</span>
                         <p id="calib-kpi-total" class="text-2xl font-black text-white mt-1">0</p>
                     </div>
+                    <div class="bg-slate-800/90 border border-amber-500/20 p-4 rounded-2xl">
+                        <span class="text-[10px] text-amber-400 uppercase font-bold tracking-wider">TO CALIBRATE</span>
+                        <span class="block text-[9px] text-slate-500 mt-0.5">Current cycle only</span>
+                        <p id="calib-kpi-to-calibrate" class="text-2xl font-black text-amber-400 mt-1">0</p>
+                    </div>
                     <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl">
                         <span class="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">DONE</span>
                         <p id="calib-kpi-done" class="text-2xl font-black text-emerald-400 mt-1">0</p>
@@ -1449,6 +1454,22 @@ window.addEventListener("cloudsync:status", (event) => {
                         <i class="fa-solid fa-scale-balanced"></i> Benchmark Comparison Analysis
                     </h4>
                     <div id="comparison-result-text" class="text-xs text-slate-200"></div>
+                </div>
+
+                <div class="bg-slate-800/90 border border-cyan-500/30 p-4 rounded-2xl space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h4 class="text-xs font-bold text-cyan-300 uppercase tracking-wider"><i class="fa-solid fa-gauge-high text-cyan-400 mr-1.5"></i> Equipment Availability & Uptime by Category</h4>
+                            <p class="text-[9px] text-slate-500 mt-0.5">Separate uptime/downtime view. Equipment count uses unique equipment codes recorded under each category.</p>
+                        </div>
+                        <span id="uptime-category-availability-label" class="text-[9px] text-slate-400 font-semibold"></span>
+                    </div>
+                    <div class="overflow-x-auto rounded-xl border border-slate-700/50">
+                        <table class="w-full text-left text-[10px] text-slate-300">
+                            <thead id="uptime-category-availability-head" class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60"></thead>
+                            <tbody id="uptime-category-availability-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -2508,6 +2529,17 @@ window.addEventListener("cloudsync:status", (event) => {
             "Pneumatic Valve",
             "Sensor"
         ];
+        // Planned/base hours per individual equipment for uptime/availability.
+        // Existing categories default to the dashboard's 720-hour base.
+        let uptimeEquipmentCategoryBaseHours = {
+            "Conveyor": 720,
+            "VFD": 720,
+            "Motor": 720,
+            "PLC Cabinet": 720,
+            "Weight Scale": 720,
+            "Pneumatic Valve": 720,
+            "Sensor": 720
+        };
 
         let lineCategories = [
             "Packing Line 1",
@@ -2591,6 +2623,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const savedCats = localStorage.getItem("suite_equipment_categories");
             const savedDtCats = localStorage.getItem("suite_downtime_categories");
             const savedUptimeEqCats = localStorage.getItem("suite_uptime_equipment_categories");
+            const savedUptimeEqBaseHours = localStorage.getItem("suite_uptime_equipment_category_base_hours");
             const savedLineCats = localStorage.getItem("suite_line_categories");
 
             if (savedEq) equipmentList = JSON.parse(savedEq);
@@ -2599,6 +2632,10 @@ window.addEventListener("cloudsync:status", (event) => {
             if (savedCats) equipmentCategories = JSON.parse(savedCats);
             if (savedDtCats) downtimeCategories = JSON.parse(savedDtCats);
             if (savedUptimeEqCats) uptimeEquipmentCategories = JSON.parse(savedUptimeEqCats);
+            if (savedUptimeEqBaseHours) {
+                try { uptimeEquipmentCategoryBaseHours = { ...uptimeEquipmentCategoryBaseHours, ...JSON.parse(savedUptimeEqBaseHours) }; } catch(e) {}
+            }
+            uptimeEquipmentCategories.forEach(cat => { if (!(cat in uptimeEquipmentCategoryBaseHours)) uptimeEquipmentCategoryBaseHours[cat] = 720; });
             if (savedLineCats) lineCategories = JSON.parse(savedLineCats);
         }
 
@@ -2609,6 +2646,7 @@ window.addEventListener("cloudsync:status", (event) => {
             localStorage.setItem("suite_equipment_categories", JSON.stringify(equipmentCategories));
             localStorage.setItem("suite_downtime_categories", JSON.stringify(downtimeCategories));
             localStorage.setItem("suite_uptime_equipment_categories", JSON.stringify(uptimeEquipmentCategories));
+            localStorage.setItem("suite_uptime_equipment_category_base_hours", JSON.stringify(uptimeEquipmentCategoryBaseHours));
             localStorage.setItem("suite_line_categories", JSON.stringify(lineCategories));
         }
 
@@ -2744,9 +2782,14 @@ window.addEventListener("cloudsync:status", (event) => {
             uptimeEquipmentCategories.forEach((cat, idx) => {
                 const item = document.createElement("div");
                 item.className = "flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl text-xs";
+                const base = Number(uptimeEquipmentCategoryBaseHours[cat] || 720);
                 item.innerHTML = `
-                    <span class="font-semibold text-white">${escapeHtml(cat)}</span>
-                    <div class="flex items-center gap-2">
+                    <div class="min-w-0">
+                        <span class="font-semibold text-white block truncate">${escapeHtml(cat)}</span>
+                        <span class="text-[9px] text-slate-500">Base: ${base.toFixed(0)} hrs / equipment</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="editUptimeEquipCategoryBaseHours(${idx})" class="text-cyan-400 hover:text-cyan-300 font-semibold px-2 py-1" title="Edit base hours"><i class="fa-solid fa-clock"></i></button>
                         <button onclick="editUptimeEquipCategory(${idx})" class="text-blue-400 hover:text-blue-300 font-semibold px-2 py-1"><i class="fa-solid fa-pen"></i></button>
                         <button onclick="deleteUptimeEquipCategory(${idx})" class="text-red-400 hover:text-red-300 font-semibold px-2 py-1"><i class="fa-solid fa-trash"></i></button>
                     </div>
@@ -2829,6 +2872,87 @@ window.addEventListener("cloudsync:status", (event) => {
             }
         }
 
+        function getUptimeEquipmentBaseHours(category) {
+            const n = Number(uptimeEquipmentCategoryBaseHours?.[category]);
+            return Number.isFinite(n) && n > 0 ? n : 720;
+        }
+
+        function getDowntimeEquipmentCode(dt) {
+            return String(dt?.code ?? dt?.equipmentCode ?? dt?.equipmentId ?? dt?.assetId ?? '').trim();
+        }
+
+        function calculateCategoryAvailability(logs, inventoryLogs) {
+            const source = Array.isArray(logs) ? logs : [];
+            const inventory = Array.isArray(inventoryLogs) ? inventoryLogs : source;
+            const rows = [];
+            uptimeEquipmentCategories.forEach(category => {
+                const cat = String(category || '').trim();
+                if (!cat) return;
+                const inventoryCodes = new Set(
+                    inventory.filter(dt => String(dt?.equipment || '').trim() === cat)
+                        .map(getDowntimeEquipmentCode).filter(Boolean)
+                );
+                const count = inventoryCodes.size;
+                let downtime = 0;
+                source.forEach(dt => {
+                    if (String(dt?.equipment || '').trim() !== cat) return;
+                    const d = (new Date(dt.end) - new Date(dt.start)) / 3600000;
+                    if (d > 0) downtime += d;
+                });
+                const basePerEquipment = getUptimeEquipmentBaseHours(cat);
+                const planned = count * basePerEquipment;
+                const uptimeHours = Math.max(0, planned - downtime);
+                const pct = planned > 0 ? Number(((uptimeHours / planned) * 100).toFixed(1)) : 0;
+                rows.push({ category: cat, count, codes: [...inventoryCodes], basePerEquipment, planned, downtime, uptimeHours, availability: pct, uptimePct: pct });
+            });
+            return rows;
+        }
+
+        function renderCategoryAvailabilityTable(logs, inventoryLogs, headId, bodyId, labelId, compareLogs, compareInventoryLogs, primaryLabel, compareLabel) {
+            const head = document.getElementById(headId);
+            const body = document.getElementById(bodyId);
+            const label = document.getElementById(labelId);
+            if (!head || !body) return;
+            const rows = calculateCategoryAvailability(logs, inventoryLogs);
+            const isCompare = Array.isArray(compareLogs);
+            const compareRows = isCompare ? calculateCategoryAvailability(compareLogs, compareInventoryLogs || inventoryLogs) : [];
+            const pMap = new Map(rows.map(r => [r.category, r]));
+            const cMap = new Map(compareRows.map(r => [r.category, r]));
+            const categories = [...new Set([...uptimeEquipmentCategories, ...rows.map(r=>r.category), ...compareRows.map(r=>r.category)])];
+            if (label) label.textContent = isCompare ? `${primaryLabel || 'Date 1'} vs ${compareLabel || 'Date 2'}` : (primaryLabel || 'Selected Period');
+            if (isCompare) {
+                head.innerHTML = `<tr><th class="py-2 px-2">Equipment Category</th><th class="py-2 px-2 text-center">Equipment Count</th><th colspan="3" class="py-2 px-2 text-center text-amber-300 border-l border-slate-700/60">${escapeHtml(primaryLabel || 'Date 1')}</th><th colspan="3" class="py-2 px-2 text-center text-blue-300 border-l border-slate-700/60">${escapeHtml(compareLabel || 'Date 2')}</th></tr><tr class="bg-slate-900/70 text-[9px] text-slate-500 uppercase"><th></th><th></th><th class="py-1 px-2 border-l border-slate-700/60">Downtime</th><th class="py-1 px-2">Uptime %</th><th class="py-1 px-2">Availability %</th><th class="py-1 px-2 border-l border-slate-700/60">Downtime</th><th class="py-1 px-2">Uptime %</th><th class="py-1 px-2">Availability %</th></tr>`;
+            } else {
+                head.innerHTML = `<tr><th class="py-2 px-2">Equipment Category</th><th class="py-2 px-2">Equipment Codes</th><th class="py-2 px-2 text-center">Count</th><th class="py-2 px-2 text-center">Base Hrs / Equipment</th><th class="py-2 px-2 text-center">Planned Hrs</th><th class="py-2 px-2 text-center">Downtime</th><th class="py-2 px-2 text-center">Uptime Hrs</th><th class="py-2 px-2 text-center">Uptime %</th><th class="py-2 px-2 text-center">Availability %</th></tr>`;
+            }
+            body.innerHTML = '';
+            categories.forEach(cat => {
+                const r = pMap.get(cat) || {category:cat,count:0,codes:[],basePerEquipment:getUptimeEquipmentBaseHours(cat),planned:0,downtime:0,uptimeHours:0,availability:0,uptimePct:0};
+                const c = cMap.get(cat) || {downtime:0,availability:0,uptimePct:0};
+                const tr = document.createElement('tr'); tr.className='hover:bg-slate-800/50 transition align-top';
+                if (isCompare) {
+                    tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${escapeHtml(cat)}</td><td class="py-2 px-2 text-center">${r.count}</td><td class="py-2 px-2 text-center text-red-400 font-bold border-l border-slate-700/40">${r.downtime.toFixed(1)} hrs</td><td class="py-2 px-2 text-center text-cyan-300 font-bold">${r.uptimePct.toFixed(1)}%</td><td class="py-2 px-2 text-center text-emerald-400 font-bold">${r.availability.toFixed(1)}%</td><td class="py-2 px-2 text-center text-red-300 font-bold border-l border-slate-700/40">${Number(c.downtime||0).toFixed(1)} hrs</td><td class="py-2 px-2 text-center text-cyan-300 font-bold">${Number(c.uptimePct||0).toFixed(1)}%</td><td class="py-2 px-2 text-center text-emerald-400 font-bold">${Number(c.availability||0).toFixed(1)}%</td>`;
+                } else {
+                    tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${escapeHtml(cat)}</td><td class="py-2 px-2 text-slate-400">${r.codes.length ? r.codes.map(escapeHtml).join(', ') : '—'}</td><td class="py-2 px-2 text-center font-bold">${r.count}</td><td class="py-2 px-2 text-center text-slate-300">${r.basePerEquipment.toFixed(0)}</td><td class="py-2 px-2 text-center">${r.planned.toFixed(1)} hrs</td><td class="py-2 px-2 text-center text-red-400 font-bold">${r.downtime.toFixed(1)} hrs</td><td class="py-2 px-2 text-center text-cyan-300 font-bold">${r.uptimeHours.toFixed(1)} hrs</td><td class="py-2 px-2 text-center text-cyan-300 font-bold">${r.uptimePct.toFixed(1)}%</td><td class="py-2 px-2 text-center text-emerald-400 font-bold">${r.availability.toFixed(1)}%</td>`;
+                }
+                body.appendChild(tr);
+            });
+        }
+
+        function editUptimeEquipCategoryBaseHours(idx) {
+            const cat = uptimeEquipmentCategories[idx];
+            const current = getUptimeEquipmentBaseHours(cat);
+            const value = prompt(`Base available hours per ${cat} equipment:`, String(current));
+            if (value === null) return;
+            const n = Number(value);
+            if (!Number.isFinite(n) || n <= 0) { alert('Enter a valid base hour value greater than 0.'); return; }
+            uptimeEquipmentCategoryBaseHours[cat] = n;
+            saveStorage();
+            renderUptimeEquipCategoriesList();
+            renderDowntimeModule();
+            renderSummaryModule();
+        }
+
         function addNewUptimeEquipCategory() {
             const input = document.getElementById("new-uptime-eq-category-input");
             const val = input.value.trim();
@@ -2838,6 +2962,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 return;
             }
             uptimeEquipmentCategories.push(val);
+            uptimeEquipmentCategoryBaseHours[val] = 720;
             input.value = "";
             saveStorage();
             renderUptimeEquipCategoriesList();
@@ -2848,7 +2973,12 @@ window.addEventListener("cloudsync:status", (event) => {
             const oldVal = uptimeEquipmentCategories[idx];
             const newVal = prompt("Edit equipment category name:", oldVal);
             if (newVal !== null && newVal.trim() !== "") {
-                uptimeEquipmentCategories[idx] = newVal.trim();
+                const trimmed = newVal.trim();
+                const oldBase = getUptimeEquipmentBaseHours(oldVal);
+                uptimeEquipmentCategories[idx] = trimmed;
+                delete uptimeEquipmentCategoryBaseHours[oldVal];
+                uptimeEquipmentCategoryBaseHours[trimmed] = oldBase;
+                downtimeLogs.forEach(dt => { if (String(dt.equipment || '').trim() === oldVal) dt.equipment = trimmed; });
                 saveStorage();
                 renderUptimeEquipCategoriesList();
                 populateUptimeEquipCategoryDropdowns();
@@ -2857,7 +2987,9 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function deleteUptimeEquipCategory(idx) {
             if (confirm("Delete this equipment category?")) {
+                const oldVal = uptimeEquipmentCategories[idx];
                 uptimeEquipmentCategories.splice(idx, 1);
+                delete uptimeEquipmentCategoryBaseHours[oldVal];
                 saveStorage();
                 renderUptimeEquipCategoriesList();
                 populateUptimeEquipCategoryDropdowns();
@@ -3083,7 +3215,22 @@ window.addEventListener("cloudsync:status", (event) => {
             return String(value || "").trim();
         }
 
+        // CURRENT calibration is always the newest cycle in the record.
+        // Older cycles remain history and must NOT contribute to the current
+        // DONE / To Calibrate / compliance numbers. Within the current cycle,
+        // multiple External/Internal entries are still allowed.
+        function getCurrentCalibrationCycle(eq) {
+            const cycles = normalizeSharedCalibrationCycles(eq || {});
+            if (cycles.length) return cycles[cycles.length - 1];
+            return null;
+        }
+
         function getRecordCalibrationCycle(eq, type) {
+            const current = getCurrentCalibrationCycle(eq);
+            if (current) {
+                const entries = Array.isArray(current[type]) ? current[type] : [];
+                return latestCalibrationCycle(entries);
+            }
             const arr = type === 'external' ? eq.externalCalibrations : eq.internalCalibrations;
             if (Array.isArray(arr) && arr.length) return latestCalibrationCycle(arr);
             return type === 'external'
@@ -3109,6 +3256,19 @@ window.addEventListener("cloudsync:status", (event) => {
             return 'PENDING';
         }
 
+        function formatSummaryComparisonLabel(type, value) {
+            if (!value) return '';
+            if (type === 'year') return String(value);
+            if (type === 'month') {
+                const m = String(value).match(/^(\d{4})-(\d{2})$/);
+                if (m) {
+                    const d = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+                    return d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+                }
+            }
+            return String(value);
+        }
+
         // --- MODULE 0: SUMMARY ---
         function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
@@ -3121,6 +3281,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const primaryValue = primaryType === "year" ? yearVal : monthVal;
             const compareType = fType === "compare-year" ? "year" : "month";
             const compareValue = fType === "compare-year" ? compareYearVal : compareMonthVal;
+            const primaryDisplay = formatSummaryComparisonLabel(primaryType, primaryValue);
+            const compareDisplay = formatSummaryComparisonLabel(compareType, compareValue);
 
             const matchesSummaryDate = (dateStr, type, value) => {
                 if (!dateStr || type === "all" || !value) return true;
@@ -3187,17 +3349,37 @@ window.addEventListener("cloudsync:status", (event) => {
             };
 
             const calcCalib = list => {
-                let done=0, overdue=0, pending=0, stsok=0;
-                (list||[]).forEach(eq => [getSubCalibStatusForRecord(eq,'external'),getSubCalibStatusForRecord(eq,'internal')].forEach(st=>{
-                    if(st==='DONE'||st==='OVERDUE, DONE') done++;
-                    else if(st==='OVERDUE') overdue++; else if(st==='PENDING') pending++; else if(st==='STSOK') stsok++;
-                }));
-                const scheduled=done+overdue+pending+stsok;
-                return {done,scheduled,compliance:scheduled?Math.round(done/scheduled*100):0};
+                let done=0, overdue=0, pending=0, stsok=0, toCalibrate=0;
+                const scheduledInstruments = new Set();
+                (list||[]).forEach(eq => {
+                    const current = getCurrentCalibrationCycle(eq);
+                    const hasCurrentCycle = !!current;
+                    if (!hasCurrentCycle) return;
+
+                    const ext = getRecordCalibrationCycle(eq, 'external');
+                    const int = getRecordCalibrationCycle(eq, 'internal');
+                    const statuses = [getSubCalibStatus(ext.sched, ext.calib), getSubCalibStatus(int.sched, int.calib)].filter(st => st !== 'NA');
+                    if (!statuses.length) return;
+
+                    // One physical instrument = one count, even when it has
+                    // multiple equipment codes and both External/Internal work.
+                    const overall = getCalibStatus(eq);
+                    if (statuses.some(st => st !== 'NA')) scheduledInstruments.add(eq.id);
+
+                    if (overall === 'DONE' || overall === 'OVERDUE, DONE') done++;
+                    else if (overall === 'OVERDUE') overdue++;
+                    else if (overall === 'PENDING') pending++;
+                    else if (overall === 'STSOK') stsok++;
+                });
+
+                const scheduled = scheduledInstruments.size;
+                toCalibrate = Math.max(0, scheduled - done);
+                return {done, scheduled, toCalibrate, overdue, pending, stsok, compliance:scheduled?Math.round(done/scheduled*100):0};
             };
             const calcDowntime = list => {
                 let hrs=0; (list||[]).forEach(dt=>{ const d=(new Date(dt.end)-new Date(dt.start))/3600000; if(d>0) hrs+=d; });
-                const avail=((list||[]).length||1)*720;
+                const codes=new Set((list||[]).map(getDowntimeEquipmentCode).filter(Boolean));
+                const avail=(codes.size||1)*720;
                 const uptime=Math.max(0,Math.min(100,Number(((1-hrs/avail)*100).toFixed(1))));
                 return {hrs,uptime};
             };
@@ -3210,7 +3392,10 @@ window.addEventListener("cloudsync:status", (event) => {
             const calibCompliance=primaryCalib.compliance;
             const cDone=primaryCalib.done;
             const totalScheduledCalib=primaryCalib.scheduled;
+            const cToCalibrate=primaryCalib.toCalibrate;
             document.getElementById("summary-calib-compliance").innerText = `${calibCompliance}%`;
+            const summaryToCalibrate = document.getElementById("summary-calib-to-calibrate");
+            if (summaryToCalibrate) summaryToCalibrate.innerText = cToCalibrate;
             document.getElementById("summary-projects-count").innerText = filteredPr.length;
             document.getElementById("summary-availability-rate").innerText = `${primaryDown.uptime}%`;
             document.getElementById("summary-uptime-rate").innerText = `${primaryDown.uptime}%`;
@@ -3223,26 +3408,26 @@ window.addEventListener("cloudsync:status", (event) => {
             const compareMttr = comparisonDt.length > 0 ? Math.round((compareDown.hrs / comparisonDt.length) * 60) : 0;
 
             const setCompare = (id, html, show) => { const el=document.getElementById(id); if(!el)return; el.innerHTML=html; el.classList.toggle('hidden',!show); };
-            setCompare('summary-dt-hours-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareDown.hrs.toFixed(1)} hrs` : '', isCompare);
-            setCompare('summary-dt-mtbf-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareMtbf} hrs` : '', isCompare);
-            setCompare('summary-dt-mttr-compare', isCompare ? `${compareValue || 'Date 2'}: ${compareMttr} mins` : '', isCompare);
+            setCompare('summary-dt-hours-compare', isCompare ? `${compareDisplay || 'Date 2'}: ${compareDown.hrs.toFixed(1)} hrs` : '', isCompare);
+            setCompare('summary-dt-mtbf-compare', isCompare ? `${compareDisplay || 'Date 2'}: ${compareMtbf} hrs` : '', isCompare);
+            setCompare('summary-dt-mttr-compare', isCompare ? `${compareDisplay || 'Date 2'}: ${compareMttr} mins` : '', isCompare);
             setCompare('summary-reliability-comparison', isCompare ? '' : '', isCompare);
             const relPrimary=document.getElementById('summary-reliability-primary'), relCompare=document.getElementById('summary-reliability-compare');
             if(isCompare){
-                if(relPrimary) relPrimary.innerHTML=`<strong class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}</strong><br>Downtime: <strong>${primaryDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${mtbf} hrs</strong> · MTTR: <strong>${mttr} mins</strong> · Uptime: <strong>${primaryDown.uptime}%</strong>`;
-                if(relCompare) relCompare.innerHTML=`<strong class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}</strong><br>Downtime: <strong>${compareDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${compareMtbf} hrs</strong> · MTTR: <strong>${compareMttr} mins</strong> · Uptime: <strong>${compareDown.uptime}%</strong>`;
+                if(relPrimary) relPrimary.innerHTML=`<strong class="text-amber-300">${escapeHtml(primaryDisplay || 'Date 1')}</strong><br>Downtime: <strong>${primaryDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${mtbf} hrs</strong> · MTTR: <strong>${mttr} mins</strong> · Uptime: <strong>${primaryDown.uptime}%</strong>`;
+                if(relCompare) relCompare.innerHTML=`<strong class="text-blue-300">${escapeHtml(compareDisplay || 'Date 2')}</strong><br>Downtime: <strong>${compareDown.hrs.toFixed(1)} hrs</strong> · MTBF: <strong>${compareMtbf} hrs</strong> · MTTR: <strong>${compareMttr} mins</strong> · Uptime: <strong>${compareDown.uptime}%</strong>`;
             }
-            setCompare('summary-availability-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
-            setCompare('summary-uptime-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
-            setCompare('summary-calib-compare', isCompare ? `${primaryValue || 'Date 1'}: ${primaryCalib.compliance}% &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${compareCalib.compliance}%` : '', isCompare);
-            setCompare('summary-projects-compare', isCompare ? `${primaryValue || 'Date 1'}: ${filteredPr.length} &nbsp;|&nbsp; ${compareValue || 'Date 2'}: ${comparisonPr.length}` : '', isCompare);
+            setCompare('summary-availability-compare', isCompare ? `${primaryDisplay || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareDisplay || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
+            setCompare('summary-uptime-compare', isCompare ? `${primaryDisplay || 'Date 1'}: ${primaryDown.uptime}% &nbsp;|&nbsp; ${compareDisplay || 'Date 2'}: ${compareDown.uptime}%` : '', isCompare);
+            setCompare('summary-calib-compare', isCompare ? `${primaryDisplay || 'Date 1'}: ${primaryCalib.compliance}% &nbsp;|&nbsp; ${compareDisplay || 'Date 2'}: ${compareCalib.compliance}%` : '', isCompare);
+            setCompare('summary-projects-compare', isCompare ? `${primaryDisplay || 'Date 1'}: ${filteredPr.length} &nbsp;|&nbsp; ${compareDisplay || 'Date 2'}: ${comparisonPr.length}` : '', isCompare);
 
             // Pareto = total downtime by Line Category. Repeated records for the same line are added together.
             const sortedLinePareto = buildPareto(filteredDt);
             const sortedComparePareto = isCompare ? buildPareto(comparisonDt) : [];
             const paretoComparison = {
                 mode: isCompare ? compareType : 'single',
-                primaryLabel: primaryValue || 'Selected Period',
+                primaryLabel: primaryDisplay || 'Selected Period',
                 compareLabel: compareValue || '',
                 primary: makeParetoBuckets(sortedLinePareto),
                 compare: isCompare ? makeParetoBuckets(sortedComparePareto) : []
@@ -3282,8 +3467,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
             const compareTopByLine = isCompare ? buildTopEquipmentByLine(comparisonDt) : [];
             const top5Body = document.getElementById("summary-top5-downtime-body");
-            const top5PLabel = primaryValue || 'Selected Period';
-            const top5CLabel = compareValue || 'Comparison';
+            const top5PLabel = primaryDisplay || 'Selected Period';
+            const top5CLabel = compareDisplay || 'Comparison';
             const top5PrimaryEquipmentHead = document.getElementById("summary-top5-primary-equipment-head");
             const top5PrimaryFailureHead = document.getElementById("summary-top5-primary-failure-head");
             const top5PrimaryTimeHead = document.getElementById("summary-top5-primary-time-head");
@@ -3399,11 +3584,11 @@ window.addEventListener("cloudsync:status", (event) => {
             });
             const calibSupp = document.getElementById("summary-per-plant-calib");
             calibSupp.innerHTML = isCompare ? `
-                <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryValue || 'Date 1')} vs ${escapeHtml(compareValue || 'Date 2')}</div>
+                <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryDisplay || 'Date 1')} vs ${escapeHtml(compareDisplay || 'Date 2')}</div>
                 <div class="grid grid-cols-5 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
                     <span>Plant</span><span>Period</span><span class="text-center">Done</span><span class="text-center">Scheduled</span><span class="text-center">Percent</span>
                 </div>
-                ${summaryPlants.map(p => { const a=calibByPlant[p]||{}; const b=compareCalibByPlant[p]||{}; const ap=a.scheduled?((a.done/a.scheduled)*100).toFixed(0):'0'; const bp=b.scheduled?((b.done/b.scheduled)*100).toFixed(0):'0'; return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-5 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryValue || 'Date 1')}</span><strong class="text-center text-emerald-400">${a.done||0}</strong><span class="text-center text-slate-300">${a.scheduled||0}</span><span class="text-center text-blue-300">${ap}%</span></div><div class="grid grid-cols-5 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareValue || 'Date 2')}</span><strong class="text-center text-emerald-300">${b.done||0}</strong><span class="text-center text-slate-300">${b.scheduled||0}</span><span class="text-center text-cyan-300">${bp}%</span></div></div>`; }).join('')}` : `
+                ${summaryPlants.map(p => { const a=calibByPlant[p]||{}; const b=compareCalibByPlant[p]||{}; const ap=a.scheduled?((a.done/a.scheduled)*100).toFixed(0):'0'; const bp=b.scheduled?((b.done/b.scheduled)*100).toFixed(0):'0'; return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-5 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryDisplay || 'Date 1')}</span><strong class="text-center text-emerald-400">${a.done||0}</strong><span class="text-center text-slate-300">${a.scheduled||0}</span><span class="text-center text-blue-300">${ap}%</span></div><div class="grid grid-cols-5 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareDisplay || 'Date 2')}</span><strong class="text-center text-emerald-300">${b.done||0}</strong><span class="text-center text-slate-300">${b.scheduled||0}</span><span class="text-center text-cyan-300">${bp}%</span></div></div>`; }).join('')}` : `
                 <div class="grid grid-cols-4 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">Done</span><span class="text-center">Scheduled Instruments</span><span class="text-center">Percent</span></div>
                 ${summaryPlants.map(p => { const d=calibByPlant[p]?.done||0; const sch=calibByPlant[p]?.scheduled||0; const pct=sch?((d/sch)*100).toFixed(0):'0'; return `<div class="grid grid-cols-4 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0"><span class="font-semibold text-white">${escapeHtml(p)}</span><strong class="text-center text-emerald-400">${d}</strong><span class="text-center text-slate-300">${sch}</span><span class="text-center text-blue-300">${pct}%</span></div>`; }).join('')}`;
 
@@ -3427,9 +3612,9 @@ window.addEventListener("cloudsync:status", (event) => {
             allSummaryPlants.forEach(p => compareProjectByPlant[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
             comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
             projSupp.innerHTML = isCompare ? `
-                <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryValue || 'Date 1')} vs ${escapeHtml(compareValue || 'Date 2')}</div>
+                <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryDisplay || 'Date 1')} vs ${escapeHtml(compareDisplay || 'Date 2')}</div>
                 <div class="grid grid-cols-6 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span>Period</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
-                ${summaryPlants.map(p=>{const a=projectByPlant[p]||{},b=compareProjectByPlant[p]||{};return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-6 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryValue || 'Date 1')}</span><strong class="text-center text-blue-400">${a['In Progress']||0}</strong><strong class="text-center text-amber-400">${a.Planning||0}</strong><strong class="text-center text-red-400">${a['On Hold']||0}</strong><strong class="text-center text-emerald-400">${a.Completed||0}</strong></div><div class="grid grid-cols-6 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareValue || 'Date 2')}</span><strong class="text-center text-blue-300">${b['In Progress']||0}</strong><strong class="text-center text-amber-300">${b.Planning||0}</strong><strong class="text-center text-red-300">${b['On Hold']||0}</strong><strong class="text-center text-emerald-300">${b.Completed||0}</strong></div></div>`;}).join('')}
+                ${summaryPlants.map(p=>{const a=projectByPlant[p]||{},b=compareProjectByPlant[p]||{};return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-6 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryDisplay || 'Date 1')}</span><strong class="text-center text-blue-400">${a['In Progress']||0}</strong><strong class="text-center text-amber-400">${a.Planning||0}</strong><strong class="text-center text-red-400">${a['On Hold']||0}</strong><strong class="text-center text-emerald-400">${a.Completed||0}</strong></div><div class="grid grid-cols-6 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareDisplay || 'Date 2')}</span><strong class="text-center text-blue-300">${b['In Progress']||0}</strong><strong class="text-center text-amber-300">${b.Planning||0}</strong><strong class="text-center text-red-300">${b['On Hold']||0}</strong><strong class="text-center text-emerald-300">${b.Completed||0}</strong></div></div>`;}).join('')}
                 ${projectViewAction}` : `
                 <div class="grid grid-cols-5 gap-2 text-[9px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
                 ${summaryPlants.map(p=>{const d=projectByPlant[p]||{};return `<div class="grid grid-cols-5 gap-2 items-center text-[11px] py-1.5 border-b border-slate-700/30 last:border-0"><span class="font-semibold text-white">${escapeHtml(p)}</span><strong class="text-center text-blue-400">${d['In Progress']||0}</strong><strong class="text-center text-amber-400">${d.Planning||0}</strong><strong class="text-center text-red-400">${d['On Hold']||0}</strong><strong class="text-center text-emerald-400">${d.Completed||0}</strong></div>`;}).join('')}
@@ -3494,19 +3679,27 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function renderCalibGauges() {
-            const filtered = equipmentList.filter(eq => currentPlant === "ALL" || eq.plant === currentPlant);
+            const filtered = equipmentList.filter(eq => currentPlant === "ALL" || normalizePlant(eq.plant) === normalizePlant(currentPlant));
 
             let extActive = 0, extDone = 0;
             let intActive = 0, intDone = 0;
 
             filtered.forEach(eq => {
-                const extCycle = getRecordCalibrationCycle(eq,'external');
-                const intCycle = getRecordCalibrationCycle(eq,'internal');
-                if (extCycle.sched) {
+                // IMPORTANT: gauges use CURRENT CYCLE only. A completed old cycle
+                // is history and does not remain in the current-cycle denominator.
+                const current = getCurrentCalibrationCycle(eq);
+                if (!current) return;
+
+                const extEntries = Array.isArray(current.external) ? current.external : [];
+                const intEntries = Array.isArray(current.internal) ? current.internal : [];
+                const extCycle = latestCalibrationCycle(extEntries);
+                const intCycle = latestCalibrationCycle(intEntries);
+
+                if (extCycle.sched || extCycle.calib) {
                     extActive++;
                     if (extCycle.calib) extDone++;
                 }
-                if (intCycle.sched) {
+                if (intCycle.sched || intCycle.calib) {
                     intActive++;
                     if (intCycle.calib) intDone++;
                 }
@@ -3523,18 +3716,11 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("int-active-num").innerText = intActive;
             document.getElementById("int-done-num").innerText = intDone;
 
-            // Render Doughnut Gauges
             const ctxExt = document.getElementById('gauge-ext-calib').getContext('2d');
             if (gaugeExt) gaugeExt.destroy();
             gaugeExt = new Chart(ctxExt, {
                 type: 'doughnut',
-                data: {
-                    datasets: [{
-                        data: [extDone, Math.max(0, extActive - extDone)],
-                        backgroundColor: ['#3b82f6', '#334155'],
-                        borderWidth: 0
-                    }]
-                },
+                data: { datasets: [{ data: [extDone, Math.max(0, extActive - extDone)], backgroundColor: ['#3b82f6', '#334155'], borderWidth: 0 }] },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }
             });
 
@@ -3542,13 +3728,7 @@ window.addEventListener("cloudsync:status", (event) => {
             if (gaugeInt) gaugeInt.destroy();
             gaugeInt = new Chart(ctxInt, {
                 type: 'doughnut',
-                data: {
-                    datasets: [{
-                        data: [intDone, Math.max(0, intActive - intDone)],
-                        backgroundColor: ['#a855f7', '#334155'],
-                        borderWidth: 0
-                    }]
-                },
+                data: { datasets: [{ data: [intDone, Math.max(0, intActive - intDone)], backgroundColor: ['#a855f7', '#334155'], borderWidth: 0 }] },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { display: false } } }
             });
         }
@@ -3579,12 +3759,23 @@ window.addEventListener("cloudsync:status", (event) => {
                 return true;
             });
 
-            // KPIs count each equipment code as one instrument and keep external/internal status separate.
-            let tTotal = filtered.length;
+            // CURRENT-CYCLE KPIs: older completed cycles are history only.
+            // One physical instrument is counted once, even if it has multiple codes.
+            const physicalGroups = new Map();
+            filtered.forEach(eq => {
+                const key = getEquipmentGroupKey(eq);
+                if (!physicalGroups.has(key)) physicalGroups.set(key, []);
+                physicalGroups.get(key).push(eq);
+            });
+
+            let tTotal = physicalGroups.size;
             let tDone = 0, tOverdue = 0, tOverdueDone = 0, tPending = 0, tStsok = 0, tNa = 0;
+            let tToCalibrate = 0;
             const ext = { DONE:0, "OVERDUE, DONE":0, OVERDUE:0, PENDING:0, STSOK:0, NA:0 };
             const int = { DONE:0, "OVERDUE, DONE":0, OVERDUE:0, PENDING:0, STSOK:0, NA:0 };
-            filtered.forEach(eq => {
+
+            physicalGroups.forEach(group => {
+                const eq = group[0];
                 const s = getCalibStatus(eq);
                 if (s === "DONE") tDone++;
                 else if (s === "OVERDUE") tOverdue++;
@@ -3592,13 +3783,21 @@ window.addEventListener("cloudsync:status", (event) => {
                 else if (s === "PENDING") tPending++;
                 else if (s === "STSOK") tStsok++;
                 else tNa++;
-                ext[getSubCalibStatusForRecord(eq,'external')] = (ext[getSubCalibStatusForRecord(eq,'external')] || 0) + 1;
-                int[getSubCalibStatusForRecord(eq,'internal')] = (int[getSubCalibStatusForRecord(eq,'internal')] || 0) + 1;
+
+                const hasCurrent = !!getCurrentCalibrationCycle(eq);
+                if (hasCurrent && ["DONE","OVERDUE, DONE"].indexOf(s) < 0 && s !== "NO CALIB SCHED") tToCalibrate++;
+
+                const es = getSubCalibStatusForRecord(eq,'external');
+                const is = getSubCalibStatusForRecord(eq,'internal');
+                ext[es] = (ext[es] || 0) + 1;
+                int[is] = (int[is] || 0) + 1;
             });
 
             document.getElementById("calib-kpi-total").innerText = tTotal;
             const totalNote = document.getElementById("calib-kpi-total-note");
-            if (totalNote) totalNote.innerText = `${tTotal} equipment code${tTotal === 1 ? "" : "s"} counted`;
+            if (totalNote) totalNote.innerText = `${tTotal} physical instrument${tTotal === 1 ? "" : "s"}`;
+            const toCalibrateEl = document.getElementById("calib-kpi-to-calibrate");
+            if (toCalibrateEl) toCalibrateEl.innerText = tToCalibrate;
             document.getElementById("calib-kpi-done").innerText = tDone;
             document.getElementById("calib-kpi-overdue").innerText = tOverdue;
             const overdueDoneEl = document.getElementById("calib-kpi-overdue-done");
@@ -3711,9 +3910,14 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function syncEquipmentCountPreview() {
-            const n = document.querySelectorAll("#calibration-groups-container input[name='eq-code']").length;
+            // Instrument count is based ONLY on unique equipment codes.
+            // Adding Cycle 2/3/etc. must never create another instrument count.
+            const codes = [...document.querySelectorAll("#calibration-groups-container input[name='eq-code']")]
+                .map(i => String(i.value || '').trim().toLowerCase())
+                .filter(Boolean);
+            const uniqueCodes = new Set(codes);
             const el = document.getElementById("equipment-count-number");
-            if (el) el.innerText = n;
+            if (el) el.innerText = uniqueCodes.size;
         }
 
         function escapeAttr(value) {
@@ -3741,147 +3945,189 @@ window.addEventListener("cloudsync:status", (event) => {
             };
         }
 
-        function makeCalibrationCycleRow(type, cycle = {}, index = 0) {
+        function makeCalibrationEntryRow(type, entry = {}) {
             const row = document.createElement("div");
-            row.className = `calibration-cycle-row ${type}-cycle-row bg-slate-900/70 border border-slate-700/50 rounded-lg p-2 space-y-1.5`;
+            row.className = `calibration-entry-row ${type}-entry-row bg-slate-900/70 border border-slate-700/50 rounded-lg p-2`;
             row.innerHTML = `
-                <div class="flex items-center justify-between gap-2">
-                    <span class="cycle-number text-[10px] font-bold ${type === 'external' ? 'text-blue-300' : 'text-purple-300'}">${type === 'external' ? 'External Entry' : 'Internal Entry'} ${index + 1}</span>
-                    <button type="button" onclick="removeCalibrationCycle(this,'${type}')" class="text-red-400 hover:text-red-300 px-1.5" title="Remove this calibration entry">
-                        <i class="fa-solid fa-trash-can text-[9px]"></i>
-                    </button>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                <div class="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1.2fr_auto] gap-1.5 items-end">
                     <div>
-                        <label class="block text-slate-400 text-[9px]">Schedule</label>
-                        <input type="date" class="cycle-sched w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]">
+                        <label class="block text-slate-400 text-[9px]">Schedule Date</label>
+                        <input type="date" class="entry-sched w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]">
                     </div>
                     <div>
                         <label class="block text-slate-400 text-[9px]">Calibration Date</label>
-                        <input type="date" class="cycle-calib w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]">
+                        <input type="date" class="entry-calib w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]">
                     </div>
-                    <div>
+                    <div class="col-span-2 sm:col-span-1">
                         <label class="block text-slate-400 text-[9px]">Calibrated By</label>
-                        <input type="text" class="cycle-by w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-white outline-none text-[10px]" placeholder="Vendor / Technician">
+                        <input type="text" class="entry-by w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="Vendor / Technician">
                     </div>
-                </div>
-            `;
-            const c = normalizeCalibrationCycle(cycle);
-            row.querySelector('.cycle-sched').value = c.sched;
-            row.querySelector('.cycle-calib').value = c.calib;
-            row.querySelector('.cycle-by').value = c.by;
+                    <button type="button" onclick="removeCalibrationEntry(this,'${type}')" class="text-red-400 hover:text-red-300 px-2 py-1.5" title="Remove this entry">
+                        <i class="fa-solid fa-trash-can text-[9px]"></i>
+                    </button>
+                </div>`;
+            const e = normalizeCalibrationCycle(entry);
+            row.querySelector('.entry-sched').value = e.sched;
+            row.querySelector('.entry-calib').value = e.calib;
+            row.querySelector('.entry-by').value = e.by;
             return row;
         }
 
-        function addCalibrationCycle(btn, type) {
+        function makeSharedCalibrationCycle(cycle = {}, index = 0) {
+            const row = document.createElement("div");
+            const cycleId = cycle.id || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8));
+            row.className = "shared-calibration-cycle bg-slate-900/50 border border-slate-700/60 rounded-xl p-2.5 space-y-2";
+            row.dataset.cycleId = cycleId;
+            const external = Array.isArray(cycle.external) ? cycle.external : [];
+            const internal = Array.isArray(cycle.internal) ? cycle.internal : [];
+            const cyclePr = cycle.pr || '';
+            const cyclePo = cycle.po || '';
+            row.innerHTML = `
+                <div class="flex items-center justify-between gap-2">
+                    <div>
+                        <span class="shared-cycle-number text-[10px] font-black text-white bg-slate-700/70 border border-slate-600 rounded px-2 py-1">Cycle ${index + 1}</span>
+                        <span class="ml-2 text-[9px] text-slate-500">External + Internal belong to this same cycle.</span>
+                    </div>
+                    <button type="button" onclick="removeSharedCalibrationCycle(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove this cycle">
+                        <i class="fa-solid fa-trash-can text-[9px]"></i>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div><label class="block text-slate-400 text-[9px]">PR No.</label><input type="text" class="cycle-pr w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="PR Reference"></div>
+                    <div><label class="block text-slate-400 text-[9px]">PO No.</label><input type="text" class="cycle-po w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="PO Reference"></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div class="external-entry-section bg-slate-950/40 p-2 rounded-lg border border-blue-500/20 space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[9px] font-black text-blue-300">EXTERNAL CALIBRATION</span>
+                            <button type="button" onclick="addCalibrationEntry(this,'external')" class="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded-lg text-[9px] font-bold">+ Add External</button>
+                        </div>
+                        <div class="external-entry-list space-y-1.5"></div>
+                    </div>
+                    <div class="internal-entry-section bg-slate-950/40 p-2 rounded-lg border border-purple-500/20 space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[9px] font-black text-purple-300">INTERNAL CALIBRATION</span>
+                            <button type="button" onclick="addCalibrationEntry(this,'internal')" class="bg-purple-600 hover:bg-purple-500 text-white px-2 py-1 rounded-lg text-[9px] font-bold">+ Add Internal</button>
+                        </div>
+                        <div class="internal-entry-list space-y-1.5"></div>
+                    </div>
+                </div>`;
+            const extList = row.querySelector('.external-entry-list');
+            const intList = row.querySelector('.internal-entry-list');
+            (external.length ? external : [{}]).forEach(e => extList.appendChild(makeCalibrationEntryRow('external', e)));
+            (internal.length ? internal : [{}]).forEach(e => intList.appendChild(makeCalibrationEntryRow('internal', e)));
+            row.querySelector('.cycle-pr').value = cyclePr;
+            row.querySelector('.cycle-po').value = cyclePo;
+            return row;
+        }
+
+        function normalizeSharedCalibrationCycles(record = {}) {
+            if (Array.isArray(record.calibrationCycles) && record.calibrationCycles.length) {
+                return record.calibrationCycles.map((c, i) => ({
+                    id: c.id || ('cy_migrated_' + i + '_' + Math.random().toString(36).slice(2,7)),
+                    pr: c.pr || '',
+                    po: c.po || '',
+                    external: (Array.isArray(c.external) ? c.external : []).map(normalizeCalibrationCycle),
+                    internal: (Array.isArray(c.internal) ? c.internal : []).map(normalizeCalibrationCycle)
+                }));
+            }
+            const ext = Array.isArray(record.externalCalibrations) ? record.externalCalibrations.map(normalizeCalibrationCycle) : [];
+            const int = Array.isArray(record.internalCalibrations) ? record.internalCalibrations.map(normalizeCalibrationCycle) : [];
+            const extLegacy = ext.length ? ext : [{sched:record.extSched || '', calib:record.extCalib || '', by:record.extBy || ''}].filter(c => c.sched || c.calib || c.by);
+            const intLegacy = int.length ? int : [{sched:record.intSched || '', calib:record.intCalib || '', by:record.intBy || ''}].filter(c => c.sched || c.calib || c.by);
+            const n = Math.max(extLegacy.length, intLegacy.length, 1);
+            return Array.from({length:n}, (_,i) => ({
+                id: 'cy_migrated_' + i,
+                pr: record.pr || '',
+                po: record.po || '',
+                external: extLegacy[i] ? [extLegacy[i]] : [],
+                internal: intLegacy[i] ? [intLegacy[i]] : []
+            })).filter(c => c.external.length || c.internal.length);
+        }
+
+        function addSharedCalibrationCycle(btn) {
             if (!isAdminUser()) return;
-            const section = btn.closest(`.${type}-calibration-section`);
-            const list = section?.querySelector(`.${type}-cycles-list`);
+            const group = btn.closest('.calibration-group');
+            const list = group?.querySelector('.shared-cycles-list');
             if (!list) return;
-            list.appendChild(makeCalibrationCycleRow(type, {}, list.children.length));
-            renumberCalibrationCycles(section, type);
+            list.appendChild(makeSharedCalibrationCycle({}, list.children.length));
+            renumberSharedCalibrationCycles(group);
         }
 
-        function removeCalibrationCycle(btn, type) {
+        function removeSharedCalibrationCycle(btn) {
             if (!isAdminUser()) return;
-            const section = btn.closest(`.${type}-calibration-section`);
-            const row = btn.closest('.calibration-cycle-row');
+            const group = btn.closest('.calibration-group');
+            const row = btn.closest('.shared-calibration-cycle');
             if (row) row.remove();
-            const list = section?.querySelector(`.${type}-cycles-list`);
-            if (list && !list.children.length) list.appendChild(makeCalibrationCycleRow(type, {}, 0));
-            renumberCalibrationCycles(section, type);
+            const list = group?.querySelector('.shared-cycles-list');
+            if (list && !list.children.length) list.appendChild(makeSharedCalibrationCycle({}, 0));
+            renumberSharedCalibrationCycles(group);
         }
 
-        function renumberCalibrationCycles(section, type) {
-            if (!section) return;
-            section.querySelectorAll('.calibration-cycle-row').forEach((row, idx) => {
-                const label = row.querySelector('.cycle-number');
-                if (label) label.innerText = `${type === 'external' ? 'External Entry' : 'Internal Entry'} ${idx + 1}`;
-            });
+        function addCalibrationEntry(btn, type) {
+            if (!isAdminUser()) return;
+            const cycle = btn.closest('.shared-calibration-cycle');
+            const list = cycle?.querySelector(`.${type}-entry-list`);
+            if (list) list.appendChild(makeCalibrationEntryRow(type, {}));
         }
 
-        function collectCalibrationCycles(section, type) {
-            return [...(section?.querySelectorAll(`.${type}-calibration-section .calibration-cycle-row`) || [])]
+        function removeCalibrationEntry(btn, type) {
+            if (!isAdminUser()) return;
+            const cycle = btn.closest('.shared-calibration-cycle');
+            const row = btn.closest('.calibration-entry-row');
+            if (row) row.remove();
+            const list = cycle?.querySelector(`.${type}-entry-list`);
+            if (list && !list.children.length) list.appendChild(makeCalibrationEntryRow(type, {}));
+        }
+
+        function collectCalibrationEntries(cycleRow, type) {
+            return [...(cycleRow?.querySelectorAll(`.${type}-entry-list .calibration-entry-row`) || [])]
                 .map(row => ({
-                    sched: row.querySelector('.cycle-sched')?.value || '',
-                    calib: row.querySelector('.cycle-calib')?.value || '',
-                    by: row.querySelector('.cycle-by')?.value.trim() || ''
+                    sched: row.querySelector('.entry-sched')?.value || '',
+                    calib: row.querySelector('.entry-calib')?.value || '',
+                    by: row.querySelector('.entry-by')?.value.trim() || ''
                 }))
                 .filter(c => c.sched || c.calib || c.by);
+        }
+
+        function renumberSharedCalibrationCycles(group) {
+            if (!group) return;
+            group.querySelectorAll('.shared-calibration-cycle').forEach((row, idx) => {
+                const label = row.querySelector('.shared-cycle-number');
+                if (label) label.innerText = `Cycle ${idx + 1}`;
+            });
         }
 
         function makeCalibrationGroup(group = {}) {
             const wrapper = document.createElement("div");
             wrapper.className = "calibration-group bg-slate-900/60 border border-slate-700/60 rounded-xl p-2.5 space-y-2";
-            const extCycles = Array.isArray(group.externalCalibrations) && group.externalCalibrations.length
-                ? group.externalCalibrations : [{sched: group.extSched || '', calib: group.extCalib || '', by: group.extBy || ''}];
-            const intCycles = Array.isArray(group.internalCalibrations) && group.internalCalibrations.length
-                ? group.internalCalibrations : [{sched: group.intSched || '', calib: group.intCalib || '', by: group.intBy || ''}];
-
+            const sharedCycles = Array.isArray(group.calibrationCycles) && group.calibrationCycles.length
+                ? group.calibrationCycles
+                : normalizeSharedCalibrationCycles(group);
             wrapper.innerHTML = `
                 <div class="flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
                         <span class="group-number text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5">Date Group</span>
-                        <span class="text-[9px] text-slate-500">Codes in this group share the PR/PO and calibration cycles.</span>
+                        <span class="text-[9px] text-slate-500">The equipment codes below are shared across all cycles in this group. Adding a cycle does not add an instrument.</span>
                     </div>
-                    <button type="button" onclick="removeCalibrationGroup(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove date group">
-                        <i class="fa-solid fa-trash-can text-[10px]"></i>
-                    </button>
+                    <button type="button" onclick="removeCalibrationGroup(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove date group"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div>
-                        <label class="block text-slate-400 text-[9px]">PR No. <span class="text-slate-600">(this date group)</span></label>
-                        <input type="text" class="group-pr w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="PR Reference">
+                <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40 space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <div><span class="text-[10px] font-black text-white">CALIBRATION CYCLES</span><span class="ml-2 text-[9px] text-slate-500">Each Cycle has its own PR/PO and can contain multiple External and Internal entries.</span></div>
+                        <button type="button" onclick="addSharedCalibrationCycle(this)" class="bg-slate-700 hover:bg-slate-600 text-white px-2.5 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap">+ Add Calibration Cycle</button>
                     </div>
-                    <div>
-                        <label class="block text-slate-400 text-[9px]">PO No. <span class="text-slate-600">(this date group)</span></label>
-                        <input type="text" class="group-po w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="PO Reference">
-                    </div>
+                    <div class="shared-cycles-list space-y-2"></div>
                 </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div class="external-calibration-section bg-slate-950/40 p-2 rounded-lg border border-blue-500/20 space-y-2">
-                        <div class="flex items-center justify-between gap-2">
-                            <span class="text-[10px] font-bold text-blue-300">EXTERNAL CALIBRATION</span>
-                            <button type="button" onclick="addCalibrationCycle(this,'external')" class="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap">
-                                + Add External Calibration
-                            </button>
-                        </div>
-                        <div class="external-cycles-list space-y-1.5"></div>
-                    </div>
-
-                    <div class="internal-calibration-section bg-slate-950/40 p-2 rounded-lg border border-purple-500/20 space-y-2">
-                        <div class="flex items-center justify-between gap-2">
-                            <span class="text-[10px] font-bold text-purple-300">INTERNAL CALIBRATION</span>
-                            <button type="button" onclick="addCalibrationCycle(this,'internal')" class="bg-purple-600 hover:bg-purple-500 text-white px-2 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap">
-                                + Add Internal Calibration
-                            </button>
-                        </div>
-                        <div class="internal-cycles-list space-y-1.5"></div>
-                    </div>
-                </div>
-
                 <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40">
-                    <div class="flex items-center justify-between mb-1.5">
-                        <span class="text-[10px] font-bold text-slate-300"><i class="fa-solid fa-barcode text-blue-400 mr-1"></i>Equipment Codes for This Calibration Cycle</span>
-                        <button type="button" onclick="addCalibrationCodeRow(this)" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded-lg">+ Add Code</button>
-                    </div>
+                    <div class="flex items-center justify-between mb-1.5"><span class="text-[10px] font-bold text-slate-300"><i class="fa-solid fa-barcode text-blue-400 mr-1"></i>Equipment Codes Shared Across Cycles</span><button type="button" onclick="addCalibrationCodeRow(this)" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded-lg">+ Add Code</button></div>
                     <div class="calibration-code-list space-y-1.5"></div>
-                </div>
-            `;
-
-            wrapper.querySelector('.group-pr').value = group.pr || '';
-            wrapper.querySelector('.group-po').value = group.po || '';
-
-            const extList = wrapper.querySelector('.external-cycles-list');
-            extCycles.forEach((cycle, idx) => extList.appendChild(makeCalibrationCycleRow('external', cycle, idx)));
-            const intList = wrapper.querySelector('.internal-cycles-list');
-            intCycles.forEach((cycle, idx) => intList.appendChild(makeCalibrationCycleRow('internal', cycle, idx)));
-
+                </div>`;
+            const list = wrapper.querySelector('.shared-cycles-list');
+            (sharedCycles.length ? sharedCycles : [{}]).forEach((cycle, idx) => list.appendChild(makeSharedCalibrationCycle(cycle, idx)));
             const codeList = wrapper.querySelector('.calibration-code-list');
             (group.codes && group.codes.length ? group.codes : ['']).forEach(code => codeList.appendChild(makeCalibrationCodeRow(code)));
-            renumberCalibrationCycles(wrapper, 'external');
-            renumberCalibrationCycles(wrapper, 'internal');
+            renumberSharedCalibrationCycles(wrapper);
             return wrapper;
         }
 
@@ -3928,8 +4174,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     const counter = row.querySelector(".code-counter");
                     if (counter) counter.innerText = `${idx + 1}.`;
                 });
-                renumberCalibrationCycles(group, 'external');
-                renumberCalibrationCycles(group, 'internal');
+                renumberSharedCalibrationCycles(group);
             });
             syncEquipmentCountPreview();
         }
@@ -3950,13 +4195,25 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function collectCalibrationGroups() {
-            return [...document.querySelectorAll("#calibration-groups-container .calibration-group")].map(group => ({
-                pr: group.querySelector(".group-pr")?.value.trim() || "",
-                po: group.querySelector(".group-po")?.value.trim() || "",
-                externalCalibrations: collectCalibrationCycles(group, 'external'),
-                internalCalibrations: collectCalibrationCycles(group, 'internal'),
-                codes: [...group.querySelectorAll("input[name='eq-code']")].map(i => i.value.trim()).filter(Boolean)
-            })).filter(g => g.codes.length && (g.externalCalibrations.length || g.internalCalibrations.length || g.pr || g.po));
+            return [...document.querySelectorAll("#calibration-groups-container .calibration-group")].map(group => {
+                const calibrationCycles = [...group.querySelectorAll('.shared-cycles-list .shared-calibration-cycle')].map(row => ({
+                    id: row.dataset.cycleId || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
+                    pr: row.querySelector('.cycle-pr')?.value.trim() || '',
+                    po: row.querySelector('.cycle-po')?.value.trim() || '',
+                    external: collectCalibrationEntries(row, 'external'),
+                    internal: collectCalibrationEntries(row, 'internal')
+                })).filter(c => c.external.length || c.internal.length);
+                return {
+                    pr: group.querySelector('.group-pr')?.value.trim() || '',
+                    po: group.querySelector('.group-po')?.value.trim() || '',
+                    calibrationCycles,
+                    externalCalibrations: calibrationCycles.flatMap(c => c.external),
+                    internalCalibrations: calibrationCycles.flatMap(c => c.internal),
+                    pr: calibrationCycles.find(c => c.pr)?.pr || '',
+                    po: calibrationCycles.find(c => c.po)?.po || '',
+                    codes: [...group.querySelectorAll("input[name='eq-code']")].map(i => i.value.trim()).filter(Boolean)
+                };
+            }).filter(g => g.codes.length && (g.calibrationCycles.length || g.pr || g.po));
         }
 
         function getSharedEquipmentData() {
@@ -3966,99 +4223,27 @@ window.addEventListener("cloudsync:status", (event) => {
             };
         }
 
-        function calibrationCycleKey(c) {
-            return [c.sched || '', c.calib || '', c.by || ''].join('|').toLowerCase();
+        function normalizeCalibrationCycleEntry(c) {
+            return normalizeCalibrationCycle(c || {});
         }
 
-        function calibrationEntryKey(c) {
-            c = normalizeCalibrationCycle(c || {});
-            return [c.sched || '', c.calib || '', c.by || ''].join('|').trim().toLowerCase();
+        function replaceSharedCalibrationCycles(incoming) {
+            return normalizeSharedCalibrationCycles({ calibrationCycles: incoming || [] })
+                .filter(c => (c.external?.length || 0) + (c.internal?.length || 0) > 0);
         }
 
-        function normalizeCalibrationCycleGroup(g = {}) {
-            return {
-                pr: String(g.pr || '').trim(),
-                po: String(g.po || '').trim(),
-                externalCalibrations: (Array.isArray(g.externalCalibrations) ? g.externalCalibrations : [])
-                    .map(normalizeCalibrationCycle).filter(c => c.sched || c.calib || c.by),
-                internalCalibrations: (Array.isArray(g.internalCalibrations) ? g.internalCalibrations : [])
-                    .map(normalizeCalibrationCycle).filter(c => c.sched || c.calib || c.by),
-                recordedAt: g.recordedAt || '',
-                codes: Array.isArray(g.codes) ? g.codes.filter(Boolean) : []
-            };
-        }
-
-        function calibrationCycleSignature(g) {
-            g = normalizeCalibrationCycleGroup(g);
-            const ext = g.externalCalibrations.map(calibrationEntryKey).sort().join('||');
-            const int = g.internalCalibrations.map(calibrationEntryKey).sort().join('||');
-            return [g.pr.toLowerCase(), g.po.toLowerCase(), ext, int].join('###');
-        }
-
-        // One cycle contains BOTH External and Internal entries.
-        // Older saved records used separate arrays/history snapshots, so migrate them
-        // into the new combined-cycle structure when they are first read.
-        function getCalibrationCycles(record) {
-            if (Array.isArray(record.calibrationCycles) && record.calibrationCycles.length) {
-                const seen = new Set();
-                return record.calibrationCycles.map(normalizeCalibrationCycleGroup).filter(c => {
-                    const k = calibrationCycleSignature(c);
-                    if (seen.has(k)) return false;
-                    seen.add(k); return true;
-                });
-            }
-
-            const candidates = [];
-            const history = Array.isArray(record.calibrationHistory) ? record.calibrationHistory : [];
-            history.forEach(h => {
-                candidates.push(normalizeCalibrationCycleGroup({
-                    pr:h.pr, po:h.po,
-                    externalCalibrations:h.externalCalibrations,
-                    internalCalibrations:h.internalCalibrations,
-                    recordedAt:h.recordedAt
-                }));
-            });
-
-            const current = normalizeCalibrationCycleGroup({
-                pr:record.pr, po:record.po,
-                externalCalibrations:record.externalCalibrations,
-                internalCalibrations:record.internalCalibrations,
-                recordedAt:'Current'
-            });
-            if (current.externalCalibrations.length || current.internalCalibrations.length || current.pr || current.po) {
-                candidates.push(current);
-            }
-
-            // Remove exact duplicate snapshots created by previous edits.
-            const seen = new Set();
-            return candidates.filter(c => {
-                const k = calibrationCycleSignature(c);
-                if (!k.replace(/#/g,'')) return false;
-                if (seen.has(k)) return false;
-                seen.add(k); return true;
-            });
+        function flattenSharedCalibrationCycles(cycles, type) {
+            return (Array.isArray(cycles) ? cycles : []).flatMap(c => Array.isArray(c?.[type]) ? c[type] : []).map(normalizeCalibrationCycle);
         }
 
         function latestCalibrationCycle(cycles) {
             const arr = (Array.isArray(cycles) ? cycles : []).filter(c => c && (c.sched || c.calib || c.by));
             if (!arr.length) return {sched:'',calib:'',by:''};
-            return [...arr].sort((a,b) => String(b.sched || b.calib || '').localeCompare(String(a.sched || a.calib || '')))[0];
+            return [...arr].sort((a,b) => String(b.calib || b.sched || '').localeCompare(String(a.calib || a.sched || '')))[0];
         }
 
-        function syncLegacyCalibrationFields(record, cycles) {
-            const current = cycles.length ? cycles[cycles.length - 1] : {};
-            record.pr = current.pr || record.pr || '';
-            record.po = current.po || record.po || '';
-            record.externalCalibrations = current.externalCalibrations || [];
-            record.internalCalibrations = current.internalCalibrations || [];
-            const latestExt = latestCalibrationCycle(record.externalCalibrations);
-            const latestInt = latestCalibrationCycle(record.internalCalibrations);
-            record.extSched = latestExt.sched || '';
-            record.extCalib = latestExt.calib || '';
-            record.extBy = latestExt.by || '';
-            record.intSched = latestInt.sched || '';
-            record.intCalib = latestInt.calib || '';
-            record.intBy = latestInt.by || '';
+        function cycleHistoryKey(cycle, index) {
+            return String(cycle?.id || `cycle-${index + 1}`);
         }
 
         function handleEquipSubmit(e) {
@@ -4067,17 +4252,10 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const editId = document.getElementById("eq-id").value;
             const shared = getSharedEquipmentData();
-            const groups = collectCalibrationGroups().map(normalizeCalibrationCycleGroup);
-            const codes = groups.flatMap(g => g.codes || []);
-
-            if (!codes.length) {
-                alert("Please enter at least one equipment code.");
-                return;
-            }
-            if (!groups.length) {
-                alert("Please enter at least one calibration cycle.");
-                return;
-            }
+            const groups = collectCalibrationGroups();
+            const codes = [...new Set(groups.flatMap(g => g.codes).map(c => String(c || '').trim().toLowerCase()).filter(Boolean))];
+            if (!codes.length) return alert("Please enter at least one equipment code.");
+            if (!groups.length) return alert("Please enter at least one calibration cycle or PR/PO group.");
 
             const workingIds = editId ? editId.split(",").map(v => Number(v)).filter(Boolean) : [];
             const selectedExisting = new Set(workingIds);
@@ -4087,62 +4265,59 @@ window.addEventListener("cloudsync:status", (event) => {
                     const cleanCode = String(code || '').trim();
                     if (!cleanCode) return;
                     let record = null;
-
-                    if (editId) {
-                        record = equipmentList.find(item => selectedExisting.has(item.id) &&
-                            String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
-                    }
-                    if (!record) {
-                        record = equipmentList.find(item =>
-                            normalizePlant(item.plant) === normalizePlant(shared.plant) &&
-                            String(item.type || '').trim() === String(shared.type || '').trim() &&
-                            String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
-                    }
+                    if (editId) record = equipmentList.find(item => selectedExisting.has(item.id) && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
+                    if (!record) record = equipmentList.find(item => normalizePlant(item.plant) === normalizePlant(shared.plant) && String(item.type || '').trim() === String(shared.type || '').trim() && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
 
                     if (!record) {
-                        record = {
-                            id: Date.now() + Math.floor(Math.random() * 1000000),
-                            ...shared, code: cleanCode,
-                            pr:'', po:'', extSched:'', extCalib:'', extBy:'', intSched:'', intCalib:'', intBy:'',
-                            externalCalibrations:[], internalCalibrations:[], calibrationHistory:[], calibrationCycles:[]
-                        };
+                        record = {id: Date.now() + Math.floor(Math.random()*1000000), ...shared, code:cleanCode, pr:'', po:'', extSched:'', extCalib:'', extBy:'', intSched:'', intCalib:'', intBy:'', externalCalibrations:[], internalCalibrations:[], calibrationCycles:[], calibrationHistory:[]};
                         equipmentList.push(record);
                     }
                     record.plant = shared.plant;
                     record.type = shared.type;
+                    if (group.pr) record.pr = group.pr;
+                    if (group.po) record.po = group.po;
 
-                    // EDIT = replace the complete cycle list with exactly what is in the form.
-                    // ADD = append the new cycle(s). This prevents an edited Internal/External
-                    // entry from becoming a second entry.
-                    let cycles;
-                    if (editId) {
-                        cycles = groups.map(normalizeCalibrationCycleGroup);
-                    } else {
-                        const newCyclesForCode = groups.filter(g => (g.codes || []).some(c => String(c).trim().toLowerCase() === cleanCode.toLowerCase()));
-                        cycles = getCalibrationCycles(record).concat(newCyclesForCode);
-                    }
+                    const beforeCycles = normalizeSharedCalibrationCycles(record);
+                    // IMPORTANT: cycles belong to this existing equipment record.
+                    // Never create a new equipment record merely because a new cycle was added.
+                    const mergedCycles = replaceSharedCalibrationCycles(group.calibrationCycles);
+                    record.calibrationCycles = mergedCycles;
+                    record.externalCalibrations = flattenSharedCalibrationCycles(mergedCycles, 'external');
+                    record.internalCalibrations = flattenSharedCalibrationCycles(mergedCycles, 'internal');
+                    const latestExt = latestCalibrationCycle(record.externalCalibrations);
+                    const latestInt = latestCalibrationCycle(record.internalCalibrations);
+                    record.extSched = latestExt.sched || '';
+                    record.extCalib = latestExt.calib || '';
+                    record.extBy = latestExt.by || '';
+                    record.intSched = latestInt.sched || '';
+                    record.intCalib = latestInt.calib || '';
+                    record.intBy = latestInt.by || '';
 
-                    const seen = new Set();
-                    cycles = cycles.filter(c => {
-                        const k = calibrationCycleSignature(c);
-                        if (seen.has(k)) return false;
-                        seen.add(k); return true;
+                    if (!Array.isArray(record.calibrationHistory)) record.calibrationHistory = [];
+                    mergedCycles.forEach((cycle, idx) => {
+                        const hasData = (cycle.external?.length || 0) + (cycle.internal?.length || 0) > 0;
+                        if (!hasData) return;
+                        const key = cycleHistoryKey(cycle, idx);
+                        const snapshot = {
+                            cycleId: key,
+                            cycle: idx + 1,
+                            recordedAt: new Date().toISOString(),
+                            pr: cycle.pr || record.pr || '',
+                            po: cycle.po || record.po || '',
+                            externalCalibrations: cycle.external || [],
+                            internalCalibrations: cycle.internal || [],
+                            extSched: latestCalibrationCycle(cycle.external || []).sched || '',
+                            extCalib: latestCalibrationCycle(cycle.external || []).calib || '',
+                            extBy: latestCalibrationCycle(cycle.external || []).by || '',
+                            intSched: latestCalibrationCycle(cycle.internal || []).sched || '',
+                            intCalib: latestCalibrationCycle(cycle.internal || []).calib || '',
+                            intBy: latestCalibrationCycle(cycle.internal || []).by || ''
+                        };
+                        const existingIndex = record.calibrationHistory.findIndex(h => String(h.cycleId || '') === key);
+                        if (existingIndex >= 0) record.calibrationHistory[existingIndex] = snapshot;
+                        else record.calibrationHistory.push(snapshot);
                     });
-
-                    record.calibrationCycles = cycles;
-                    syncLegacyCalibrationFields(record, cycles);
-                    record.calibrationHistory = cycles.slice(0, -1).map((c, idx) => ({
-                        recordedAt: c.recordedAt || '',
-                        pr:c.pr, po:c.po,
-                        externalCalibrations:c.externalCalibrations,
-                        internalCalibrations:c.internalCalibrations,
-                        extSched:latestCalibrationCycle(c.externalCalibrations).sched || '',
-                        extCalib:latestCalibrationCycle(c.externalCalibrations).calib || '',
-                        extBy:latestCalibrationCycle(c.externalCalibrations).by || '',
-                        intSched:latestCalibrationCycle(c.internalCalibrations).sched || '',
-                        intCalib:latestCalibrationCycle(c.internalCalibrations).calib || '',
-                        intBy:latestCalibrationCycle(c.internalCalibrations).by || ''
-                    }));
+                    if (record.calibrationHistory.length > 100) record.calibrationHistory = record.calibrationHistory.slice(-100);
                 });
             });
 
@@ -4157,26 +4332,21 @@ window.addEventListener("cloudsync:status", (event) => {
             if (!isAdminUser()) return;
             const selected = equipmentList.find(item => item.id === id);
             if (!selected) return;
-
             const groupKey = getEquipmentGroupKey(selected);
             const group = equipmentList.filter(item => getEquipmentGroupKey(item) === groupKey);
-            const cycles = getCalibrationCycles(selected);
-
             document.getElementById("eq-id").value = group.map(item => item.id).join(",");
             document.getElementById("modal-equip-title").innerText = group.length > 1 ? "Edit Calibration Record / Equipment Codes" : "Edit Calibration Entry";
             clearEquipmentSharedFields();
             document.getElementById("eq-shared-plant").value = selected.plant || "Plant 1";
             document.getElementById("eq-shared-type").value = selected.type || "";
-
             const container = document.getElementById("calibration-groups-container");
             container.innerHTML = "";
-            cycles.forEach(cycle => addCalibrationGroup({
-                pr:cycle.pr, po:cycle.po,
-                externalCalibrations:cycle.externalCalibrations,
-                internalCalibrations:cycle.internalCalibrations,
-                codes:group.map(item => item.code || "")
-            }));
-            if (!cycles.length) addCalibrationGroup({codes:group.map(item => item.code || "")});
+            addCalibrationGroup({
+                pr: selected.pr || "",
+                po: selected.po || "",
+                calibrationCycles: normalizeSharedCalibrationCycles(selected),
+                codes: group.map(item => item.code || "")
+            });
             document.getElementById("modal-equipment").classList.remove("hidden");
         }
 
@@ -4185,22 +4355,53 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function calibrationHistoryRows(record) {
-            const cycles = getCalibrationCycles(record);
-            // Current cycle is ALWAYS first; older cycles follow in reverse chronological order.
-            return cycles.slice().reverse().map((c, index) => ({
-                cycle: cycles.length - index,
-                current: index === 0,
-                recordedAt: index === 0 ? 'Current' : (c.recordedAt || ''),
-                pr:c.pr || '', po:c.po || '',
-                externalCalibrations:c.externalCalibrations,
-                internalCalibrations:c.internalCalibrations,
-                extSched:latestCalibrationCycle(c.externalCalibrations).sched || '',
-                extCalib:latestCalibrationCycle(c.externalCalibrations).calib || '',
-                extBy:latestCalibrationCycle(c.externalCalibrations).by || '',
-                intSched:latestCalibrationCycle(c.internalCalibrations).sched || '',
-                intCalib:latestCalibrationCycle(c.internalCalibrations).calib || '',
-                intBy:latestCalibrationCycle(c.internalCalibrations).by || ''
-            }));
+            const cycles = normalizeSharedCalibrationCycles(record);
+            const history = Array.isArray(record.calibrationHistory) ? record.calibrationHistory : [];
+            const rows = history.map((h, index) => {
+                const cycleId = String(h.cycleId || `cycle-${(h.cycle || index + 1)}`);
+                const currentCycle = cycles.findIndex((c, i) => cycleHistoryKey(c, i) === cycleId || (!h.cycleId && i === index));
+                const current = currentCycle >= 0;
+                const currentData = current ? cycles[currentCycle] : null;
+                return {
+                    cycle: h.cycle || index + 1,
+                    cycleId,
+                    current,
+                    recordedAt: h.recordedAt || "",
+                    pr: h.pr || record.pr || "", po: h.po || record.po || "",
+                    externalCalibrations: currentData ? currentData.external : (Array.isArray(h.externalCalibrations) ? h.externalCalibrations : []),
+                    internalCalibrations: currentData ? currentData.internal : (Array.isArray(h.internalCalibrations) ? h.internalCalibrations : []),
+                    extSched: h.extSched || "", extCalib: h.extCalib || "", extBy: h.extBy || "",
+                    intSched: h.intSched || "", intCalib: h.intCalib || "", intBy: h.intBy || ""
+                };
+            });
+            // If the record predates the new history model, or history is empty, show current cycles.
+            if (!rows.length) {
+                return cycles.map((c, index) => ({
+                    cycle: index + 1, current: true, recordedAt: "Current", pr: record.pr || "", po: record.po || "",
+                    externalCalibrations: c.external || [], internalCalibrations: c.internal || [],
+                    extSched: latestCalibrationCycle(c.external || []).sched || "", extCalib: latestCalibrationCycle(c.external || []).calib || "", extBy: latestCalibrationCycle(c.external || []).by || "",
+                    intSched: latestCalibrationCycle(c.internal || []).sched || "", intCalib: latestCalibrationCycle(c.internal || []).calib || "", intBy: latestCalibrationCycle(c.internal || []).by || ""
+                }));
+            }
+            // Add any current cycle that does not yet have a history snapshot.
+            cycles.forEach((c, index) => {
+                const id = cycleHistoryKey(c, index);
+                if (!rows.some(r => String(r.cycleId || '') === id || r.cycle === index + 1 && r.current)) {
+                    rows.push({
+                        cycle: index + 1, current: true, recordedAt: "Current", pr: record.pr || "", po: record.po || "",
+                        externalCalibrations: c.external || [], internalCalibrations: c.internal || [],
+                        extSched: latestCalibrationCycle(c.external || []).sched || "", extCalib: latestCalibrationCycle(c.external || []).calib || "", extBy: latestCalibrationCycle(c.external || []).by || "",
+                        intSched: latestCalibrationCycle(c.internal || []).sched || "", intCalib: latestCalibrationCycle(c.internal || []).calib || "", intBy: latestCalibrationCycle(c.internal || []).by || ""
+                    });
+                }
+            });
+            return rows.sort((a,b) => Number(a.cycle || 0) - Number(b.cycle || 0));
+        }
+
+        function formatCalibrationEntries(entries) {
+            const arr = Array.isArray(entries) ? entries : [];
+            if (!arr.length) return '-';
+            return arr.map(e => `${escapeHtml(e.sched || '-')} / ${escapeHtml(e.calib || '-')}<br><span class="text-slate-400">${escapeHtml(e.by || '-')}</span>`).join('<hr class="border-slate-700/50 my-1">');
         }
 
         function viewCalibrationHistory(id) {
@@ -4210,28 +4411,20 @@ window.addEventListener("cloudsync:status", (event) => {
             const group = equipmentList.filter(item => getEquipmentGroupKey(item) === groupKey);
             const content = document.getElementById("calibration-history-content");
             if (!content) return;
-
-            const cycleRows = calibrationHistoryRows(selected);
-            const equipmentCodes = group.map(r => r.code).filter(Boolean);
-
-            content.innerHTML = cycleRows.map(cycle => {
-                const label = cycle.current ? 'CURRENT CYCLE' : 'CYCLE ' + cycle.cycle;
-                const labelClass = cycle.current ? 'text-blue-300' : 'text-purple-300';
-                const codeList = equipmentCodes.length ? equipmentCodes.map(code => `<span class="inline-flex items-center px-2 py-1 mr-1 mb-1 rounded-md bg-slate-700/70 border border-slate-600/60 text-[10px] font-mono text-white">${escapeHtml(code)}</span>`).join('') : '<span class="text-slate-500">-</span>';
-                const extEntries = cycle.externalCalibrations.length ? cycle.externalCalibrations : [];
-                const intEntries = cycle.internalCalibrations.length ? cycle.internalCalibrations : [];
-                const entryRows = (entries, color, statusFallback) => entries.length ? entries.map((entry, idx) => {
-                    const status = getSubCalibStatus(entry.sched, entry.calib);
-                    return `<tr class="border-t border-slate-700/50"><td class="px-2.5 py-2 text-center font-bold ${color}">${idx+1}</td><td class="px-2.5 py-2 text-center">${escapeHtml(entry.sched || '-')}</td><td class="px-2.5 py-2 text-center">${escapeHtml(entry.calib || '-')}</td><td class="px-2.5 py-2 text-center">${escapeHtml(entry.by || '-')}</td><td class="px-2.5 py-2 text-center"><span class="text-[9px] font-bold">${status}</span></td></tr>`;
-                }).join('') : `<tr><td colspan="5" class="px-2.5 py-3 text-center text-slate-500">${statusFallback}</td></tr>`;
+            content.innerHTML = group.map(record => {
+                const rows = calibrationHistoryRows(record);
+                const body = rows.map(r => `<tr class="border-t border-slate-700/50 ${r.current ? 'bg-blue-500/5' : ''}">
+                    <td class="px-2.5 py-2 text-center font-bold ${r.current ? 'text-blue-300' : 'text-slate-400'}">Cycle ${r.cycle}${r.current ? ' <span class="text-[8px]">CURRENT</span>' : ''}</td>
+                    <td class="px-2.5 py-2 font-mono text-[10px]">${escapeHtml(r.pr || '-')}<br><span class="text-purple-300">${escapeHtml(r.po || '-')}</span></td>
+                    <td class="px-2.5 py-2 text-center">${formatCalibrationEntries(r.externalCalibrations)}</td>
+                    <td class="px-2.5 py-2 text-center">${formatCalibrationEntries(r.internalCalibrations)}</td>
+                </tr>`).join('');
                 return `<div class="mb-4 border border-slate-700/60 rounded-xl overflow-hidden">
-                    <div class="px-3 py-2 bg-slate-900/70 flex items-center justify-between gap-3"><div><span class="text-xs font-black ${labelClass}">${label}</span><span class="ml-2 text-[9px] text-slate-500">${cycle.current ? 'Latest cycle controls current status' : 'Historical calibration cycle'}</span></div><span class="text-[9px] text-slate-500">${cycle.recordedAt && cycle.recordedAt !== 'Current' ? escapeHtml(cycle.recordedAt) : ''}</span></div>
-                    <div class="p-3 space-y-3"><div><div class="text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-1.5">Equipment Codes in This Cycle</div><div>${codeList}</div></div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div class="overflow-x-auto rounded-lg border border-blue-500/20"><div class="px-2.5 py-1.5 bg-blue-950/30 text-[10px] font-bold text-blue-300">EXTERNAL CALIBRATION — ${extEntries.length} ${extEntries.length===1?'ENTRY':'ENTRIES'}</div><table class="w-full text-[10px] text-slate-300"><thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2 py-1.5">#</th><th class="px-2 py-1.5">Schedule</th><th class="px-2 py-1.5">Calibration</th><th class="px-2 py-1.5">Calibrated By</th><th class="px-2 py-1.5">Status</th></tr></thead><tbody>${entryRows(extEntries,'text-blue-300','No External Entry')}</tbody></table></div>
-                    <div class="overflow-x-auto rounded-lg border border-purple-500/20"><div class="px-2.5 py-1.5 bg-purple-950/30 text-[10px] font-bold text-purple-300">INTERNAL CALIBRATION — ${intEntries.length} ${intEntries.length===1?'ENTRY':'ENTRIES'}</div><table class="w-full text-[10px] text-slate-300"><thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2 py-1.5">#</th><th class="px-2 py-1.5">Schedule</th><th class="px-2 py-1.5">Calibration</th><th class="px-2 py-1.5">Calibrated By</th><th class="px-2 py-1.5">Status</th></tr></thead><tbody>${entryRows(intEntries,'text-purple-300','No Internal Entry')}</tbody></table></div></div>
-                    <div class="text-[9px] text-slate-500">PR: <span class="text-slate-300">${escapeHtml(cycle.pr || '-')}</span> &nbsp; PO: <span class="text-purple-300">${escapeHtml(cycle.po || '-')}</span></div></div></div>`;
+                    <div class="px-3 py-2 bg-slate-900/70"><span class="text-xs font-bold text-white">${escapeHtml(record.code || '-')}</span><span class="ml-2 text-[9px] text-slate-500">${rows.length} shared calibration cycle${rows.length === 1 ? '' : 's'}</span></div>
+                    <div class="px-3 py-2 text-[9px] text-slate-400 bg-slate-950/30">Each row is one cycle. External and Internal entries in the same row belong to that same cycle. Multiple entries can be recorded on either side without creating another cycle.</div>
+                    <div class="overflow-x-auto"><table class="w-full text-[10px] text-slate-300"><thead class="bg-slate-900 text-slate-500 uppercase"><tr><th class="px-2.5 py-2">Cycle</th><th class="px-2.5 py-2">PR / PO</th><th class="px-2.5 py-2">External<br>Schedule / Calibration / By</th><th class="px-2.5 py-2">Internal<br>Schedule / Calibration / By</th></tr></thead><tbody>${body}</tbody></table></div>
+                </div>`;
             }).join('');
-
             document.getElementById("modal-calibration-history").classList.remove("hidden");
         }
 
@@ -4310,10 +4503,14 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (diff > 0) totalHrs += diff;
             });
 
-            const availHours = (primaryLogs.length > 0 ? primaryLogs.length : 1) * 720;
+            const uniqueEquipmentIds = new Set(primaryLogs.map(getDowntimeEquipmentCode).filter(Boolean));
+            const availHours = (uniqueEquipmentIds.size || 1) * 720;
             const uptimePct = Math.max(0, Math.min(100, parseFloat(((1 - (totalHrs / availHours)) * 100).toFixed(1))));
             const mtbf = primaryLogs.length > 0 ? (720 / primaryLogs.length).toFixed(1) : "0";
             const mttr = primaryLogs.length > 0 ? Math.round((totalHrs / primaryLogs.length) * 60) : 0;
+
+            const uptimeInventoryLogs = downtimeLogs.filter(dt => currentPlant === "ALL" || normalizePlant(dt.plant) === normalizePlant(currentPlant));
+            renderCategoryAvailabilityTable(primaryLogs, uptimeInventoryLogs, 'uptime-category-availability-head', 'uptime-category-availability-body', 'uptime-category-availability-label', isCompare ? compareLogs : null, uptimeInventoryLogs, primaryValue || 'All Time', compareValue || '');
 
             document.getElementById("uptime-kpi-percent").innerText = `${uptimePct}%`;
             document.getElementById("uptime-kpi-hours").innerText = `${totalHrs.toFixed(1)} hrs`;
@@ -4323,7 +4520,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const compCard=document.getElementById("comparison-result-card");
             if(isCompare){
                 compCard.classList.remove("hidden");
-                const calc=list=>{let h=0;list.forEach(dt=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000;if(d>0)h+=d;});const up=Math.max(0,Math.min(100,Number(((1-h/((list.length||1)*720))*100).toFixed(1))));return {h,up};};
+                const calc=list=>{let h=0;list.forEach(dt=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000;if(d>0)h+=d;});const ids=new Set(list.map(getDowntimeEquipmentCode).filter(Boolean));const up=Math.max(0,Math.min(100,Number(((1-h/((ids.size||1)*720))*100).toFixed(1))));return {h,up};};
                 const cp=calc(primaryLogs),cc=calc(compareLogs),dp=(cp.up-cc.up).toFixed(1),dh=(cp.h-cc.h).toFixed(1);
                 document.getElementById("comparison-result-text").innerHTML=`Comparing <strong>${primaryValue}</strong> (${cp.up}% uptime, ${cp.h.toFixed(1)} hrs downtime) against <strong>${compareValue}</strong> (${cc.up}% uptime, ${cc.h.toFixed(1)} hrs downtime).<br>Uptime Variance: <strong class="${dp>=0?'text-emerald-400':'text-red-400'}">${dp>=0?'+':''}${dp}%</strong> | Downtime Variance: <strong class="${dh<=0?'text-emerald-400':'text-red-400'}">${dh<=0?'':'+'}${dh} hrs</strong>.`;
             }else compCard.classList.add("hidden");
