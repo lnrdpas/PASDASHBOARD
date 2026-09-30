@@ -3932,7 +3932,7 @@ window.addEventListener("cloudsync:status", (event) => {
             // One card = Instrument Type + its Equipment Codes.
             // Codes remain the counting unit; calibration occurrences stay inside the same card.
             const cardGroups = new Map();
-            records.forEach(eq => {
+            codeRecordsForKpi.forEach(eq => {
                 // IMPORTANT: visual grouping is Instrument Type + Plant only.
                 // Equipment Code is displayed inside that card; calibration dates
                 // and occurrences must never create another top-level card.
