@@ -3999,6 +3999,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function normalizeCalibrationCycle(cycle = {}) {
             return {
+                id: cycle.id || cycle.entryId || ('cal_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8)),
                 sched: cycle.sched || cycle.dateSched || "",
                 calib: cycle.calib || cycle.dateCalib || "",
                 by: cycle.by || ""
@@ -4027,6 +4028,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     </button>
                 </div>`;
             const e = normalizeCalibrationCycle(entry);
+            row.dataset.entryId = e.id;
             row.querySelector('.entry-sched').value = e.sched;
             row.querySelector('.entry-calib').value = e.calib;
             row.querySelector('.entry-by').value = e.by;
@@ -4065,14 +4067,14 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="external-entry-section bg-slate-950/40 p-2 rounded-lg border border-blue-500/20 space-y-1.5">
                         <div class="flex items-center justify-between gap-2">
                             <span class="text-[9px] font-black text-blue-300">EXTERNAL CALIBRATION</span>
-                            <button type="button" onclick="addCalibrationEntry(this,'external')" class="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded-lg text-[9px] font-bold">+ Add External</button>
+                            <button type="button" onclick="addCalibrationEntry(this,'external')" class="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded-lg text-[9px] font-bold">+ Add External Calibration</button>
                         </div>
                         <div class="external-entry-list space-y-1.5"></div>
                     </div>
                     <div class="internal-entry-section bg-slate-950/40 p-2 rounded-lg border border-purple-500/20 space-y-1.5">
                         <div class="flex items-center justify-between gap-2">
                             <span class="text-[9px] font-black text-purple-300">INTERNAL CALIBRATION</span>
-                            <button type="button" onclick="addCalibrationEntry(this,'internal')" class="bg-purple-600 hover:bg-purple-500 text-white px-2 py-1 rounded-lg text-[9px] font-bold">+ Add Internal</button>
+                            <button type="button" onclick="addCalibrationEntry(this,'internal')" class="bg-purple-600 hover:bg-purple-500 text-white px-2 py-1 rounded-lg text-[9px] font-bold">+ Add Internal Calibration</button>
                         </div>
                         <div class="internal-entry-list space-y-1.5"></div>
                     </div>
@@ -4163,7 +4165,9 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function collectCalibrationEntries(cycleRow, type) {
             return [...(cycleRow?.querySelectorAll(`.${type}-entry-list .calibration-entry-row`) || [])]
-                .map(row => ({
+                .map((row, index) => ({
+                    id: row.dataset.entryId || ('cal_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8)),
+                    occurrence: index + 1,
                     sched: row.querySelector('.entry-sched')?.value || '',
                     calib: row.querySelector('.entry-calib')?.value || '',
                     by: row.querySelector('.entry-by')?.value.trim() || ''
@@ -4327,12 +4331,18 @@ window.addEventListener("cloudsync:status", (event) => {
                     target.po = cycle.po || target.po || '';
                     const existingEntries = Array.isArray(target[type]) ? target[type].map(normalizeCalibrationCycleEntry) : [];
                     const incomingEntries = Array.isArray(cycle[type]) ? cycle[type].map(normalizeCalibrationCycleEntry) : [];
+                    // IMPORTANT: multiple calibration occurrences are intentional.
+                    // The same instrument may require calibration more than once in
+                    // the same cycle, so NEVER deduplicate by date/vendor/value.
+                    // Keep each occurrence as a separate record.
+                    const existingIds = new Set(existingEntries.map(x => String(x.id || '')));
                     incomingEntries.forEach(entry => {
                         if (!entry.sched && !entry.calib && !entry.by) return;
-                        const key = calibrationCycleKey(entry);
-                        if (!existingEntries.some(x => calibrationCycleKey(x) === key)) existingEntries.push(entry);
+                        if (entry.id && existingIds.has(String(entry.id))) return;
+                        existingEntries.push(entry);
+                        existingIds.add(String(entry.id || ''));
                     });
-                    target[type] = existingEntries;
+                    target[type] = existingEntries.map((entry, i) => ({...entry, occurrence: i + 1}));
                 });
             });
             return result.filter(c => (c.external?.length || 0) + (c.internal?.length || 0) > 0);
@@ -4479,6 +4489,21 @@ window.addEventListener("cloudsync:status", (event) => {
             return arr.map(e => `${escapeHtml(e.sched || '-')} / ${escapeHtml(e.calib || '-')}<br><span class="text-slate-400">${escapeHtml(e.by || '-')}</span>`).join('<hr class="border-slate-700/50 my-1">');
         }
 
+        function formatCalibrationOccurrenceList(entries, tone = 'blue') {
+            const arr = Array.isArray(entries) ? entries : [];
+            if (!arr.length) return '<span class="text-slate-500">No calibration occurrence recorded.</span>';
+            const border = tone === 'purple' ? 'border-purple-500/15' : 'border-blue-500/15';
+            return arr.map((e, i) => {
+                const no = e.occurrence || i + 1;
+                return `<div class="border ${border} rounded-lg px-2 py-1.5 mb-1.5 last:mb-0 bg-slate-900/30">
+                    <div class="font-bold text-slate-200">Calibration #${no}</div>
+                    <div class="mt-0.5"><span class="text-slate-500">Next Due:</span> ${escapeHtml(e.sched || '-')}</div>
+                    <div><span class="text-slate-500">Calibrated:</span> ${escapeHtml(e.calib || '-')}</div>
+                    <div><span class="text-slate-500">By:</span> ${escapeHtml(e.by || '-')}</div>
+                </div>`;
+            }).join('');
+        }
+
         function viewCalibrationHistory(id) {
             const selected = equipmentList.find(item => item.id === id);
             if (!selected) return;
@@ -4575,8 +4600,14 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="px-3 py-2 bg-slate-950/30 border-b border-slate-700/40">
                         <div class="flex flex-wrap gap-1.5 mb-2">${summary || '<span class="text-[9px] text-slate-500">No computation available</span>'}</div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-[9px] text-slate-400">
-                            <div class="bg-blue-500/5 border border-blue-500/15 rounded-lg p-2"><b class="text-blue-300">External:</b> <span class="text-slate-300">Next Due:</span> ${escapeHtml(extLatest.sched || '-')} &nbsp; | &nbsp; Calibrated: ${escapeHtml(extLatest.calib || '-')} &nbsp; | &nbsp; By: ${escapeHtml(extLatest.by || '-')}</div>
-                            <div class="bg-purple-500/5 border border-purple-500/15 rounded-lg p-2"><b class="text-purple-300">Internal:</b> <span class="text-slate-300">Next Due:</span> ${escapeHtml(intLatest.sched || '-')} &nbsp; | &nbsp; Calibrated: ${escapeHtml(intLatest.calib || '-')} &nbsp; | &nbsp; By: ${escapeHtml(intLatest.by || '-')}</div>
+                            <div class="bg-blue-500/5 border border-blue-500/15 rounded-lg p-2">
+                                <div class="font-bold text-blue-300 mb-1">External Calibration (${(cycle.external || []).length} occurrence${(cycle.external || []).length === 1 ? '' : 's'})</div>
+                                ${formatCalibrationOccurrenceList(cycle.external || [], 'blue')}
+                            </div>
+                            <div class="bg-purple-500/5 border border-purple-500/15 rounded-lg p-2">
+                                <div class="font-bold text-purple-300 mb-1">Internal Calibration (${(cycle.internal || []).length} occurrence${(cycle.internal || []).length === 1 ? '' : 's'})</div>
+                                ${formatCalibrationOccurrenceList(cycle.internal || [], 'purple')}
+                            </div>
                         </div>
                         ${snapshotCount ? `<div class="text-[9px] text-purple-300 mt-1">${snapshotCount} saved history snapshot${snapshotCount === 1 ? '' : 's'} for this cycle.</div>` : ''}
                     </div>
