@@ -4009,8 +4009,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="text-[10px] text-slate-400 mt-0.5">${escapeHtml(first.plant || '-')} · ${group.length} equipment code${group.length===1?'':'s'}</div>
                     </div>
                     <div class="p-4 space-y-3">
-                        <div class="text-[9px] uppercase tracking-wider font-black text-slate-500">Code</div>
-                        ${codeRows}
+                        <div class="text-[9px] uppercase tracking-wider font-black text-slate-500">Equipment Codes</div>
+                        <div class="text-xs font-bold text-slate-200">${codeRows}</div>
                         <div class="text-[9px] text-slate-500 pt-1">All calibration dates/occurrences remain inside this Instrument Type card. Adding another External or Internal date does not create another card or equipment count.</div>
                     </div>`;
                 cards.appendChild(card);
