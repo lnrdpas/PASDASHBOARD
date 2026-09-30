@@ -3302,7 +3302,12 @@ window.addEventListener("cloudsync:status", (event) => {
                 const c = getRecordCalibrationCycle(eq, type);
                 entries = (c && (c.sched || c.calib || c.by)) ? [c] : [];
             }
-            const statuses = entries
+            const code = String(eq?.code || '').trim().toLowerCase();
+            const applicableEntries = entries.filter(c => {
+                const codes = Array.isArray(c?.codes) ? c.codes.map(v => String(v || '').trim().toLowerCase()).filter(Boolean) : [];
+                return !codes.length || !code || codes.includes(code);
+            });
+            const statuses = applicableEntries
                 .map(c => getSubCalibStatus(c?.sched || '', c?.calib || ''))
                 .filter(s => s !== 'NA');
             if (!statuses.length) return 'NA';
@@ -3436,24 +3441,57 @@ window.addEventListener("cloudsync:status", (event) => {
             };
 
             const calcCalib = list => {
-                // ALL calibration summary counts are per unique equipment code.
-                // External + Internal are evaluated for the same code, but a code
-                // is counted only once in the overall calibration totals.
-                let done=0, overdue=0, pending=0, stsok=0;
-                uniqueEquipmentCodes(list).forEach(eq => {
-                    const ext = getSubCalibStatusForRecord(eq, 'external');
-                    const int = getSubCalibStatusForRecord(eq, 'internal');
-                    const statuses = [ext, int].filter(st => st !== 'NA');
-                    if (!statuses.length) return;
-                    const status = getCalibStatus(eq);
-                    if (status === 'DONE') done++;
-                    else if (status === 'OVERDUE, DONE') done++;
-                    else if (status === 'OVERDUE') overdue++;
-                    else if (status === 'PENDING') pending++;
-                    else if (status === 'STSOK') stsok++;
+                // Calibration workload is counted as CODE x CALIBRATION OCCURRENCE.
+                // A new code increases the count for every applicable occurrence.
+                // A new occurrence increases the count by the number of codes assigned to it.
+                let done=0, overdue=0, pending=0, stsok=0, na=0;
+                const records = uniqueEquipmentCodes(list);
+                records.forEach(eq => {
+                    const cycles = normalizeSharedCalibrationCycles(eq);
+                    const codeCount = 1;
+                    cycles.forEach(cycle => {
+                        ['external','internal'].forEach(type => {
+                            const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
+                            entries.forEach(entry => {
+                                // Each saved occurrence represents one requirement for this code.
+                                const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
+                                if (st === 'DONE' || st === 'OVERDUE, DONE') done += codeCount;
+                                else if (st === 'OVERDUE') overdue += codeCount;
+                                else if (st === 'PENDING') pending += codeCount;
+                                else if (st === 'STSOK') stsok += codeCount;
+                                else na += codeCount;
+                            });
+                        });
+                    });
+                });
+                // If records are grouped by card and one record contains multiple codes,
+                // use the group's code count when the occurrence is shared across that card.
+                const seenGroups = new Map();
+                (list || []).forEach(eq => {
+                    const key = `${normalizePlant(eq.plant)}||${String(eq.type||'').trim().toLowerCase()}`;
+                    if (!seenGroups.has(key)) seenGroups.set(key, []);
+                    seenGroups.get(key).push(eq);
+                });
+                // Recalculate from logical cards so shared occurrences count once per code.
+                done=overdue=pending=stsok=na=0;
+                seenGroups.forEach(group => {
+                    const codes = new Set(group.map(x=>String(x.code||'').trim().toLowerCase()).filter(Boolean));
+                    const codeCount = codes.size || 1;
+                    const representative = group[0];
+                    const cycles = normalizeSharedCalibrationCycles(representative);
+                    cycles.forEach(cycle => ['external','internal'].forEach(type => {
+                        (Array.isArray(cycle[type]) ? cycle[type] : []).forEach(entry => {
+                            const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
+                            if (st === 'DONE' || st === 'OVERDUE, DONE') done += codeCount;
+                            else if (st === 'OVERDUE') overdue += codeCount;
+                            else if (st === 'PENDING') pending += codeCount;
+                            else if (st === 'STSOK') stsok += codeCount;
+                            else na += codeCount;
+                        });
+                    }));
                 });
                 const scheduled = done + overdue + pending + stsok;
-                return {done, scheduled, toCalibrate:Math.max(0, scheduled-done), overdue, pending, stsok, compliance:scheduled?Math.round(done/scheduled*100):0};
+                return {done, scheduled, toCalibrate: overdue + pending + stsok, overdue, pending, stsok, na, compliance:scheduled?Math.round(done/scheduled*100):0};
             };
             const calcDowntime = list => {
                 let hrs=0; (list||[]).forEach(dt=>{ const d=(new Date(dt.end)-new Date(dt.start))/3600000; if(d>0) hrs+=d; });
@@ -4008,7 +4046,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                 const e = item.entry || {};
                                 const status = calibrationOccurrenceStatus({type:item.type, sched:e.sched || e.dateSched || '', calib:e.calib || e.dateCalib || ''});
                                 const ids = item.recordIds.map(x => String(x));
-                                const codes = item.codes.length ? item.codes : instrumentCodes;
+                                const codes = Array.isArray(e.codes) && e.codes.length ? e.codes : (item.codes.length ? item.codes : instrumentCodes);
                                 const typeLabel = item.type === 'external' ? 'EXTERNAL CALIBRATION' : 'INTERNAL CALIBRATION';
                                 const typeCls = item.type === 'external' ? 'text-blue-300' : 'text-purple-300';
                                 const editFn = `openCalibrationOccurrenceEditor(${JSON.stringify(ids)},${JSON.stringify(item.cycleId)},${JSON.stringify(item.type)},${JSON.stringify(e.id || '')})`;
@@ -4128,7 +4166,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 calib: cycle.calib || cycle.dateCalib || "",
                 by: cycle.by || "",
                 pr: cycle.pr || cycle.prNo || "",
-                po: cycle.po || cycle.poNo || ""
+                po: cycle.po || cycle.poNo || "",
+                codes: Array.isArray(cycle.codes) ? cycle.codes.map(v => String(v || '').trim()).filter(Boolean) : []
             };
         }
 
@@ -4213,8 +4252,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>`;
             const extList = row.querySelector('.external-entry-list');
             const intList = row.querySelector('.internal-entry-list');
-            (external.length ? external : [{}]).forEach(e => extList.appendChild(makeCalibrationEntryRow('external', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || ''})));
-            (internal.length ? internal : [{}]).forEach(e => intList.appendChild(makeCalibrationEntryRow('internal', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || ''})));
+            (external.length ? external : [{}]).forEach(e => extList.appendChild(makeCalibrationEntryRow('external', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || '', codes:Array.isArray(e.codes) && e.codes.length ? e.codes : cycleCodes})));
+            (internal.length ? internal : [{}]).forEach(e => intList.appendChild(makeCalibrationEntryRow('internal', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || '', codes:Array.isArray(e.codes) && e.codes.length ? e.codes : cycleCodes})));
             return row;
         }
 
@@ -4289,7 +4328,11 @@ window.addEventListener("cloudsync:status", (event) => {
                     calib: row.querySelector('.entry-calib')?.value || '',
                     by: row.querySelector('.entry-by')?.value.trim() || '',
                     pr: row.querySelector('.entry-pr')?.value.trim() || '',
-                    po: row.querySelector('.entry-po')?.value.trim() || ''
+                    po: row.querySelector('.entry-po')?.value.trim() || '',
+                    codes: (() => {
+                        try { return JSON.parse(cycleRow?.dataset?.cycleCodes || '[]').map(v => String(v || '').trim()).filter(Boolean); }
+                        catch (_) { return []; }
+                    })()
                 }))
                 .filter(c => c.sched || c.calib || c.by);
         }
@@ -4531,10 +4574,17 @@ window.addEventListener("cloudsync:status", (event) => {
                     if (group.po) record.po = group.po;
 
                     const beforeCycles = normalizeSharedCalibrationCycles(record);
-                    const incomingCyclesForCode = (group.calibrationCycles || []).filter(c => {
-                        const cycleCodes = Array.isArray(c.codes) ? c.codes.map(v => String(v || '').trim().toLowerCase()).filter(Boolean) : [];
-                        return !cycleCodes.length || cycleCodes.includes(cleanCode.toLowerCase());
-                    }).map(c => ({...c, codes:[cleanCode]}));
+                    const incomingCyclesForCode = (group.calibrationCycles || []).map(c => {
+                        const cycleCodes = Array.isArray(c.codes) ? c.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
+                        const selectedCycleCodes = cycleCodes.length ? cycleCodes : group.codes;
+                        const codeMatches = selectedCycleCodes.map(v => v.toLowerCase()).includes(cleanCode.toLowerCase());
+                        if (!codeMatches) return null;
+                        const filterEntries = entries => (Array.isArray(entries) ? entries : []).filter(entry => {
+                            const entryCodes = Array.isArray(entry.codes) ? entry.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
+                            return !entryCodes.length || entryCodes.map(v => v.toLowerCase()).includes(cleanCode.toLowerCase());
+                        }).map(entry => ({...entry, codes:[cleanCode]}));
+                        return {...c, codes:[cleanCode], external:filterEntries(c.external), internal:filterEntries(c.internal)};
+                    }).filter(c => c && (c.external.length || c.internal.length || c.pr || c.po));
                     // IMPORTANT: cycles belong to this equipment record and only to the codes assigned to that cycle.
                     const mergedCycles = mergeSharedCalibrationCycles(beforeCycles, incomingCyclesForCode);
                     mergedCycles.forEach(c => { c.codes = [cleanCode]; });
