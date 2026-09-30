@@ -3987,6 +3987,52 @@ window.addEventListener("cloudsync:status", (event) => {
             }
         }
 
+        // Global tracker helper. The Executive Summary has its own scoped
+        // collectGroupCalibrationCycles() helper, but the Calibration Tracker
+        // renders outside that function. Keep a global copy here so the tracker
+        // never fails with "collectGroupCalibrationCycles is not defined".
+        function collectGroupCalibrationCycles(group) {
+            const merged = [];
+            const byCycleKey = new Map();
+            (group || []).forEach(record => {
+                const cycles = normalizeSharedCalibrationCycles(record);
+                cycles.forEach((cycle, cycleIndex) => {
+                    const cycleKey = String(cycle.id || `cycle-${cycleIndex + 1}`);
+                    let target = byCycleKey.get(cycleKey);
+                    if (!target) {
+                        target = { id: cycle.id || cycleKey, pr: cycle.pr || '', po: cycle.po || '', codes: [], external: [], internal: [] };
+                        byCycleKey.set(cycleKey, target);
+                        merged.push(target);
+                    }
+                    target.codes = [...new Set([...(target.codes || []), ...(Array.isArray(cycle.codes) ? cycle.codes : []), ...(record.code ? [record.code] : [])].map(v => String(v || '').trim()).filter(Boolean))];
+                    target.pr = target.pr || cycle.pr || '';
+                    target.po = target.po || cycle.po || '';
+                    ['external','internal'].forEach(type => {
+                        const targetEntries = target[type];
+                        (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
+                            const normalized = normalizeCalibrationCycle(entry);
+                            const entryId = String(normalized.id || '');
+                            const existing = entryId ? targetEntries.findIndex(x => String(x.id || '') === entryId) : -1;
+                            if (existing >= 0) {
+                                targetEntries[existing] = {
+                                    ...targetEntries[existing],
+                                    ...normalized,
+                                    codes: [...new Set([...(targetEntries[existing].codes || []), ...(normalized.codes || []), ...(record.code ? [record.code] : [])])]
+                                };
+                            } else {
+                                targetEntries.push({
+                                    ...normalized,
+                                    id: entryId || `${cycleKey}-${type}-${entryIndex}-${normalized.sched || normalized.calib || ''}`,
+                                    codes: [...new Set([...(normalized.codes || []), ...(record.code ? [record.code] : [])])]
+                                });
+                            }
+                        });
+                    });
+                });
+            });
+            return merged;
+        }
+
         function renderCalibModule() {
             hydrateCalibrationTrackerData();
             renderCalibGauges();
