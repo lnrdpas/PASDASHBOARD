@@ -2685,6 +2685,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const savedLineCats = localStorage.getItem("suite_line_categories");
 
             if (savedEq) equipmentList = JSON.parse(savedEq);
+            dedupeEquipmentCodes();
             if (savedDt) downtimeLogs = JSON.parse(savedDt);
             if (savedPr) projectsList = JSON.parse(savedPr);
             if (savedCats) equipmentCategories = JSON.parse(savedCats);
@@ -3453,7 +3454,10 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("summary-availability-rate").innerText = `${primaryDown.uptime}%`;
             document.getElementById("summary-uptime-rate").innerText = `${primaryDown.uptime}%`;
             document.getElementById("summary-dt-hours").innerText = `${primaryDown.hrs.toFixed(1)} hrs`;
-            const mtbf = filteredDt.length > 0 ? (720 / filteredDt.length).toFixed(1) : "0";
+            const uniqueEq = new Set(filteredDt.map(getDowntimeEquipmentCode).filter(Boolean));
+            const availHrs = (uniqueEq.size || 1) * 720;
+            const totalDownHrs = filteredDt.reduce((a,dt)=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000; return a+(d>0?d:0);},0);
+            const mtbf = filteredDt.length > 0 ? ((availHrs-totalDownHrs)/filteredDt.length).toFixed(1) : "0";
             const mttr = filteredDt.length > 0 ? Math.round((primaryDown.hrs / filteredDt.length) * 60) : 0;
             document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
@@ -3900,83 +3904,13 @@ window.addEventListener("cloudsync:status", (event) => {
             };
 
             groups.forEach(group => {
-                const first = group[0];
-                const actionId = first.id;
-                const statuses = group.map(eq => getCalibStatus(eq));
-                const overall = statuses.every(s => s === statuses[0]) ? statuses[0] : "MIXED";
-                const currentCycles = group.flatMap(eq => {
-                    const c = getCurrentCalibrationCycle(eq);
-                    return c ? [c] : [];
-                });
-                const current = currentCycles[0] || {};
-                const extEntries = Array.isArray(current.external) ? current.external.filter(e => e.sched || e.calib || e.by) : [];
-                const intEntries = Array.isArray(current.internal) ? current.internal.filter(e => e.sched || e.calib || e.by) : [];
-                const latest = arr => arr.length ? arr[arr.length - 1] : {};
-                const ext = latest(extEntries);
-                const int = latest(intEntries);
-                const extSt = getSubCalibStatus(ext.sched || first.extSched, ext.calib || first.extCalib);
-                const intSt = getSubCalibStatus(int.sched || first.intSched, int.calib || first.intCalib);
-                const hasHistory = group.some(eq => Array.isArray(eq.calibrationHistory) && eq.calibrationHistory.length) || group.some(eq => Array.isArray(eq.calibrationCycles) && eq.calibrationCycles.length);
-                const codes = [...new Set(group.flatMap(eq => {
-                    const cycle = getCurrentCalibrationCycle(eq);
-                    return (cycle && Array.isArray(cycle.codes) && cycle.codes.length) ? cycle.codes : [eq.code];
-                }).filter(Boolean))];
-                const codeHtml = codes.map(code => `<span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px] font-bold">${escapeHtml(code)}</span>`).join('');
-                const cycleLabel = current && current.id ? 'Current Cycle' : 'Calibration Record';
-
-                const card = document.createElement("div");
-                card.className = "rounded-2xl border border-slate-700/60 bg-slate-900/65 overflow-hidden shadow-sm";
-                card.innerHTML = `
-                    <div class="p-4 border-b border-slate-700/50 bg-slate-900/80">
-                        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                            <div class="min-w-0">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span class="text-[9px] uppercase tracking-wider font-black text-slate-500">Instrument Type</span>
-                                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black border ${badgeColors[overall] || badgeColors.MIXED}">${escapeHtml(overall)}</span>
-                                </div>
-                                <h3 class="text-base font-black text-white mt-1">${escapeHtml(first.type || '-')}</h3>
-                                <div class="text-[10px] text-slate-400 mt-0.5">${escapeHtml(first.plant || '-')} · ${codes.length} equipment code${codes.length === 1 ? '' : 's'}</div>
-                                <div class="flex flex-wrap gap-1.5 mt-3">${codeHtml || '<span class="text-[10px] text-slate-500">No equipment code</span>'}</div>
-                            </div>
-                            <div class="flex items-center gap-2 shrink-0">
-                                <button type="button" onclick="viewCalibrationHistory(${actionId})" class="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 text-[10px] font-bold"><i class="fa-solid fa-clock-rotate-left mr-1"></i>History</button>
-                                <button type="button" onclick="editEquipment(${actionId})" class="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/20 text-[10px] font-bold"><i class="fa-solid fa-pen mr-1"></i>Edit</button>
-                                <button type="button" onclick="deleteEquipmentGroup(${actionId})" class="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/20 text-[10px] font-bold"><i class="fa-solid fa-trash mr-1"></i>Delete</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="p-4 space-y-3">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div class="rounded-xl border border-blue-500/20 bg-blue-950/10 p-3">
-                                <div class="flex items-center justify-between gap-2 mb-2">
-                                    <div class="text-[10px] font-black text-blue-300 uppercase tracking-wider"><i class="fa-solid fa-globe mr-1"></i>External Calibration</div>
-                                    <span class="text-[9px] font-bold px-2 py-0.5 rounded border ${badgeColors[extSt] || badgeColors.NA}">${escapeHtml(extSt)}</span>
-                                </div>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px]">
-                                    <div><span class="text-slate-500 block">Schedule</span><span class="text-slate-200">${escapeHtml(ext.sched || first.extSched || '-')}</span></div>
-                                    <div><span class="text-slate-500 block">Calibration</span><span class="text-slate-200">${escapeHtml(ext.calib || first.extCalib || '-')}</span></div>
-                                    <div><span class="text-slate-500 block">Calibrated By</span><span class="text-slate-200">${escapeHtml(ext.by || first.extBy || '-')}</span></div>
-                                    <div><span class="text-slate-500 block">Entries</span><span class="text-slate-200">${extEntries.length}</span></div>
-                                </div>
-                            </div>
-                            <div class="rounded-xl border border-purple-500/20 bg-purple-950/10 p-3">
-                                <div class="flex items-center justify-between gap-2 mb-2">
-                                    <div class="text-[10px] font-black text-purple-300 uppercase tracking-wider"><i class="fa-solid fa-screwdriver-wrench mr-1"></i>Internal Calibration</div>
-                                    <span class="text-[9px] font-bold px-2 py-0.5 rounded border ${badgeColors[intSt] || badgeColors.NA}">${escapeHtml(intSt)}</span>
-                                </div>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px]">
-                                    <div><span class="text-slate-500 block">Schedule</span><span class="text-slate-200">${escapeHtml(int.sched || first.intSched || '-')}</span></div>
-                                    <div><span class="text-slate-500 block">Calibration</span><span class="text-slate-200">${escapeHtml(int.calib || first.intCalib || '-')}</span></div>
-                                    <div><span class="text-slate-500 block">Calibrated By</span><span class="text-slate-200">${escapeHtml(int.by || first.intBy || '-')}</span></div>
-                                    <div><span class="text-slate-500 block">Entries</span><span class="text-slate-200">${intEntries.length}</span></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[9px] text-slate-500">
-                            <span>${escapeHtml(cycleLabel)}${hasHistory ? ' · History available' : ''}</span>
-                            <span>Use <strong class="text-slate-300">History</strong> to edit/delete individual calibration occurrences.</span>
-                        </div>
-                    </div>`;
+                const first=group[0], actionId=first.id;
+                const allCodes=[...new Set(group.map(eq=>String(eq.code||'').trim()).filter(Boolean))];
+                const badge=status=>{const cls={DONE:'bg-emerald-500/10 text-emerald-400 border-emerald-500/20','OVERDUE, DONE':'bg-orange-500/10 text-orange-400 border-orange-500/20',OVERDUE:'bg-red-500/10 text-red-400 border-red-500/20',PENDING:'bg-amber-500/10 text-amber-400 border-amber-500/20',STSOK:'bg-blue-500/10 text-blue-400 border-blue-500/20',NA:'bg-slate-700/40 text-slate-400 border-slate-700/60'}[status]||'bg-slate-700/40 text-slate-300 border-slate-600/60';return `<span class="inline-flex px-1.5 py-0.5 rounded border text-[8px] font-black ${cls}">${escapeHtml(status)}</span>`;};
+                const occ=(eq,type)=>{const es=normalizeSharedCalibrationCycles(eq).flatMap(c=>Array.isArray(c[type])?c[type]:[]).filter(e=>e.sched||e.calib||e.by||e.pr||e.po);return es.length?es.map(e=>badge(getSubCalibStatus(e.sched,e.calib))).join(' '):badge('NA');};
+                const rows=group.map(eq=>`<div class="grid grid-cols-1 md:grid-cols-3 gap-2 items-center rounded-xl border border-slate-700/50 bg-slate-950/35 px-3 py-2"><div><div class="text-[10px] font-black text-white">${escapeHtml(eq.code||'-')}</div><div class="text-[8px] text-slate-500">Individual equipment-code calculation</div></div><div class="text-[9px]"><span class="text-blue-300 font-black mr-1">EXT</span>${occ(eq,'external')}<span class="text-slate-600 mx-1">|</span><span class="text-purple-300 font-black mr-1">INT</span>${occ(eq,'internal')}</div><div class="text-[8px] text-slate-400 md:text-right">Current: ${badge(getSubCalibStatusForRecord(eq,'external'))} ${badge(getSubCalibStatusForRecord(eq,'internal'))}</div></div>`).join('');
+                const card=document.createElement('div'); card.className='rounded-2xl border border-slate-700/60 bg-slate-900/65 overflow-hidden shadow-sm';
+                card.innerHTML=`<div class="p-4 border-b border-slate-700/50 bg-slate-900/80"><div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3"><div><div class="text-[9px] uppercase tracking-wider font-black text-slate-500">Instrument Type</div><h3 class="text-base font-black text-white mt-1">${escapeHtml(first.type||'-')}</h3><div class="text-[10px] text-slate-400 mt-0.5">${escapeHtml(first.plant||'-')} · ${allCodes.length} equipment code${allCodes.length===1?'':'s'}</div><div class="flex flex-wrap gap-1.5 mt-3">${allCodes.map(c=>`<span class="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px] font-bold">${escapeHtml(c)}</span>`).join('')}</div></div><div class="flex items-center gap-2"><button type="button" onclick="viewCalibrationHistory(${actionId})" class="px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px] font-bold">History</button><button type="button" onclick="editEquipment(${actionId})" class="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px] font-bold">Edit</button><button type="button" onclick="deleteEquipmentGroup(${actionId})" class="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-[10px] font-bold">Delete</button></div></div></div><div class="p-4 space-y-3"><div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Calibration Status by Equipment Code</div><div class="space-y-2">${rows}</div><div class="text-[9px] text-slate-500">External and Internal statuses for every code are shown above. All occurrences remain in History.</div></div>`;
                 cards.appendChild(card);
             });
         }
@@ -4392,6 +4326,25 @@ window.addEventListener("cloudsync:status", (event) => {
             return String(cycle?.id || `cycle-${index + 1}`);
         }
 
+        function dedupeEquipmentCodes() {
+            const byKey = new Map(), result = [];
+            (equipmentList || []).forEach(record => {
+                const code = String(record.code || '').trim(); if (!code) return;
+                const key = `${normalizePlant(record.plant)}||${code.toLowerCase()}`;
+                if (!byKey.has(key)) { byKey.set(key, record); result.push(record); return; }
+                const target = byKey.get(key);
+                const merged = mergeSharedCalibrationCycles(normalizeSharedCalibrationCycles(target), normalizeSharedCalibrationCycles(record));
+                target.calibrationCycles = merged.map(c => ({...c, codes:[code]}));
+                target.externalCalibrations = flattenSharedCalibrationCycles(target.calibrationCycles,'external');
+                target.internalCalibrations = flattenSharedCalibrationCycles(target.calibrationCycles,'internal');
+                const le=latestCalibrationCycle(target.externalCalibrations), li=latestCalibrationCycle(target.internalCalibrations);
+                target.extSched=le.sched||''; target.extCalib=le.calib||''; target.extBy=le.by||'';
+                target.intSched=li.sched||''; target.intCalib=li.calib||''; target.intBy=li.by||'';
+                target.pr=target.pr||record.pr||''; target.po=target.po||record.po||'';
+            });
+            equipmentList=result;
+        }
+
         function handleEquipSubmit(e) {
             e.preventDefault();
             if (!isAdminUser()) return;
@@ -4471,6 +4424,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 });
             });
 
+            dedupeEquipmentCodes();
             saveStorage();
             closeEquipModal();
             renderCalibModule();
@@ -4856,7 +4810,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 const availableHours = (equipmentIds.size || 1) * 720;
                 const failures = (logs || []).length;
                 const uptime = Math.max(0, Math.min(100, Number(((1 - (hrs / availableHours)) * 100).toFixed(1))));
-                const mtbf = failures > 0 ? Number((availableHours / failures).toFixed(1)) : 0;
+                const operatingHours = Math.max(0, availableHours - hrs);
+                const mtbf = failures > 0 ? Number((operatingHours / failures).toFixed(1)) : 0;
                 const mttr = failures > 0 ? Number(((hrs / failures) * 60).toFixed(0)) : 0;
                 return { hrs, uptime, mtbf, mttr, failures, availableHours };
             };
