@@ -3896,6 +3896,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function normalizeCalibrationCycle(cycle = {}) {
             return {
+                id: cycle.id || cycle.entryId || "",
                 sched: cycle.sched || cycle.dateSched || "",
                 calib: cycle.calib || cycle.dateCalib || "",
                 by: cycle.by || ""
@@ -3924,6 +3925,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     </button>
                 </div>`;
             const e = normalizeCalibrationCycle(entry);
+            row.dataset.entryId = e.id || ('ce_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8));
             row.querySelector('.entry-sched').value = e.sched;
             row.querySelector('.entry-calib').value = e.calib;
             row.querySelector('.entry-by').value = e.by;
@@ -3981,7 +3983,7 @@ window.addEventListener("cloudsync:status", (event) => {
         function normalizeSharedCalibrationCycles(record = {}) {
             if (Array.isArray(record.calibrationCycles) && record.calibrationCycles.length) {
                 return record.calibrationCycles.map((c, i) => ({
-                    id: c.id || ('cy_migrated_' + i + '_' + Math.random().toString(36).slice(2,7)),
+                    id: c.id || ('cy_migrated_' + i),
                     pr: c.pr || '',
                     po: c.po || '',
                     external: (Array.isArray(c.external) ? c.external : []).map(normalizeCalibrationCycle),
@@ -4040,6 +4042,7 @@ window.addEventListener("cloudsync:status", (event) => {
         function collectCalibrationEntries(cycleRow, type) {
             return [...(cycleRow?.querySelectorAll(`.${type}-entry-list .calibration-entry-row`) || [])]
                 .map(row => ({
+                    id: row.dataset.entryId || ('ce_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
                     sched: row.querySelector('.entry-sched')?.value || '',
                     calib: row.querySelector('.entry-calib')?.value || '',
                     by: row.querySelector('.entry-by')?.value.trim() || ''
@@ -4184,32 +4187,16 @@ window.addEventListener("cloudsync:status", (event) => {
             return normalizeCalibrationCycle(c || {});
         }
 
-        function mergeSharedCalibrationCycles(existing, incoming) {
-            const result = normalizeSharedCalibrationCycles({calibrationCycles: existing});
-            (incoming || []).forEach((incomingCycle, idx) => {
-                const cycle = incomingCycle || {};
-                let target = result.find(c => c.id && cycle.id && c.id === cycle.id);
-                if (!target) {
-                    target = result[idx];
-                }
-                if (!target) {
-                    target = {id: cycle.id || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)), external: [], internal: []};
-                    result.push(target);
-                }
-                ['external','internal'].forEach(type => {
-                    target.pr = cycle.pr || target.pr || '';
-                    target.po = cycle.po || target.po || '';
-                    const existingEntries = Array.isArray(target[type]) ? target[type].map(normalizeCalibrationCycleEntry) : [];
-                    const incomingEntries = Array.isArray(cycle[type]) ? cycle[type].map(normalizeCalibrationCycleEntry) : [];
-                    incomingEntries.forEach(entry => {
-                        if (!entry.sched && !entry.calib && !entry.by) return;
-                        const key = calibrationCycleKey(entry);
-                        if (!existingEntries.some(x => calibrationCycleKey(x) === key)) existingEntries.push(entry);
-                    });
-                    target[type] = existingEntries;
-                });
-            });
-            return result.filter(c => (c.external?.length || 0) + (c.internal?.length || 0) > 0);
+        function replaceSharedCalibrationCycles(incoming) {
+            return normalizeSharedCalibrationCycles({ calibrationCycles: incoming || [] })
+                .map((c, idx) => ({
+                    id: c.id || ('cy_' + (idx + 1)),
+                    pr: c.pr || '',
+                    po: c.po || '',
+                    external: (c.external || []).map(normalizeCalibrationCycle),
+                    internal: (c.internal || []).map(normalizeCalibrationCycle)
+                }))
+                .filter(c => (c.external?.length || 0) + (c.internal?.length || 0) > 0 || c.pr || c.po);
         }
 
         function flattenSharedCalibrationCycles(cycles, type) {
@@ -4230,82 +4217,124 @@ window.addEventListener("cloudsync:status", (event) => {
             e.preventDefault();
             if (!isAdminUser()) return;
 
-            const editId = document.getElementById("eq-id").value;
-            const shared = getSharedEquipmentData();
-            const groups = collectCalibrationGroups();
-            const codes = [...new Set(groups.flatMap(g => g.codes).map(c => String(c || '').trim().toLowerCase()).filter(Boolean))];
-            if (!codes.length) return alert("Please enter at least one equipment code.");
-            if (!groups.length) return alert("Please enter at least one calibration cycle or PR/PO group.");
+            try {
+                const editId = document.getElementById("eq-id")?.value || '';
+                const shared = getSharedEquipmentData();
+                const groups = collectCalibrationGroups();
+                const codes = [...new Set(groups.flatMap(g => g.codes)
+                    .map(c => String(c || '').trim())
+                    .filter(Boolean))];
 
-            const workingIds = editId ? editId.split(",").map(v => Number(v)).filter(Boolean) : [];
-            const selectedExisting = new Set(workingIds);
+                if (!shared.plant || !shared.type) {
+                    alert("Please select the Plant and Instrument Type.");
+                    return;
+                }
+                if (!codes.length) {
+                    alert("Please enter at least one equipment code.");
+                    return;
+                }
+                if (!groups.length) {
+                    alert("Please enter at least one calibration cycle or PR/PO group.");
+                    return;
+                }
 
-            groups.forEach(group => {
-                group.codes.forEach(code => {
-                    const cleanCode = String(code || '').trim();
-                    if (!cleanCode) return;
-                    let record = null;
-                    if (editId) record = equipmentList.find(item => selectedExisting.has(item.id) && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
-                    if (!record) record = equipmentList.find(item => normalizePlant(item.plant) === normalizePlant(shared.plant) && String(item.type || '').trim() === String(shared.type || '').trim() && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
+                const workingIds = editId ? editId.split(',').map(v => Number(v)).filter(Boolean) : [];
+                const selectedExisting = new Set(workingIds);
+                const nowIso = new Date().toISOString();
 
-                    if (!record) {
-                        record = {id: Date.now() + Math.floor(Math.random()*1000000), ...shared, code:cleanCode, pr:'', po:'', extSched:'', extCalib:'', extBy:'', intSched:'', intCalib:'', intBy:'', externalCalibrations:[], internalCalibrations:[], calibrationCycles:[], calibrationHistory:[]};
-                        equipmentList.push(record);
-                    }
-                    record.plant = shared.plant;
-                    record.type = shared.type;
-                    if (group.pr) record.pr = group.pr;
-                    if (group.po) record.po = group.po;
+                groups.forEach(group => {
+                    const cycleData = replaceSharedCalibrationCycles(group.calibrationCycles || []);
+                    group.codes.forEach(code => {
+                        const cleanCode = String(code || '').trim();
+                        if (!cleanCode) return;
 
-                    const beforeCycles = normalizeSharedCalibrationCycles(record);
-                    // IMPORTANT: cycles belong to this existing equipment record.
-                    // Never create a new equipment record merely because a new cycle was added.
-                    const mergedCycles = mergeSharedCalibrationCycles(beforeCycles, group.calibrationCycles);
-                    record.calibrationCycles = mergedCycles;
-                    record.externalCalibrations = flattenSharedCalibrationCycles(mergedCycles, 'external');
-                    record.internalCalibrations = flattenSharedCalibrationCycles(mergedCycles, 'internal');
-                    const latestExt = latestCalibrationCycle(record.externalCalibrations);
-                    const latestInt = latestCalibrationCycle(record.internalCalibrations);
-                    record.extSched = latestExt.sched || '';
-                    record.extCalib = latestExt.calib || '';
-                    record.extBy = latestExt.by || '';
-                    record.intSched = latestInt.sched || '';
-                    record.intCalib = latestInt.calib || '';
-                    record.intBy = latestInt.by || '';
+                        let record = null;
+                        if (editId) {
+                            record = equipmentList.find(item =>
+                                selectedExisting.has(item.id) &&
+                                String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase()
+                            );
+                        }
+                        if (!record) {
+                            record = equipmentList.find(item =>
+                                normalizePlant(item.plant) === normalizePlant(shared.plant) &&
+                                String(item.type || '').trim() === String(shared.type || '').trim() &&
+                                String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase()
+                            );
+                        }
 
-                    if (!Array.isArray(record.calibrationHistory)) record.calibrationHistory = [];
-                    mergedCycles.forEach((cycle, idx) => {
-                        const hasData = (cycle.external?.length || 0) + (cycle.internal?.length || 0) > 0;
-                        if (!hasData) return;
-                        const key = cycleHistoryKey(cycle, idx);
-                        const snapshot = {
-                            cycleId: key,
-                            cycle: idx + 1,
-                            recordedAt: new Date().toISOString(),
-                            pr: cycle.pr || record.pr || '',
-                            po: cycle.po || record.po || '',
-                            externalCalibrations: cycle.external || [],
-                            internalCalibrations: cycle.internal || [],
-                            extSched: latestCalibrationCycle(cycle.external || []).sched || '',
-                            extCalib: latestCalibrationCycle(cycle.external || []).calib || '',
-                            extBy: latestCalibrationCycle(cycle.external || []).by || '',
-                            intSched: latestCalibrationCycle(cycle.internal || []).sched || '',
-                            intCalib: latestCalibrationCycle(cycle.internal || []).calib || '',
-                            intBy: latestCalibrationCycle(cycle.internal || []).by || ''
-                        };
-                        const existingIndex = record.calibrationHistory.findIndex(h => String(h.cycleId || '') === key);
-                        if (existingIndex >= 0) record.calibrationHistory[existingIndex] = snapshot;
-                        else record.calibrationHistory.push(snapshot);
+                        if (!record) {
+                            record = {
+                                id: Date.now() + Math.floor(Math.random() * 1000000),
+                                ...shared,
+                                code: cleanCode,
+                                pr: '', po: '',
+                                extSched: '', extCalib: '', extBy: '',
+                                intSched: '', intCalib: '', intBy: '',
+                                externalCalibrations: [],
+                                internalCalibrations: [],
+                                calibrationCycles: [],
+                                calibrationHistory: []
+                            };
+                            equipmentList.push(record);
+                        }
+
+                        record.plant = shared.plant;
+                        record.type = shared.type;
+                        record.code = cleanCode;
+                        if (group.pr) record.pr = group.pr;
+                        if (group.po) record.po = group.po;
+
+                        // The form contains the complete cycle list for this code.
+                        // Replace it rather than merging duplicate/old entries.
+                        record.calibrationCycles = cycleData;
+                        record.externalCalibrations = flattenSharedCalibrationCycles(cycleData, 'external');
+                        record.internalCalibrations = flattenSharedCalibrationCycles(cycleData, 'internal');
+
+                        const latestExt = latestCalibrationCycle(record.externalCalibrations);
+                        const latestInt = latestCalibrationCycle(record.internalCalibrations);
+                        record.extSched = latestExt.sched || '';
+                        record.extCalib = latestExt.calib || '';
+                        record.extBy = latestExt.by || '';
+                        record.intSched = latestInt.sched || '';
+                        record.intCalib = latestInt.calib || '';
+                        record.intBy = latestInt.by || '';
+
+                        if (!Array.isArray(record.calibrationHistory)) record.calibrationHistory = [];
+                        cycleData.forEach((cycle, idx) => {
+                            const key = cycleHistoryKey(cycle, idx);
+                            const snapshot = {
+                                cycleId: key,
+                                cycle: idx + 1,
+                                recordedAt: nowIso,
+                                pr: cycle.pr || record.pr || '',
+                                po: cycle.po || record.po || '',
+                                externalCalibrations: cycle.external || [],
+                                internalCalibrations: cycle.internal || [],
+                                extSched: latestCalibrationCycle(cycle.external || []).sched || '',
+                                extCalib: latestCalibrationCycle(cycle.external || []).calib || '',
+                                extBy: latestCalibrationCycle(cycle.external || []).by || '',
+                                intSched: latestCalibrationCycle(cycle.internal || []).sched || '',
+                                intCalib: latestCalibrationCycle(cycle.internal || []).calib || '',
+                                intBy: latestCalibrationCycle(cycle.internal || []).by || ''
+                            };
+                            const existingIndex = record.calibrationHistory.findIndex(h => String(h.cycleId || '') === key);
+                            if (existingIndex >= 0) record.calibrationHistory[existingIndex] = snapshot;
+                            else record.calibrationHistory.push(snapshot);
+                        });
                     });
-                    if (record.calibrationHistory.length > 100) record.calibrationHistory = record.calibrationHistory.slice(-100);
                 });
-            });
 
-            saveStorage();
-            closeEquipModal();
-            renderCalibModule();
-            renderSummaryModule();
-            renderCalendarModule();
+                saveStorage();
+                closeEquipModal();
+                renderCalibModule();
+                renderSummaryModule();
+                renderCalendarModule();
+                alert("Calibration entries saved successfully.");
+            } catch (err) {
+                console.error('Calibration save failed:', err);
+                alert("Unable to save calibration entries. Please check the entry fields and try again.");
+            }
         }
 
         function editEquipment(id) {
