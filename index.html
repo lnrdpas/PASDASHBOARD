@@ -384,73 +384,80 @@ window.CloudSync = (() => {
         return String(id ?? `${Date.now()}-${index}`);
     }
 
-    function calibrationFieldNames() {
-        return [
-            "calibrationCycles",
-            "externalCalibrations",
-            "internalCalibrations",
-            "extSched", "extCalib", "extBy",
-            "intSched", "intCalib", "intBy"
-        ];
+    // Calibration data is stored inside equipment_records.data. Older cloud
+    // rows may contain the equipment identity but not the newer calibration
+    // cycle/history fields. Never let a cloud pull erase those local fields.
+    function hasCalibrationData(record) {
+        if (!record || typeof record !== 'object') return false;
+        return !!(
+            (Array.isArray(record.calibrationCycles) && record.calibrationCycles.length) ||
+            (Array.isArray(record.externalCalibrations) && record.externalCalibrations.length) ||
+            (Array.isArray(record.internalCalibrations) && record.internalCalibrations.length) ||
+            (Array.isArray(record.calibrationHistory) && record.calibrationHistory.length) ||
+            record.extSched || record.extCalib || record.extBy ||
+            record.intSched || record.intCalib || record.intBy ||
+            record.pr || record.po
+        );
     }
 
-    function hasCalibrationPayload(record) {
-        if (!record || typeof record !== "object") return false;
-        return calibrationFieldNames().some(key => {
-            const value = record[key];
-            if (Array.isArray(value)) return value.length > 0;
-            return value !== undefined && value !== null && String(value) !== "";
-        });
-    }
+    function mergeEquipmentCalibration(localRecord, remoteRecord) {
+        if (!localRecord) return remoteRecord;
+        if (!remoteRecord) return localRecord;
 
-    function mergeCalibrationPayload(localRecord, remoteRecord) {
-        const localHas = hasCalibrationPayload(localRecord);
-        const remoteHas = hasCalibrationPayload(remoteRecord);
-        const localHasRichCycles = Array.isArray(localRecord?.calibrationCycles) && localRecord.calibrationCycles.length > 0;
-        const remoteHasRichCycles = Array.isArray(remoteRecord?.calibrationCycles) && remoteRecord.calibrationCycles.length > 0;
-        if (!localHas || (remoteHas && (!localHasRichCycles || remoteHasRichCycles))) return remoteRecord;
-        const merged = { ...(remoteRecord || {}) };
-        calibrationFieldNames().forEach(key => {
-            if (localRecord[key] !== undefined && localRecord[key] !== null &&
-                (!(key in merged) || merged[key] === "" || (Array.isArray(merged[key]) && !merged[key].length))) {
-                merged[key] = localRecord[key];
-            }
+        const merged = { ...remoteRecord };
+        const localCycles = normalizeSharedCalibrationCycles(localRecord);
+        const remoteCycles = normalizeSharedCalibrationCycles(remoteRecord);
+        if (localCycles.length || remoteCycles.length) {
+            const cycles = mergeSharedCalibrationCycles(localCycles, remoteCycles);
+            merged.calibrationCycles = cycles;
+            merged.externalCalibrations = flattenSharedCalibrationCycles(cycles, 'external');
+            merged.internalCalibrations = flattenSharedCalibrationCycles(cycles, 'internal');
+        } else {
+            ['calibrationCycles','externalCalibrations','internalCalibrations','calibrationHistory',
+             'extSched','extCalib','extBy','intSched','intCalib','intBy','pr','po'].forEach(key => {
+                if (localRecord[key] !== undefined && (merged[key] === undefined || merged[key] === null || merged[key] === '')) {
+                    merged[key] = localRecord[key];
+                }
+            });
+        }
+
+        // History is an audit trail; keep both local and cloud history entries.
+        const histories = [...(Array.isArray(remoteRecord.calibrationHistory) ? remoteRecord.calibrationHistory : []),
+                           ...(Array.isArray(localRecord.calibrationHistory) ? localRecord.calibrationHistory : [])];
+        if (histories.length) {
+            const byKey = new Map();
+            histories.forEach((h, i) => byKey.set(String(h?.cycleId || `${i}-${JSON.stringify(h)}`), h));
+            merged.calibrationHistory = Array.from(byKey.values());
+        }
+
+        // Preserve the latest legacy fields when the remote row has no value.
+        ['extSched','extCalib','extBy','intSched','intCalib','intBy','pr','po'].forEach(key => {
+            if ((merged[key] === undefined || merged[key] === null || merged[key] === '') && localRecord[key]) merged[key] = localRecord[key];
         });
         return merged;
     }
 
     function mergeEquipmentCloudRows(localRows, remoteRows) {
-        const local = Array.isArray(localRows) ? localRows : [];
-        const remote = Array.isArray(remoteRows) ? remoteRows : [];
-        const byId = new Map(local.filter(Boolean).map(row => [String(row?.id), row]));
-        const byCode = new Map();
-        local.filter(Boolean).forEach(row => {
-            const key = `${normalizePlant(row?.plant)}||${String(row?.code || "").trim().toLowerCase()}`;
-            if (key.endsWith("||")) return;
-            if (!byCode.has(key)) byCode.set(key, row);
-        });
-
+        const localById = new Map((localRows || []).filter(Boolean).map(x => [String(x.id), x]));
+        const localByKey = new Map((localRows || []).filter(Boolean).map(x => [`${normalizePlant(x.plant)}||${String(x.code || '').trim().toLowerCase()}`, x]));
+        const remoteIds = new Set((remoteRows || []).filter(Boolean).map(x => String(x.id)));
+        const usedLocal = new Set();
         const merged = [];
-        const remoteMatchedLocalIds = new Set();
-        remote.filter(Boolean).forEach(remoteRow => {
-            const codeKey = `${normalizePlant(remoteRow?.plant)}||${String(remoteRow?.code || "").trim().toLowerCase()}`;
-            const localRow = byId.get(String(remoteRow?.id)) || byCode.get(codeKey);
-            if (localRow) {
-                remoteMatchedLocalIds.add(String(localRow?.id));
-                merged.push(mergeCalibrationPayload(localRow, remoteRow));
-            } else {
-                merged.push(remoteRow);
-            }
+
+        (remoteRows || []).filter(Boolean).forEach(remote => {
+            const key = `${normalizePlant(remote.plant)}||${String(remote.code || '').trim().toLowerCase()}`;
+            const local = localById.get(String(remote.id)) || localByKey.get(key);
+            if (local) usedLocal.add(local);
+            merged.push(local ? mergeEquipmentCalibration(local, remote) : remote);
         });
 
-        // If a calibration/equipment record exists only in this browser, do not
-        // erase it merely because the cloud table is missing that row.
-        local.filter(Boolean).forEach(localRow => {
-            if (!remoteMatchedLocalIds.has(String(localRow?.id))) {
-                merged.push(localRow);
-            }
+        // Keep local equipment records that contain calibration data even if
+        // the current cloud row is missing them. This prevents refresh/login
+        // from deleting the user's calibration tracker information.
+        (localRows || []).filter(Boolean).forEach(local => {
+            if (usedLocal.has(local)) return;
+            if (!remoteIds.has(String(local.id)) && hasCalibrationData(local)) merged.push(local);
         });
-
         return merged;
     }
 
@@ -463,12 +470,18 @@ window.CloudSync = (() => {
 
         if (error) throw error;
 
-        const remoteRows = (data || []).map(row => row.data).filter(Boolean);
-        const localRows = readArray(cfg.key);
-        const rows = dataset === "equipment"
-            ? mergeEquipmentCloudRows(localRows, remoteRows)
-            : remoteRows;
-
+        const rows = (data || []).map(row => row.data).filter(Boolean);
+        if (dataset === "equipment") {
+            const localRows = readArray(cfg.key);
+            const mergedRows = mergeEquipmentCloudRows(localRows, rows);
+            writeArray(cfg.key, mergedRows);
+            // Keep the raw cloud snapshot as the sync baseline. If local
+            // calibration was preserved, push() will recognize it as a local
+            // change and upload it instead of losing it again.
+            lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
+            window.__PASDASHBOARD_EQUIPMENT_NEEDS_PUSH__ = !sameJson(mergedRows, rows);
+            return mergedRows;
+        }
         writeArray(cfg.key, rows);
         lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
         return rows;
@@ -764,29 +777,22 @@ window.CloudSync = (() => {
     async function start() {
         if (!init()) return { ok: false, configured: false };
 
-        // Keep the browser's existing equipment/calibration snapshot available
-        // while the cloud data is loaded. The equipment pull merges calibration
-        // fields and calibration-only local rows instead of deleting them.
-        // This prevents a refresh from making the Calibration Tracker empty
-        // when Executive Summary can still read the same equipment dataset.
-        Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
-
-        // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
-        // the pull itself can trigger a save of stale/partial browser data.
+        // IMPORTANT: keep the browser dataset during the cloud pull. Calibration
+        // cycles/history may exist locally while an older Supabase equipment row
+        // contains only the basic equipment fields. Clearing localStorage here
+        // was the reason calibration tracker data disappeared after reopening
+        // or refreshing the page. The equipment pull now merges calibration data
+        // into the cloud rows and preserves local calibration-only records.
         const result = await pull();
         if (result.ok) {
-            // If local calibration data had to be merged back into the equipment
-            // dataset, persist that repaired combined dataset to Supabase now.
-            // This makes the next browser refresh receive the same calibration
-            // records instead of depending on localStorage again.
-            const equipment = readArray(DATASETS.equipment.key);
-            const remoteEquipment = await fetchRemoteDataset("equipment");
-            if (JSON.stringify(equipment) !== JSON.stringify(remoteEquipment)) {
-                await replaceDataset("equipment", equipment);
-                lastSynced.equipment = JSON.parse(JSON.stringify(equipment));
-            }
             installStorageWatcher();
             startBackgroundRefresh();
+            // If the pull had to preserve calibration fields that were absent from
+            // Supabase, immediately synchronize the merged equipment record back.
+            if (window.__PASDASHBOARD_EQUIPMENT_NEEDS_PUSH__) {
+                window.__PASDASHBOARD_EQUIPMENT_NEEDS_PUSH__ = false;
+                schedulePush();
+            }
         }
         return result;
     }
@@ -3623,7 +3629,15 @@ window.addEventListener("cloudsync:status", (event) => {
             };
             const primaryCalib=calcCalib(filteredEq, primaryType, primaryValue), compareCalib=isCompare?calcCalib(comparisonEq, compareType, compareValue):null;
             const calibChartIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
-            const calibChartPrimary = calibChartIgnoreFilter ? calcCalib(equipmentList, primaryType, primaryValue) : primaryCalib;
+            const calibChartPrimary = calibChartIgnoreFilter
+                ? calcCalib(
+                    currentPlant === "ALL"
+                        ? equipmentList
+                        : equipmentList.filter(eq => normalizePlant(eq.plant) === normalizePlant(currentPlant)),
+                    'all',
+                    ''
+                  )
+                : primaryCalib;
             const calibChartCompare = (!calibChartIgnoreFilter && isCompare) ? compareCalib : null;
             window._summaryCompareCalib = calibChartCompare?.compliance || 0;
             const primaryDown=calcDowntime(filteredDt), compareDown=isCompare?calcDowntime(comparisonDt):null;
@@ -3793,27 +3807,20 @@ window.addEventListener("cloudsync:status", (event) => {
                 projectByPlant[p] = { "In Progress": 0, Planning: 0, "On Hold": 0, Completed: 0 };
             });
 
-            // Supporting details use the SAME workload logic as the calibration graph.
-            // The single Calibration Ignore Filters checkbox controls BOTH the graph and
-            // its supporting details. It ignores date filters but still respects plant.
-            const calibSupportingIgnore = !!document.getElementById('summary-calib-ignore-filter')?.checked;
-            const projectSupportingIgnore = !!document.getElementById('summary-projects-ignore-filter')?.checked;
-            const calibrationSupportingSource = calibSupportingIgnore ? equipmentList : filteredEq;
-            const projectSupportingSource = projectSupportingIgnore ? projectsList : filteredPr;
-            const calibrationSupportingCompare = (!calibSupportingIgnore && isCompare) ? comparisonEq : [];
-            const projectSupportingCompare = (!projectSupportingIgnore && isCompare) ? comparisonPr : [];
-
+            // Supporting details use the SAME occurrence x equipment-code workload logic as the main KPI.
+            const calibSupportingIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
             allSummaryPlants.forEach(plant => {
-                const plantRecords = calibrationSupportingSource.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
-                const w = calcCalib(
-                    plantRecords,
-                    calibSupportingIgnore ? 'all' : primaryType,
-                    calibSupportingIgnore ? '' : primaryValue
-                );
+                // Keep the plant filter, but when Ignore Filters is checked, ignore
+                // the Executive Summary date/year/month filter for the supporting details
+                // exactly like the Calibration Status Breakdown graph.
+                const plantRecords = (calibSupportingIgnoreFilter ? equipmentList : filteredEq)
+                    .filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
+                const w = calcCalib(plantRecords, calibSupportingIgnoreFilter ? 'all' : primaryType, calibSupportingIgnoreFilter ? '' : primaryValue);
                 calibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
             });
 
-            projectSupportingSource.forEach(pr => {
+            const projectSupportingIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
+            (projectSupportingIgnoreFilter ? projectsList : filteredPr).forEach(pr => {
                 const plant = normalizePlant(pr.plant);
                 if (!projectByPlant[plant]) return;
                 const status = String(pr.status || "Planning").trim();
@@ -3822,14 +3829,16 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const compareCalibByPlant = {};
             allSummaryPlants.forEach(p => compareCalibByPlant[p] = {done:0, scheduled:0});
-            allSummaryPlants.forEach(plant => {
-                const plantRecords = calibrationSupportingCompare.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
-                const w = calcCalib(plantRecords, compareType, compareValue);
-                compareCalibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
-            });
+            if (isCompare && !calibSupportingIgnoreFilter) {
+                allSummaryPlants.forEach(plant => {
+                    const plantRecords = comparisonEq.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
+                    const w = calcCalib(plantRecords, compareType, compareValue);
+                    compareCalibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
+                });
+            }
             const calibSupp = document.getElementById("summary-per-plant-calib");
-            const calibSupportingCompareActive = !calibSupportingIgnore && isCompare;
-            calibSupp.innerHTML = calibSupportingCompareActive ? `
+            const showCalibSupportingComparison = isCompare && !calibSupportingIgnoreFilter;
+            calibSupp.innerHTML = showCalibSupportingComparison ? `
                 <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryDisplay || 'Date 1')} vs ${escapeHtml(compareDisplay || 'Date 2')}</div>
                 <div class="grid grid-cols-5 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
                     <span>Plant</span><span>Period</span><span class="text-center">Done</span><span class="text-center">Scheduled</span><span class="text-center">Percent</span>
@@ -3856,9 +3865,9 @@ window.addEventListener("cloudsync:status", (event) => {
                 : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
             const compareProjectByPlant = {};
             allSummaryPlants.forEach(p => compareProjectByPlant[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
-            projectSupportingCompare.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
-            const projectSupportingCompareActive = !projectSupportingIgnore && isCompare;
-            projSupp.innerHTML = projectSupportingCompareActive ? `
+            comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
+            const showProjectSupportingComparison = isCompare && !projectSupportingIgnoreFilter;
+            projSupp.innerHTML = showProjectSupportingComparison ? `
                 <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryDisplay || 'Date 1')} vs ${escapeHtml(compareDisplay || 'Date 2')}</div>
                 <div class="grid grid-cols-6 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span>Period</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
                 ${summaryPlants.map(p=>{const a=projectByPlant[p]||{},b=compareProjectByPlant[p]||{};return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-6 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryDisplay || 'Date 1')}</span><strong class="text-center text-blue-400">${a['In Progress']||0}</strong><strong class="text-center text-amber-400">${a.Planning||0}</strong><strong class="text-center text-red-400">${a['On Hold']||0}</strong><strong class="text-center text-emerald-400">${a.Completed||0}</strong></div><div class="grid grid-cols-6 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareDisplay || 'Date 2')}</span><strong class="text-center text-blue-300">${b['In Progress']||0}</strong><strong class="text-center text-amber-300">${b.Planning||0}</strong><strong class="text-center text-red-300">${b['On Hold']||0}</strong><strong class="text-center text-emerald-300">${b.Completed||0}</strong></div></div>`;}).join('')}
