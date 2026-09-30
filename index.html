@@ -1351,22 +1351,22 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
 
                     <div class="overflow-x-auto rounded-xl border border-slate-700/50">
-                        <table class="w-full text-left text-xs text-slate-300">
+                        <table class="w-full min-w-[1500px] text-left text-[11px] leading-tight text-slate-300">
                             <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                 <tr>
-                                    <th style="width: 15%;">Equipment</th>
-                                    <th style="width: 14%;">Equipment Codes</th>
-                                    <th style="width: 10%;">PR NO. &nbsp;&nbsp; PO NO.</th>
-                                    <th style="width: 7%;" class="text-center bg-blue-950/20 border-l border-slate-700/40">EXT Sched</th>
-                                    <th style="width: 7%;" class="text-center bg-blue-950/20">EXT Calib</th>
-                                    <th style="width: 10%;" class="text-center bg-blue-950/20">EXT Calibrated By</th>
-                                    <th style="width: 7%;" class="text-center bg-blue-950/20 border-r border-slate-700/40">EXT Status</th>
-                                    <th style="width: 7%;" class="text-center bg-purple-950/20">INT Sched</th>
-                                    <th style="width: 7%;" class="text-center bg-purple-950/20">INT Calib</th>
-                                    <th style="width: 10%;" class="text-center bg-purple-950/20">INT Calibrated By</th>
-                                    <th style="width: 7%;" class="text-center bg-purple-950/20 border-r border-slate-700/40">INT Status</th>
-                                    <th style="width: 7%;" class="text-center">Overall</th>
-                                    <th style="width: 6%;" class="text-center action-col">Action</th>
+                                    <th class="px-3 py-2 min-w-[180px]">Equipment</th>
+                                    <th class="px-3 py-2 min-w-[170px]">Equipment Codes</th>
+                                    <th class="px-3 py-2 min-w-[150px]">PR NO. &nbsp;&nbsp; PO NO.</th>
+                                    <th class="px-3 py-2 min-w-[105px] text-center bg-blue-950/20 border-l border-slate-700/40">EXT Sched</th>
+                                    <th class="px-3 py-2 min-w-[105px] text-center bg-blue-950/20">EXT Calib</th>
+                                    <th class="px-3 py-2 min-w-[145px] text-center bg-blue-950/20">EXT Calibrated By</th>
+                                    <th class="px-3 py-2 min-w-[115px] text-center bg-blue-950/20 border-r border-slate-700/40">EXT Status</th>
+                                    <th class="px-3 py-2 min-w-[105px] text-center bg-purple-950/20">INT Sched</th>
+                                    <th class="px-3 py-2 min-w-[105px] text-center bg-purple-950/20">INT Calib</th>
+                                    <th class="px-3 py-2 min-w-[145px] text-center bg-purple-950/20">INT Calibrated By</th>
+                                    <th class="px-3 py-2 min-w-[115px] text-center bg-purple-950/20 border-r border-slate-700/40">INT Status</th>
+                                    <th class="px-3 py-2 min-w-[105px] text-center">Overall</th>
+                                    <th class="px-3 py-2 min-w-[90px] text-center action-col">Action</th>
                                 </tr>
                             </thead>
                             <tbody id="calib-table-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -1716,7 +1716,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
     <!-- MODALS -->
     <div id="modal-equipment" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-5xl w-full p-5 sm:p-6 shadow-2xl space-y-3 sm:space-y-4 max-h-[92vh] overflow-y-auto">
             <div class="flex items-center justify-between pb-3 border-b border-slate-700">
                 <div>
                     <h3 id="modal-equip-title" class="text-sm font-bold text-white">Add Calibration Entries</h3>
@@ -1724,7 +1724,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>
                 <button onclick="closeEquipModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
-            <form id="form-equipment" onsubmit="handleEquipSubmit(event)" class="space-y-4 text-xs">
+            <form id="form-equipment" novalidate onsubmit="handleEquipSubmit(event)" class="space-y-4 text-xs">
                 <input type="hidden" id="eq-id">
 
                 <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 space-y-3">
@@ -3908,7 +3908,7 @@ window.addEventListener("cloudsync:status", (event) => {
             groupMap.forEach(group => {
                 const first = group[0];
                 const codes = [...new Map(group.map(eq => [String(eq.code || '').trim().toLowerCase(), String(eq.code || '').trim()])).values()].filter(Boolean);
-                const codeCell = codes.map(code => `<div class="py-1 ${codes.length > 1 ? 'border-b border-slate-700/40 last:border-0' : ''}"><span class="text-blue-300 font-black">${esc(code)}</span></div>`).join('');
+                const codeCell = codes.map(code => `<div class="py-0.5 leading-tight ${codes.length > 1 ? 'border-b border-slate-700/40 last:border-0' : ''}"><span class="text-blue-300 font-black whitespace-nowrap">${esc(code)}</span></div>`).join('');
                 const extCells = group.map(eq => `<div class="py-1 text-center ${group.length > 1 ? 'border-b border-slate-700/40 last:border-0' : ''}">${esc(eq.extSched || '-')}</div>`).join('');
                 const extCalibCells = group.map(eq => `<div class="py-1 text-center ${group.length > 1 ? 'border-b border-slate-700/40 last:border-0' : ''}">${esc(eq.extCalib || '-')}</div>`).join('');
                 const extByCells = group.map(eq => `<div class="py-1 text-center ${group.length > 1 ? 'border-b border-slate-700/40 last:border-0' : ''}">${esc(eq.extBy || '-')}</div>`).join('');
@@ -3924,8 +3924,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-800/50 transition align-top';
                 tr.innerHTML = `
-                    <td class="py-3 px-3"><div class="font-bold text-white">${esc(first.type || '-')}</div><p class="text-[10px] text-slate-400 mt-0.5">${esc(first.plant || '-')}</p><span class="inline-flex mt-1 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">${codes.length} code${codes.length===1?'':'s'}</span></td>
-                    <td class="py-3 px-3">${codeCell}</td>
+                    <td class="py-2 px-3"><div class="font-bold text-white">${esc(first.type || '-')}</div><p class="text-[10px] text-slate-400 mt-0.5">${esc(first.plant || '-')}</p><span class="inline-flex mt-1 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">${codes.length} code${codes.length===1?'':'s'}</span></td>
+                    <td class="py-2 px-3">${codeCell}</td>
                     <td class="py-3 px-3 font-mono text-[11px]"><div class="text-blue-300">${esc(prValues.join(', ') || '-')}</div><div class="text-purple-300">${esc(poValues.join(', ') || '-')}</div></td>
                     <td class="py-3 px-3 bg-blue-950/10 text-[11px]">${extCells}</td>
                     <td class="py-3 px-3 bg-blue-950/10 text-[11px]">${extCalibCells}</td>
@@ -3935,7 +3935,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     <td class="py-3 px-3 bg-purple-950/10 text-[11px]">${intCalibCells}</td>
                     <td class="py-3 px-3 bg-purple-950/10 text-[11px]">${intByCells}</td>
                     <td class="py-3 px-3 bg-purple-950/10 border-r border-slate-700/30">${intStatusCells}</td>
-                    <td class="py-3 px-3">${overallCells}</td>
+                    <td class="py-2 px-3">${overallCells}</td>
                     <td class="py-3 px-3 text-center action-col"><div class="flex items-center justify-center gap-1.5">
                         <button onclick="viewCalibrationHistory(${first.id})" class="edit-delete-action text-purple-400 hover:text-purple-300 p-1.5" title="View calibration history"><i class="fa-solid fa-clock-rotate-left"></i></button>
                         <button onclick="editEquipment(${first.id})" class="edit-delete-action text-blue-400 hover:text-blue-300 p-1.5" title="Edit equipment"><i class="fa-solid fa-pen"></i></button>
@@ -4009,7 +4009,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const row = document.createElement("div");
             row.className = `calibration-entry-row ${type}-entry-row bg-slate-900/70 border border-slate-700/50 rounded-lg p-2`;
             row.innerHTML = `
-                <div class="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1.2fr_auto] gap-1.5 items-end">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.2fr_auto] gap-2 items-end">
                     <div>
                         <label class="block text-slate-400 text-[9px]">Schedule Date</label>
                         <input type="date" class="entry-sched w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]">
@@ -4018,7 +4018,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <label class="block text-slate-400 text-[9px]">Calibration Date</label>
                         <input type="date" class="entry-calib w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]">
                     </div>
-                    <div class="col-span-2 sm:col-span-1">
+                    <div class="sm:col-span-2 lg:col-span-1">
                         <label class="block text-slate-400 text-[9px]">Calibrated By</label>
                         <input type="text" class="entry-by w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="Vendor / Technician">
                     </div>
@@ -4355,8 +4355,14 @@ window.addEventListener("cloudsync:status", (event) => {
         function handleEquipSubmit(e) {
             e.preventDefault();
             if (!isAdminUser()) return;
+            const plantEl = document.getElementById("eq-shared-plant");
+            const typeEl = document.getElementById("eq-shared-type");
+            if (!plantEl?.value) { alert("Please select a Plant."); plantEl?.focus(); return; }
+            if (!typeEl?.value) { alert("Please select an Instrument / Equipment Class."); typeEl?.focus(); return; }
             const editId = document.getElementById("eq-id").value;
             const shared = getSharedEquipmentData();
+            if (!String(shared.plant || '').trim()) { alert("Please select a Plant."); return; }
+            if (!String(shared.type || '').trim()) { alert("Please select an Instrument / Equipment Class."); return; }
             const groups = collectCalibrationGroups();
             const codes = [...new Set(groups.flatMap(g => g.codes).map(c => String(c).trim()).filter(Boolean))];
             if (!codes.length) return alert("Please enter at least one equipment code.");
@@ -4755,7 +4761,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <strong class="text-white">${escapeHtml(dt.code)} - ${escapeHtml(dt.equipment)}</strong>
                             <p class="text-[10px] text-slate-400">${escapeHtml(dt.line)} (${escapeHtml(dt.plant)})</p>
                         </td>
-                        <td class="py-3 px-3"><span class="bg-slate-900 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(dt.category)}</span></td>
+                        <td class="py-2 px-3"><span class="bg-slate-900 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(dt.category)}</span></td>
                         <td class="py-3 px-3 text-[11px]">${dt.start.replace('T', ' ')}</td>
                         <td class="py-3 px-3 text-[11px]">${dt.end.replace('T', ' ')}</td>
                         <td class="py-3 px-3 text-center text-red-400 font-bold">${dur.toFixed(1)} hrs</td>
