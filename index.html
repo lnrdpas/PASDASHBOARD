@@ -1439,21 +1439,25 @@ window.addEventListener("cloudsync:status", (event) => {
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl relative">
                         <p class="text-xs text-slate-400 font-semibold">Uptime Percentage</p>
                         <h3 id="uptime-kpi-percent" class="text-2xl font-black text-emerald-400 mt-1">100%</h3>
+                        <div id="uptime-kpi-percent-compare" class="summary-kpi-compare hidden"></div>
                         <p id="uptime-compare-pct-label" class="text-[10px] text-slate-400 mt-1">Target Operational Efficiency: &gt;95%</p>
                     </div>
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <p class="text-xs text-slate-400 font-semibold">Total Downtime Duration</p>
                         <h3 id="uptime-kpi-hours" class="text-2xl font-black text-red-400 mt-1">0 hrs</h3>
+                        <div id="uptime-kpi-hours-compare" class="summary-kpi-compare hidden"></div>
                         <p id="uptime-compare-hrs-label" class="text-[10px] text-slate-400 mt-1">Across Selected Plant Lines</p>
                     </div>
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <p class="text-xs text-slate-400 font-semibold">MTBF (Mean Time Between Failures)</p>
                         <h3 id="uptime-kpi-mtbf" class="text-2xl font-black text-blue-400 mt-1">0 hrs</h3>
+                        <div id="uptime-kpi-mtbf-compare" class="summary-kpi-compare hidden"></div>
                         <p class="text-[10px] text-slate-400 mt-1">Reliability Metric</p>
                     </div>
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl">
                         <p class="text-xs text-slate-400 font-semibold">MTTR (Mean Time To Repair)</p>
                         <h3 id="uptime-kpi-mttr" class="text-2xl font-black text-amber-400 mt-1">0 mins</h3>
+                        <div id="uptime-kpi-mttr-compare" class="summary-kpi-compare hidden"></div>
                         <p class="text-[10px] text-slate-400 mt-1">Average Recovery Time</p>
                     </div>
                 </div>
@@ -4018,6 +4022,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function normalizeCalibrationCycle(cycle = {}) {
             return {
+                id: cycle.id || cycle.entryId || '',
                 sched: cycle.sched || cycle.dateSched || "",
                 calib: cycle.calib || cycle.dateCalib || "",
                 by: cycle.by || "",
@@ -4059,6 +4064,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                 </div>`;
             const e = normalizeCalibrationCycle(entry);
+            row.dataset.entryId = e.id || ('ce_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8));
             row.querySelector('.entry-sched').value = e.sched;
             row.querySelector('.entry-calib').value = e.calib;
             row.querySelector('.entry-by').value = e.by;
@@ -4186,6 +4192,7 @@ window.addEventListener("cloudsync:status", (event) => {
         function collectCalibrationEntries(cycleRow, type) {
             return [...(cycleRow?.querySelectorAll(`.${type}-entry-list .calibration-entry-row`) || [])]
                 .map(row => ({
+                    id: row.dataset.entryId || ('ce_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
                     sched: row.querySelector('.entry-sched')?.value || '',
                     calib: row.querySelector('.entry-calib')?.value || '',
                     by: row.querySelector('.entry-by')?.value.trim() || '',
@@ -4340,9 +4347,11 @@ window.addEventListener("cloudsync:status", (event) => {
                     const existingEntries = Array.isArray(target[type]) ? target[type].map(normalizeCalibrationCycleEntry) : [];
                     const incomingEntries = Array.isArray(cycle[type]) ? cycle[type].map(normalizeCalibrationCycleEntry) : [];
                     incomingEntries.forEach(entry => {
-                        if (!entry.sched && !entry.calib && !entry.by) return;
-                        const key = calibrationCycleKey(entry);
-                        if (!existingEntries.some(x => calibrationCycleKey(x) === key)) existingEntries.push(entry);
+                        if (!entry.sched && !entry.calib && !entry.by && !entry.pr && !entry.po) return;
+                        // Every calibration occurrence is independent. PR/PO are part of
+                        // the occurrence identity so a second entry is never overwritten.
+                        const key = [entry.sched || '', entry.calib || '', entry.by || '', entry.pr || '', entry.po || ''].join('|');
+                        if (!existingEntries.some(x => [x.sched || '', x.calib || '', x.by || '', x.pr || '', x.po || ''].join('|') === key)) existingEntries.push(entry);
                     });
                     target[type] = existingEntries;
                 });
@@ -4424,8 +4433,8 @@ window.addEventListener("cloudsync:status", (event) => {
                             cycleId: key,
                             cycle: idx + 1,
                             recordedAt: new Date().toISOString(),
-                            pr: cycle.pr || record.pr || '',
-                            po: cycle.po || record.po || '',
+                            pr: '',
+                            po: '',
                             externalCalibrations: cycle.external || [],
                             internalCalibrations: cycle.internal || [],
                             extSched: latestCalibrationCycle(cycle.external || []).sched || '',
@@ -4535,8 +4544,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 typeSelect.value = source.type || '';
             }
             document.getElementById('cal-edit-plant').value = source.plant || 'Plant 1';
-            document.getElementById('cal-edit-pr').value = entry.pr || cycle.pr || source.pr || '';
-            document.getElementById('cal-edit-po').value = entry.po || cycle.po || source.po || '';
+            document.getElementById('cal-edit-pr').value = entry.pr || '';
+            document.getElementById('cal-edit-po').value = entry.po || '';
             document.getElementById('cal-edit-sched').value = entry.sched || '';
             document.getElementById('cal-edit-calib').value = entry.calib || '';
             document.getElementById('cal-edit-by').value = entry.by || '';
@@ -4607,7 +4616,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 record.calibrationHistory = record.calibrationHistory.filter(h => String(h.cycleId || '') !== String(st.cycleId));
                 record.calibrationCycles.forEach((c,i) => {
                     if (!(c.external?.length || 0) && !(c.internal?.length || 0)) return;
-                    record.calibrationHistory.push({cycleId:cycleHistoryKey(c,i),cycle:i+1,recordedAt:new Date().toISOString(),pr:c.pr||record.pr||'',po:c.po||record.po||'',externalCalibrations:c.external||[],internalCalibrations:c.internal||[],extSched:latestCalibrationCycle(c.external||[]).sched||'',extCalib:latestCalibrationCycle(c.external||[]).calib||'',extBy:latestCalibrationCycle(c.external||[]).by||'',intSched:latestCalibrationCycle(c.internal||[]).sched||'',intCalib:latestCalibrationCycle(c.internal||[]).calib||'',intBy:latestCalibrationCycle(c.internal||[]).by||''});
+                    record.calibrationHistory.push({cycleId:cycleHistoryKey(c,i),cycle:i+1,recordedAt:new Date().toISOString(),pr:'',po:'',externalCalibrations:c.external||[],internalCalibrations:c.internal||[],extSched:latestCalibrationCycle(c.external||[]).sched||'',extCalib:latestCalibrationCycle(c.external||[]).calib||'',extBy:latestCalibrationCycle(c.external||[]).by||'',intSched:latestCalibrationCycle(c.internal||[]).sched||'',intCalib:latestCalibrationCycle(c.internal||[]).calib||'',intBy:latestCalibrationCycle(c.internal||[]).by||''});
                 });
             });
             saveStorage();
@@ -4811,20 +4820,26 @@ window.addEventListener("cloudsync:status", (event) => {
                 return matches(dt,compareType,compareValue);
             }):[];
 
-            // Calculate primary metrics
-            let totalHrs = 0;
-            primaryLogs.forEach(dt => {
-                const s = new Date(dt.start);
-                const e = new Date(dt.end);
-                const diff = (e - s) / (1000 * 60 * 60);
-                if (diff > 0) totalHrs += diff;
-            });
-
-            const uniqueEquipmentIds = new Set(primaryLogs.map(getDowntimeEquipmentCode).filter(Boolean));
-            const availHours = (uniqueEquipmentIds.size || 1) * 720;
-            const uptimePct = Math.max(0, Math.min(100, parseFloat(((1 - (totalHrs / availHours)) * 100).toFixed(1))));
-            const mtbf = primaryLogs.length > 0 ? (720 / primaryLogs.length).toFixed(1) : "0";
-            const mttr = primaryLogs.length > 0 ? Math.round((totalHrs / primaryLogs.length) * 60) : 0;
+            const calcReliabilityMetrics = logs => {
+                let hrs = 0;
+                (logs || []).forEach(dt => {
+                    const diff = (new Date(dt.end) - new Date(dt.start)) / 3600000;
+                    if (diff > 0) hrs += diff;
+                });
+                const equipmentIds = new Set((logs || []).map(getDowntimeEquipmentCode).filter(Boolean));
+                const availableHours = (equipmentIds.size || 1) * 720;
+                const failures = (logs || []).length;
+                const uptime = Math.max(0, Math.min(100, Number(((1 - (hrs / availableHours)) * 100).toFixed(1))));
+                const mtbf = failures > 0 ? Number((availableHours / failures).toFixed(1)) : 0;
+                const mttr = failures > 0 ? Number(((hrs / failures) * 60).toFixed(0)) : 0;
+                return { hrs, uptime, mtbf, mttr, failures, availableHours };
+            };
+            const primaryMetrics = calcReliabilityMetrics(primaryLogs);
+            const compareMetrics = isCompare ? calcReliabilityMetrics(compareLogs) : null;
+            const totalHrs = primaryMetrics.hrs;
+            const uptimePct = primaryMetrics.uptime;
+            const mtbf = primaryMetrics.mtbf.toFixed(1);
+            const mttr = primaryMetrics.mttr;
 
             const uptimeInventoryLogs = downtimeLogs.filter(dt => currentPlant === "ALL" || normalizePlant(dt.plant) === normalizePlant(currentPlant));
             renderCategoryAvailabilityTable(primaryLogs, uptimeInventoryLogs, 'uptime-category-availability-head', 'uptime-category-availability-body', 'uptime-category-availability-label', isCompare ? compareLogs : null, uptimeInventoryLogs, primaryValue || 'All Time', compareValue || '');
@@ -4834,12 +4849,22 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("uptime-kpi-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("uptime-kpi-mttr").innerText = `${mttr} mins`;
 
+            const setUptimeKpiCompare = (id, html, show) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.innerHTML = html || '';
+                el.classList.toggle('hidden', !show);
+            };
+            setUptimeKpiCompare('uptime-kpi-percent-compare', isCompare ? `<span class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}: ${primaryMetrics.uptime}%</span><span class="mx-1 text-slate-600">|</span><span class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}: ${compareMetrics.uptime}%</span>` : '', isCompare);
+            setUptimeKpiCompare('uptime-kpi-hours-compare', isCompare ? `<span class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}: ${primaryMetrics.hrs.toFixed(1)} hrs</span><span class="mx-1 text-slate-600">|</span><span class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}: ${compareMetrics.hrs.toFixed(1)} hrs</span>` : '', isCompare);
+            setUptimeKpiCompare('uptime-kpi-mtbf-compare', isCompare ? `<span class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}: ${primaryMetrics.mtbf.toFixed(1)} hrs</span><span class="mx-1 text-slate-600">|</span><span class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}: ${compareMetrics.mtbf.toFixed(1)} hrs</span>` : '', isCompare);
+            setUptimeKpiCompare('uptime-kpi-mttr-compare', isCompare ? `<span class="text-amber-300">${escapeHtml(primaryValue || 'Date 1')}: ${primaryMetrics.mttr} mins</span><span class="mx-1 text-slate-600">|</span><span class="text-blue-300">${escapeHtml(compareValue || 'Date 2')}: ${compareMetrics.mttr} mins</span>` : '', isCompare);
+
             const compCard=document.getElementById("comparison-result-card");
             if(isCompare){
                 compCard.classList.remove("hidden");
-                const calc=list=>{let h=0;list.forEach(dt=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000;if(d>0)h+=d;});const ids=new Set(list.map(getDowntimeEquipmentCode).filter(Boolean));const up=Math.max(0,Math.min(100,Number(((1-h/((ids.size||1)*720))*100).toFixed(1))));return {h,up};};
-                const cp=calc(primaryLogs),cc=calc(compareLogs),dp=(cp.up-cc.up).toFixed(1),dh=(cp.h-cc.h).toFixed(1);
-                document.getElementById("comparison-result-text").innerHTML=`Comparing <strong>${primaryValue}</strong> (${cp.up}% uptime, ${cp.h.toFixed(1)} hrs downtime) against <strong>${compareValue}</strong> (${cc.up}% uptime, ${cc.h.toFixed(1)} hrs downtime).<br>Uptime Variance: <strong class="${dp>=0?'text-emerald-400':'text-red-400'}">${dp>=0?'+':''}${dp}%</strong> | Downtime Variance: <strong class="${dh<=0?'text-emerald-400':'text-red-400'}">${dh<=0?'':'+'}${dh} hrs</strong>.`;
+                const cp=primaryMetrics, cc=compareMetrics, dp=(cp.uptime-cc.uptime).toFixed(1), dh=(cp.hrs-cc.hrs).toFixed(1);
+                document.getElementById("comparison-result-text").innerHTML=`Comparing <strong>${primaryValue}</strong> (${cp.uptime}% uptime, ${cp.hrs.toFixed(1)} hrs downtime, ${cp.mtbf.toFixed(1)} hrs MTBF, ${cp.mttr} mins MTTR) against <strong>${compareValue}</strong> (${cc.uptime}% uptime, ${cc.hrs.toFixed(1)} hrs downtime, ${cc.mtbf.toFixed(1)} hrs MTBF, ${cc.mttr} mins MTTR).<br>Uptime Variance: <strong class="${dp>=0?'text-emerald-400':'text-red-400'}">${dp>=0?'+':''}${dp}%</strong> | Downtime Variance: <strong class="${dh<=0?'text-emerald-400':'text-red-400'}">${dh<=0?'':'+'}${dh} hrs</strong>.`;
             }else compCard.classList.add("hidden");
 
             // Top Equipment by Line — Highest Downtime Only.
