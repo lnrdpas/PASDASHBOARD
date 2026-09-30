@@ -1570,6 +1570,30 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                 </div>
 
+                <div class="bg-slate-800/90 border border-amber-500/30 p-4 rounded-2xl space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-xs font-bold text-amber-300 uppercase tracking-wider"><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h3>
+                            <p class="text-[9px] text-slate-500 mt-0.5">Uses the Uptime/Downtime filters above. One highest-downtime equipment/failure category is shown for each line.</p>
+                        </div>
+                        <span id="uptime-top-equipment-filter-label" class="text-[9px] text-slate-400 font-semibold"></span>
+                    </div>
+                    <div class="overflow-x-auto rounded-xl border border-slate-700/50">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
+                                <tr>
+                                    <th class="py-2.5 px-3">Line</th>
+                                    <th id="uptime-top-primary-head" class="py-2.5 px-3">Equipment</th>
+                                    <th id="uptime-top-primary-category-head" class="py-2.5 px-3">Failure Category</th>
+                                    <th id="uptime-top-primary-time-head" class="py-2.5 px-3 text-center">Downtime</th>
+                                    <th id="uptime-top-compare-head" class="py-2.5 px-3 hidden">Comparison</th>
+                                </tr>
+                            </thead>
+                            <tbody id="uptime-top-equipment-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div class="bg-slate-800/90 border border-slate-700/60 p-4 rounded-2xl space-y-3">
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
                         <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Historical Downtime Records</h3>
@@ -1772,6 +1796,49 @@ window.addEventListener("cloudsync:status", (event) => {
                 <button type="button" onclick="closeCalibrationHistory()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
             <div id="calibration-history-content"></div>
+        </div>
+    </div>
+
+    <!-- CALIBRATION OCCURRENCE EDIT MODAL -->
+    <div id="modal-calibration-occurrence-edit" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[70] flex items-center justify-center p-4 hidden no-print">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
+                <div>
+                    <h3 class="text-sm font-bold text-white"><i class="fa-solid fa-pen-to-square text-amber-400 mr-2"></i>Edit Calibration Entry</h3>
+                    <p class="text-[10px] text-slate-400 mt-0.5">Edit all information for this calibration occurrence. Date fields use the calendar picker.</p>
+                </div>
+                <button type="button" onclick="closeCalibrationOccurrenceEditor()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="form-calibration-occurrence-edit" onsubmit="saveCalibrationOccurrenceEdit(event)" class="space-y-3 text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label class="block text-slate-300 font-semibold mb-1">Instrument / Equipment Class *</label><select id="cal-edit-type" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none category-select-dropdown"></select></div>
+                    <div><label class="block text-slate-300 font-semibold mb-1">Plant Allocation *</label><select id="cal-edit-plant" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none"><option value="Plant 1">Plant 1</option><option value="Plant 2">Plant 2</option><option value="PreMix">PreMix Plant</option></select></div>
+                </div>
+                <div class="bg-slate-950/40 border border-slate-700/50 rounded-xl p-3">
+                    <div class="flex items-center justify-between mb-2"><span class="font-bold text-blue-300">Equipment Codes</span><span class="text-[9px] text-slate-500">One code per existing instrument record</span></div>
+                    <div id="cal-edit-codes" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label class="block text-slate-300 font-semibold mb-1">PR No.</label><input id="cal-edit-pr" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none"></div>
+                    <div><label class="block text-slate-300 font-semibold mb-1">PO No.</label><input id="cal-edit-po" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none"></div>
+                </div>
+                <div class="bg-slate-950/40 border border-slate-700/50 rounded-xl p-3 space-y-3">
+                    <div class="flex items-center gap-2"><span id="cal-edit-kind" class="text-[9px] font-black uppercase tracking-wider text-blue-300">EXTERNAL CALIBRATION</span><span id="cal-edit-cycle" class="text-[9px] text-slate-500"></span></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div><label class="block text-slate-300 font-semibold mb-1">Schedule Date *</label><input id="cal-edit-sched" type="date" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none"></div>
+                        <div><label class="block text-slate-300 font-semibold mb-1">Calibration Date</label><input id="cal-edit-calib" type="date" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none"></div>
+                    </div>
+                    <div><label class="block text-slate-300 font-semibold mb-1">Calibrated By</label><input id="cal-edit-by" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none" placeholder="Vendor / Technician"></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div><label class="block text-slate-300 font-semibold mb-1">Next Due</label><input id="cal-edit-next-due" type="date" readonly class="w-full bg-slate-900/70 border border-slate-700 rounded-xl px-3 py-2 text-slate-400 outline-none" title="Automatically calculated as one year after Calibration Date"></div>
+                        <div class="flex items-end"><span class="text-[9px] text-slate-500 pb-2">Next Due is automatically calculated from the Calibration Date.</span></div>
+                    </div>
+                </div>
+                <div class="pt-2 flex justify-end gap-2">
+                    <button type="button" onclick="closeCalibrationOccurrenceEditor()" class="px-4 py-2 rounded-xl bg-slate-700 text-slate-200">Cancel</button>
+                    <button type="submit" class="admin-only px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold">Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -4425,19 +4492,116 @@ window.addEventListener("cloudsync:status", (event) => {
             return [type, entry?.sched || '', entry?.calib || '', entry?.by || ''].join('|');
         }
 
-        function editCalibrationOccurrence(recordId, cycleId, type, entryIndex) {
+        let calibrationOccurrenceEditState = null;
+
+        function calculateCalibrationNextDue(calib) {
+            if (!calib) return '';
+            const d = new Date(calib + 'T00:00:00');
+            if (isNaN(d.getTime())) return '';
+            d.setFullYear(d.getFullYear() + 1);
+            return d.toISOString().slice(0,10);
+        }
+
+        function openCalibrationOccurrenceEditor(recordIds, cycleId, type, entryIndex) {
             if (!isAdminUser()) return;
-            editEquipment(recordId);
-            setTimeout(() => {
-                const cycle = document.querySelector(`#calibration-groups-container .shared-calibration-cycle[data-cycle-id="${CSS.escape(String(cycleId))}"]`);
-                const list = cycle?.querySelector(`.${type}-entry-list`);
-                const row = list?.children?.[Number(entryIndex)];
-                if (row) {
-                    row.scrollIntoView({behavior:'smooth',block:'center'});
-                    row.classList.add('ring-2','ring-amber-400');
-                    setTimeout(() => row.classList.remove('ring-2','ring-amber-400'), 1800);
+            const ids = Array.isArray(recordIds) ? recordIds.map(String) : [String(recordIds)];
+            const records = ids.map(id => equipmentList.find(item => String(item.id) === id)).filter(Boolean);
+            if (!records.length) return;
+            const source = records[0];
+            const cycles = normalizeSharedCalibrationCycles(source);
+            const cycle = cycles.find(c => String(c.id) === String(cycleId));
+            if (!cycle) return;
+            const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
+            const entry = entries[Number(entryIndex)];
+            if (!entry) return;
+
+            calibrationOccurrenceEditState = { ids, cycleId:String(cycleId), type, entryIndex:Number(entryIndex) };
+            const typeSelect = document.getElementById('cal-edit-type');
+            if (typeSelect) {
+                typeSelect.innerHTML = document.getElementById('eq-shared-type')?.innerHTML || '';
+                typeSelect.value = source.type || '';
+            }
+            document.getElementById('cal-edit-plant').value = source.plant || 'Plant 1';
+            document.getElementById('cal-edit-pr').value = cycle.pr || source.pr || '';
+            document.getElementById('cal-edit-po').value = cycle.po || source.po || '';
+            document.getElementById('cal-edit-sched').value = entry.sched || '';
+            document.getElementById('cal-edit-calib').value = entry.calib || '';
+            document.getElementById('cal-edit-by').value = entry.by || '';
+            document.getElementById('cal-edit-next-due').value = calculateCalibrationNextDue(entry.calib);
+            document.getElementById('cal-edit-kind').textContent = `${type.toUpperCase()} CALIBRATION`;
+            document.getElementById('cal-edit-kind').className = `text-[9px] font-black uppercase tracking-wider ${type === 'external' ? 'text-blue-300' : 'text-purple-300'}`;
+            document.getElementById('cal-edit-cycle').textContent = `Cycle ${cycles.findIndex(c => String(c.id) === String(cycleId)) + 1}`;
+            const codeBox = document.getElementById('cal-edit-codes');
+            codeBox.innerHTML = records.map((r,i) => `<div><label class="block text-slate-400 text-[9px] mb-1">Equipment Code ${i+1}</label><input type="text" data-record-id="${escapeAttr(r.id)}" value="${escapeAttr(r.code || '')}" required class="cal-edit-code w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none"></div>`).join('');
+            document.getElementById('modal-calibration-occurrence-edit').classList.remove('hidden');
+            setTimeout(() => document.getElementById('cal-edit-sched')?.focus(), 50);
+        }
+
+        function editCalibrationOccurrence(recordId, cycleId, type, entryIndex) {
+            const ids = Array.isArray(recordId) ? recordId : [recordId];
+            openCalibrationOccurrenceEditor(ids, cycleId, type, entryIndex);
+        }
+
+        function closeCalibrationOccurrenceEditor() {
+            calibrationOccurrenceEditState = null;
+            document.getElementById('modal-calibration-occurrence-edit')?.classList.add('hidden');
+        }
+
+        function saveCalibrationOccurrenceEdit(event) {
+            event.preventDefault();
+            if (!isAdminUser() || !calibrationOccurrenceEditState) return;
+            const st = calibrationOccurrenceEditState;
+            const type = st.type;
+            const newType = document.getElementById('cal-edit-type').value;
+            const plant = document.getElementById('cal-edit-plant').value;
+            const pr = document.getElementById('cal-edit-pr').value.trim();
+            const po = document.getElementById('cal-edit-po').value.trim();
+            const sched = document.getElementById('cal-edit-sched').value;
+            const calib = document.getElementById('cal-edit-calib').value;
+            const by = document.getElementById('cal-edit-by').value.trim();
+            const codeInputs = [...document.querySelectorAll('#cal-edit-codes .cal-edit-code')];
+            const codes = codeInputs.map(x => x.value.trim());
+            if (!sched || codeInputs.some(x => !x.value.trim())) { alert('Schedule Date and Equipment Code are required.'); return; }
+
+            st.ids.forEach((id, idx) => {
+                const record = equipmentList.find(item => String(item.id) === String(id));
+                if (!record) return;
+                const cycles = normalizeSharedCalibrationCycles(record);
+                const cycle = cycles.find(c => String(c.id) === String(st.cycleId));
+                if (!cycle) return;
+                const oldEntries = Array.isArray(cycle[type]) ? cycle[type] : [];
+                const oldEntry = oldEntries[st.entryIndex];
+                if (!oldEntry) return;
+                const updated = {sched, calib, by};
+                if (newType === type) {
+                    cycle[type] = oldEntries.map((e,i) => i === st.entryIndex ? updated : e);
+                } else {
+                    cycle[type] = oldEntries.filter((e,i) => i !== st.entryIndex);
+                    cycle[newType] = [...(Array.isArray(cycle[newType]) ? cycle[newType] : []), updated];
                 }
-            }, 80);
+                cycle.pr = pr; cycle.po = po;
+                cycle.codes = [codes[idx] || record.code || ''];
+                record.plant = plant;
+                record.type = newType === type ? newType && (document.getElementById('cal-edit-type').value || record.type) : (document.getElementById('cal-edit-type').value || record.type);
+                record.code = codes[idx] || record.code;
+                record.calibrationCycles = cycles.filter(c => (c.external?.length || 0) + (c.internal?.length || 0));
+                record.externalCalibrations = flattenSharedCalibrationCycles(record.calibrationCycles,'external');
+                record.internalCalibrations = flattenSharedCalibrationCycles(record.calibrationCycles,'internal');
+                const le = latestCalibrationCycle(record.externalCalibrations), li = latestCalibrationCycle(record.internalCalibrations);
+                record.extSched=le.sched||''; record.extCalib=le.calib||''; record.extBy=le.by||'';
+                record.intSched=li.sched||''; record.intCalib=li.calib||''; record.intBy=li.by||'';
+                if (!Array.isArray(record.calibrationHistory)) record.calibrationHistory = [];
+                record.calibrationHistory = record.calibrationHistory.filter(h => String(h.cycleId || '') !== String(st.cycleId));
+                record.calibrationCycles.forEach((c,i) => {
+                    if (!(c.external?.length || 0) && !(c.internal?.length || 0)) return;
+                    record.calibrationHistory.push({cycleId:cycleHistoryKey(c,i),cycle:i+1,recordedAt:new Date().toISOString(),pr:c.pr||record.pr||'',po:c.po||record.po||'',externalCalibrations:c.external||[],internalCalibrations:c.internal||[],extSched:latestCalibrationCycle(c.external||[]).sched||'',extCalib:latestCalibrationCycle(c.external||[]).calib||'',extBy:latestCalibrationCycle(c.external||[]).by||'',intSched:latestCalibrationCycle(c.internal||[]).sched||'',intCalib:latestCalibrationCycle(c.internal||[]).calib||'',intBy:latestCalibrationCycle(c.internal||[]).by||''});
+                });
+            });
+            saveStorage();
+            closeCalibrationOccurrenceEditor();
+            renderCalibModule(); renderSummaryModule(); renderCalendarModule();
+            const selected = equipmentList.find(e => String(e.id) === String(st.ids[0]));
+            if (selected) viewCalibrationHistory(selected.id);
         }
 
         function deleteCalibrationOccurrence(recordIds, cycleId, type, entryKey) {
@@ -4476,50 +4640,94 @@ window.addEventListener("cloudsync:status", (event) => {
             const content = document.getElementById("calibration-history-content");
             if (!content) return;
 
-            const cards = group.map(record => {
-                const rows = calibrationHistoryRows(record);
-                return rows.map(r => ({...r, recordId:record.id, recordCode:record.code || '', plant:record.plant || '', type:record.type || ''}));
-            }).flat();
-            const byInstrument = new Map();
-            cards.forEach(r => {
-                const dateKey = `${r.cycleId}|${r.type}|${r.sched}|${r.calib}|${r.by}|${r.pr}|${r.po}`;
-                if (!byInstrument.has(dateKey)) byInstrument.set(dateKey, { ...r, recordIds:[], codes:[] });
-                const g = byInstrument.get(dateKey);
-                if (!g.recordIds.includes(r.recordId)) g.recordIds.push(r.recordId);
-                (r.codes || [r.recordCode]).forEach(code => { if (code && !g.codes.includes(code)) g.codes.push(code); });
+            // Group matching instrument records together. Codes that share the same
+            // cycle/date/entry remain in ONE instrument card instead of creating a
+            // separate card for every equipment code.
+            const grouped = new Map();
+            group.forEach(record => {
+                calibrationHistoryRows(record).forEach(r => {
+                    const key = [r.cycleId, r.type, r.sched, r.calib, r.by, r.pr, r.po].join('|');
+                    if (!grouped.has(key)) grouped.set(key, {...r, recordIds:[], codes:[]});
+                    const g = grouped.get(key);
+                    if (!g.recordIds.includes(record.id)) g.recordIds.push(record.id);
+                    const codes = (r.codes && r.codes.length) ? r.codes : [record.code || ''];
+                    codes.forEach(code => { if (code && !g.codes.includes(code)) g.codes.push(code); });
+                });
             });
-            const entries = [...byInstrument.values()].sort((a,b) => Number(a.cycle)-Number(b.cycle) || String(a.calib||a.sched).localeCompare(String(b.calib||b.sched)));
 
+            const entries = [...grouped.values()].sort((a,b) => Number(a.cycle)-Number(b.cycle) || String(a.sched||a.calib).localeCompare(String(b.sched||b.calib)));
             const instrumentCodes = [...new Set(group.map(r => r.code).filter(Boolean))];
             const cycleMap = new Map();
-            entries.forEach(r => { const k=String(r.cycle); if(!cycleMap.has(k)) cycleMap.set(k,[]); cycleMap.get(k).push(r); });
-            const sections = [...cycleMap.entries()].map(([cycle, arr]) => `
-                <section class="border border-slate-700/60 rounded-xl overflow-hidden bg-slate-900/40">
-                    <div class="px-3 py-2 bg-slate-950/70 border-b border-slate-700/60 flex flex-wrap items-center justify-between gap-2">
-                        <div class="font-black text-blue-300 text-xs">Cycle ${escapeHtml(cycle)}</div>
-                        <div class="text-[9px] text-slate-500">${arr.length} calibration occurrence${arr.length===1?'':'s'}</div>
+            entries.forEach(r => {
+                const key = String(r.cycle);
+                if (!cycleMap.has(key)) cycleMap.set(key, []);
+                cycleMap.get(key).push(r);
+            });
+
+            const statusClass = status => ({
+                DONE:'text-emerald-300 bg-emerald-500/10 border-emerald-500/20',
+                'OVERDUE, DONE':'text-orange-300 bg-orange-500/10 border-orange-500/20',
+                OVERDUE:'text-red-300 bg-red-500/10 border-red-500/20',
+                PENDING:'text-amber-300 bg-amber-500/10 border-amber-500/20',
+                STSOK:'text-blue-300 bg-blue-500/10 border-blue-500/20'
+            }[status] || 'text-slate-300 bg-slate-700/30 border-slate-700');
+            const nextDueFor = calib => {
+                if (!calib) return '-';
+                const d = new Date(calib + 'T00:00:00');
+                if (isNaN(d)) return '-';
+                d.setFullYear(d.getFullYear() + 1);
+                return d.toISOString().slice(0,10);
+            };
+
+            const cycleSections = [...cycleMap.entries()].map(([cycle, arr]) => `
+                <div class="border-t border-slate-700/60 first:border-t-0">
+                    <div class="px-3 py-2 bg-slate-950/60 flex items-center justify-between gap-2">
+                        <div class="text-xs font-black text-blue-300">Cycle ${escapeHtml(cycle)}</div>
+                        <div class="text-[9px] text-slate-500">${arr.length} occurrence${arr.length === 1 ? '' : 's'}</div>
                     </div>
-                    <div class="p-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div class="p-3 space-y-2">
                         ${arr.map(r => {
-                            const status=calibrationOccurrenceStatus(r);
-                            const cls={DONE:'text-emerald-400 bg-emerald-500/10 border-emerald-500/20','OVERDUE, DONE':'text-orange-400 bg-orange-500/10 border-orange-500/20',OVERDUE:'text-red-400 bg-red-500/10 border-red-500/20',PENDING:'text-amber-400 bg-amber-500/10 border-amber-500/20',STSOK:'text-blue-400 bg-blue-500/10 border-blue-500/20'}[status]||'text-slate-300 bg-slate-700/30 border-slate-700';
-                            const nextDue = r.calib ? (()=>{const d=new Date(r.calib+'T00:00:00'); if(isNaN(d)) return '-'; d.setFullYear(d.getFullYear()+1); return d.toISOString().slice(0,10);})() : '-';
-                            const codes=r.codes.length?r.codes:instrumentCodes;
-                            const ids=r.recordIds.map(x=>String(x));
-                            return `<div class="border border-slate-700/60 rounded-xl p-3 bg-slate-800/70 space-y-2">
-                                <div class="flex items-start justify-between gap-2"><div><div class="text-[9px] uppercase tracking-wider font-bold ${r.type==='external'?'text-blue-300':'text-purple-300'}">${r.type.toUpperCase()} CALIBRATION</div><div class="text-xs font-black text-white mt-0.5">${escapeHtml(r.sched||r.calib||'No date')}</div></div><span class="px-2 py-1 rounded-lg border text-[9px] font-black ${cls}">${escapeHtml(status)}</span></div>
-                                <div class="text-[10px] text-slate-300"><span class="text-slate-500">Instrument Type:</span> <strong>${escapeHtml(typeKey||'-')}</strong></div>
-                                <div class="text-[10px] text-slate-300"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ')}</strong></div>
-                                <div class="grid grid-cols-2 gap-2 text-[10px]"><div><span class="text-slate-500">Schedule:</span> ${escapeHtml(r.sched||'-')}</div><div><span class="text-slate-500">Calibration:</span> ${escapeHtml(r.calib||'-')}</div><div><span class="text-slate-500">Calibrated By:</span> ${escapeHtml(r.by||'-')}</div><div><span class="text-slate-500">Next Due:</span> ${escapeHtml(nextDue)}</div><div><span class="text-slate-500">PR:</span> ${escapeHtml(r.pr||'-')}</div><div><span class="text-slate-500">PO:</span> ${escapeHtml(r.po||'-')}</div></div>
-                                <div class="flex justify-end gap-1.5 pt-1 border-t border-slate-700/50"><button type="button" onclick='editCalibrationOccurrence(${JSON.stringify(ids[0])},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${r.entryIndex})' class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-white">Edit</button><button type="button" onclick='deleteCalibrationOccurrence(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${JSON.stringify(calibrationOccurrenceKey(r.type,r))})' class="px-2 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[9px] font-bold text-red-300">Delete</button></div>
+                            const status = calibrationOccurrenceStatus(r);
+                            const ids = r.recordIds.map(x => String(x));
+                            const codes = r.codes.length ? r.codes : instrumentCodes;
+                            const editId = ids[0] || '';
+                            return `<div class="rounded-lg border border-slate-700/60 bg-slate-900/45 p-2.5">
+                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="text-[9px] uppercase tracking-wider font-black ${r.type==='external'?'text-blue-300':'text-purple-300'}">${r.type.toUpperCase()} CALIBRATION</span>
+                                            <span class="px-1.5 py-0.5 rounded border text-[8px] font-black ${statusClass(status)}">${escapeHtml(status)}</span>
+                                        </div>
+                                        <div class="text-[10px] text-slate-300 mt-1"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ') || '-'}</strong></div>
+                                    </div>
+                                    <div class="flex gap-1.5 shrink-0">
+                                        <button type="button" onclick='openCalibrationOccurrenceEditor(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${r.entryIndex})' class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-white">Edit</button>
+                                        <button type="button" onclick='deleteCalibrationOccurrence(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${JSON.stringify(calibrationOccurrenceKey(r.type,r))})' class="px-2 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[9px] font-bold text-red-300">Delete</button>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[9px]">
+                                    <div><span class="text-slate-500 block">Schedule</span><span class="text-slate-200">${escapeHtml(r.sched || '-')}</span></div>
+                                    <div><span class="text-slate-500 block">Calibration</span><span class="text-slate-200">${escapeHtml(r.calib || '-')}</span></div>
+                                    <div><span class="text-slate-500 block">Calibrated By</span><span class="text-slate-200">${escapeHtml(r.by || '-')}</span></div>
+                                    <div><span class="text-slate-500 block">Next Due</span><span class="text-slate-200">${escapeHtml(nextDueFor(r.calib))}</span></div>
+                                    <div><span class="text-slate-500 block">PR</span><span class="text-slate-200">${escapeHtml(r.pr || '-')}</span></div>
+                                    <div><span class="text-slate-500 block">PO</span><span class="text-slate-200">${escapeHtml(r.po || '-')}</span></div>
+                                </div>
                             </div>`;
                         }).join('')}
                     </div>
-                </section>`).join('');
+                </div>`).join('');
 
             content.innerHTML = `<div class="space-y-3">
-                <div class="border border-purple-500/20 bg-purple-500/5 rounded-xl p-3"><div class="text-[9px] uppercase tracking-wider text-purple-300 font-bold">Instrument Type</div><div class="text-base font-black text-white">${escapeHtml(typeKey||'-')}</div><div class="text-[9px] text-slate-400 mt-1">Plant: ${escapeHtml(selected.plant||'-')} · ${instrumentCodes.length} equipment code${instrumentCodes.length===1?'':'s'}</div><div class="flex flex-wrap gap-1.5 mt-2">${instrumentCodes.map(c=>`<span class="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[9px] font-bold">${escapeHtml(c)}</span>`).join('')}</div></div>
-                ${sections || '<div class="text-center py-8 text-slate-500 text-xs">No calibration history found.</div>'}
+                <div class="border border-purple-500/25 bg-purple-500/5 rounded-2xl overflow-hidden">
+                    <div class="px-4 py-3 bg-slate-900/70 border-b border-purple-500/15">
+                        <div class="text-[9px] uppercase tracking-wider text-purple-300 font-bold">Instrument Type</div>
+                        <div class="text-base font-black text-white">${escapeHtml(typeKey || '-')}</div>
+                        <div class="text-[9px] text-slate-400 mt-1">Plant: ${escapeHtml(selected.plant || '-')} · ${instrumentCodes.length} equipment code${instrumentCodes.length===1?'':'s'}</div>
+                        <div class="flex flex-wrap gap-1.5 mt-2">${instrumentCodes.map(c => `<span class="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[9px] font-bold">${escapeHtml(c)}</span>`).join('')}</div>
+                    </div>
+                    ${cycleSections || '<div class="text-center py-8 text-slate-500 text-xs">No calibration history found.</div>'}
+                </div>
             </div>`;
             document.getElementById("modal-calibration-history").classList.remove("hidden");
         }
@@ -4620,6 +4828,69 @@ window.addEventListener("cloudsync:status", (event) => {
                 const cp=calc(primaryLogs),cc=calc(compareLogs),dp=(cp.up-cc.up).toFixed(1),dh=(cp.h-cc.h).toFixed(1);
                 document.getElementById("comparison-result-text").innerHTML=`Comparing <strong>${primaryValue}</strong> (${cp.up}% uptime, ${cp.h.toFixed(1)} hrs downtime) against <strong>${compareValue}</strong> (${cc.up}% uptime, ${cc.h.toFixed(1)} hrs downtime).<br>Uptime Variance: <strong class="${dp>=0?'text-emerald-400':'text-red-400'}">${dp>=0?'+':''}${dp}%</strong> | Downtime Variance: <strong class="${dh<=0?'text-emerald-400':'text-red-400'}">${dh<=0?'':'+'}${dh} hrs</strong>.`;
             }else compCard.classList.add("hidden");
+
+            // Top Equipment by Line — Highest Downtime Only.
+            // This section intentionally uses the same Uptime/Downtime filtered primaryLogs/compareLogs.
+            // It does not use the Historical Downtime Records search box.
+            const buildHighestEquipmentByLine = logs => {
+                const map = {};
+                (logs || []).forEach(dt => {
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+                    if (!map[line]) map[line] = {};
+                    const key = equipment + '||' + category;
+                    map[line][key] = (map[line][key] || 0) + dur;
+                });
+                return Object.entries(map).map(([line, items]) => {
+                    const best = Object.entries(items).sort((a,b) => b[1] - a[1])[0];
+                    if (!best) return null;
+                    const parts = best[0].split('||');
+                    return { line, equipment: parts[0], category: parts[1], duration: best[1] };
+                }).filter(Boolean).sort((a,b) => b.duration - a.duration);
+            };
+
+            const topPrimary = buildHighestEquipmentByLine(primaryLogs);
+            const topCompare = isCompare ? buildHighestEquipmentByLine(compareLogs) : [];
+            const topBody = document.getElementById('uptime-top-equipment-body');
+            const topCompareHead = document.getElementById('uptime-top-compare-head');
+            const topLabel = document.getElementById('uptime-top-equipment-filter-label');
+            if (topLabel) topLabel.textContent = isCompare ? `${primaryValue || 'Period 1'} vs ${compareValue || 'Period 2'}` : (primaryValue || 'All Time');
+            if (topCompareHead) topCompareHead.classList.toggle('hidden', !isCompare);
+            if (topBody) {
+                topBody.innerHTML = '';
+                const byLine = {};
+                topPrimary.forEach(x => { byLine[x.line] = { primary:x }; });
+                topCompare.forEach(x => { if (!byLine[x.line]) byLine[x.line] = {}; byLine[x.line].compare = x; });
+                const lines = Object.keys(byLine);
+                if (!lines.length) {
+                    topBody.innerHTML = `<tr><td colspan="${isCompare ? 5 : 4}" class="text-center py-6 text-slate-500 italic">No downtime records found for the selected Uptime/Downtime filter.</td></tr>`;
+                } else {
+                    lines.sort((a,b) => ((byLine[b].primary?.duration || 0) - (byLine[a].primary?.duration || 0)));
+                    lines.forEach(line => {
+                        const p = byLine[line].primary;
+                        const c = byLine[line].compare;
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-slate-800/50 transition';
+                        if (isCompare) {
+                            tr.innerHTML = `
+                                <td class="py-2.5 px-3"><strong class="text-white">${escapeHtml(line)}</strong></td>
+                                <td class="py-2.5 px-3"><strong class="text-amber-300">${escapeHtml(p?.equipment || '—')}</strong>${c ? `<div class="text-[9px] text-blue-300 mt-1">${escapeHtml(c.equipment)}</div>` : ''}</td>
+                                <td class="py-2.5 px-3">${escapeHtml(p?.category || '—')}${c ? `<div class="text-[9px] text-blue-300 mt-1">${escapeHtml(c.category)}</div>` : ''}</td>
+                                <td class="py-2.5 px-3 text-center font-bold text-red-400">${p ? p.duration.toFixed(1)+' hrs' : '—'}${c ? `<div class="text-[9px] text-blue-300 mt-1">${c.duration.toFixed(1)} hrs</div>` : ''}</td>
+                                <td class="py-2.5 px-3 text-[9px] text-slate-400">${escapeHtml(primaryValue || 'Period 1')}<br><span class="text-blue-300">${escapeHtml(compareValue || 'Period 2')}</span></td>`;
+                        } else {
+                            tr.innerHTML = `
+                                <td class="py-2.5 px-3"><strong class="text-white">${escapeHtml(line)}</strong></td>
+                                <td class="py-2.5 px-3"><strong class="text-amber-300">${escapeHtml(p.equipment)}</strong></td>
+                                <td class="py-2.5 px-3">${escapeHtml(p.category)}</td>
+                                <td class="py-2.5 px-3 text-center font-bold text-red-400">${p.duration.toFixed(1)} hrs</td>`;
+                        }
+                        topBody.appendChild(tr);
+                    });
+                }
+            }
 
             // Render Downtime History Table
             const tbody = document.getElementById("downtime-table-body");
