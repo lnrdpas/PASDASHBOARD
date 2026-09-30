@@ -321,6 +321,26 @@ window.CloudSync = (() => {
         );
     }
 
+    // Recover data saved by earlier PASDASHBOARD/REV1 versions.
+    // The normalized database was originally deployed with REV1_OKAY_DASHBOARD
+    // and later changed to PASDASHBOARD. Read both IDs so existing records
+    // are not hidden simply because the app identifier changed.
+    function cloudAppIds() {
+        const current = String(window.CLOUD_CONFIG?.appId || "PASDASHBOARD");
+        return [...new Set([current, "PASDASHBOARD", "REV1_OKAY_DASHBOARD"].filter(Boolean))];
+    }
+
+    function mergeUniqueRows(rowArrays) {
+        const map = new Map();
+        (rowArrays || []).flat().forEach(row => {
+            if (!row) return;
+            const id = String(row.id ?? row.record_id ?? "");
+            const key = id || JSON.stringify(row);
+            if (!map.has(key)) map.set(key, row);
+        });
+        return [...map.values()];
+    }
+
     function status(message, ok = true) {
         window.dispatchEvent(new CustomEvent("cloudsync:status", {
             detail: { message, ok }
@@ -438,57 +458,83 @@ window.CloudSync = (() => {
 
     async function pullDataset(dataset) {
         const cfg = DATASETS[dataset];
-        const { data, error } = await client.from(cfg.table).select("record_id,data,updated_at").eq("app_id", window.CLOUD_CONFIG.appId);
-        if (error) throw error;
-        const remoteRows = (data || []).map(row => row.data).filter(Boolean);
+        const pulledSets = [];
+        for (const appId of cloudAppIds()) {
+            try {
+                const { data, error } = await client.from(cfg.table)
+                    .select("record_id,data,updated_at")
+                    .eq("app_id", appId);
+                if (!error && Array.isArray(data)) {
+                    pulledSets.push(data.map(row => row.data).filter(Boolean));
+                }
+            } catch (_) {}
+        }
+        const remoteRows = mergeUniqueRows(pulledSets);
         const localRows = readArray(cfg.key);
-        const rows = dataset === "equipment" ? mergeEquipmentCloudRows(localRows, remoteRows) : remoteRows;
+
+        // NEVER erase an existing browser copy just because the normalized
+        // cloud query returned zero rows. This is critical during migration:
+        // older PASDASHBOARD versions may still have the real calibration
+        // cards/cycles in localStorage while the new normalized table is empty
+        // (or temporarily unreadable because of RLS).
+        //
+        // If cloud rows exist, merge them with the local copy so calibration
+        // fields are preserved. If cloud rows are empty, keep the local copy
+        // intact and let the legacy app_state recovery run afterward.
+        let rows;
+        if (remoteRows.length) {
+            rows = dataset === "equipment"
+                ? mergeEquipmentCloudRows(localRows, remoteRows)
+                : remoteRows;
+        } else {
+            rows = localRows;
+        }
+
         writeArray(cfg.key, rows);
         lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
         return rows;
     }
 
     async function pullLegacyAppState() {
-        // Migration bridge for dashboards that were using the original
-        // single-row app_state table before the normalized tables were added.
-        // This is read-only: the old row is never deleted or modified here.
-        try {
-            const { data, error } = await client
-                .from("app_state")
-                .select("payload, updated_at")
-                .eq("app_id", window.CLOUD_CONFIG.appId)
-                .maybeSingle();
-            if (error || !data?.payload) return null;
+        // Migration bridge for the original single-row app_state database.
+        // Older installations used REV1_OKAY_DASHBOARD; newer ones use
+        // PASDASHBOARD. Try both without modifying/deleting the old row.
+        for (const appId of cloudAppIds()) {
+            try {
+                const { data, error } = await client
+                    .from("app_state")
+                    .select("payload, updated_at")
+                    .eq("app_id", appId)
+                    .maybeSingle();
+                if (error || !data?.payload) continue;
 
-            const payload = data.payload;
-            const getPayloadArray = key => {
-                try {
-                    const raw = payload?.[key];
-                    if (Array.isArray(raw)) return raw;
-                    if (typeof raw === "string") {
-                        const parsed = JSON.parse(raw);
-                        return Array.isArray(parsed) ? parsed : [];
+                const payload = data.payload;
+                const getPayloadArray = key => {
+                    try {
+                        const raw = payload?.[key];
+                        if (Array.isArray(raw)) return raw;
+                        if (typeof raw === "string") {
+                            const parsed = JSON.parse(raw);
+                            return Array.isArray(parsed) ? parsed : [];
+                        }
+                    } catch (_) {}
+                    return [];
+                };
+                return {
+                    appId,
+                    equipment: getPayloadArray("suite_equipment_data"),
+                    downtime: getPayloadArray("suite_downtime_data"),
+                    projects: getPayloadArray("suite_projects_data"),
+                    categories: {
+                        equipment: getPayloadArray("suite_equipment_categories"),
+                        downtime: getPayloadArray("suite_downtime_categories"),
+                        uptime_equipment: getPayloadArray("suite_uptime_equipment_categories"),
+                        line: getPayloadArray("suite_line_categories")
                     }
-                } catch (_) {}
-                return [];
-            };
-
-            return {
-                equipment: getPayloadArray("suite_equipment_data"),
-                downtime: getPayloadArray("suite_downtime_data"),
-                projects: getPayloadArray("suite_projects_data"),
-                categories: {
-                    equipment: getPayloadArray("suite_equipment_categories"),
-                    downtime: getPayloadArray("suite_downtime_categories"),
-                    uptime_equipment: getPayloadArray("suite_uptime_equipment_categories"),
-                    line: getPayloadArray("suite_line_categories")
-                },
-                payload
-            };
-        } catch (_) {
-            // app_state may not exist in a newly created normalized project.
-            return null;
+                };
+            } catch (_) {}
         }
+        return null;
     }
 
     async function migrateLegacyIfNeeded(normalizedRows) {
@@ -528,20 +574,21 @@ window.CloudSync = (() => {
     }
 
     async function pullCategories() {
-        const { data, error } = await client
-            .from("category_records")
-            .select("category_type,value")
-            .eq("app_id", window.CLOUD_CONFIG.appId)
-            .order("sort_order", { ascending: true });
-
-        if (error) throw error;
-
         const grouped = {};
-        (data || []).forEach(row => {
-            if (!grouped[row.category_type]) grouped[row.category_type] = [];
-            grouped[row.category_type].push(row.value);
-        });
-
+        for (const appId of cloudAppIds()) {
+            try {
+                const { data, error } = await client
+                    .from("category_records")
+                    .select("category_type,value,sort_order")
+                    .eq("app_id", appId)
+                    .order("sort_order", { ascending: true });
+                if (error) continue;
+                (data || []).forEach(row => {
+                    if (!grouped[row.category_type]) grouped[row.category_type] = [];
+                    if (!grouped[row.category_type].includes(row.value)) grouped[row.category_type].push(row.value);
+                });
+            } catch (_) {}
+        }
         Object.entries(CATEGORIES).forEach(([type, key]) => {
             if (Object.prototype.hasOwnProperty.call(grouped, type)) {
                 writeArray(key, grouped[type]);
@@ -585,7 +632,10 @@ window.CloudSync = (() => {
             const recovered = (readArray(DATASETS.equipment.key).length ||
                                readArray(DATASETS.downtime.key).length ||
                                readArray(DATASETS.projects.key).length);
-            status(recovered ? "Cloud data loaded" : "Cloud data loaded (no records found)", true);
+            const eqCount = readArray(DATASETS.equipment.key).length;
+            const dtCount = readArray(DATASETS.downtime.key).length;
+            const prCount = readArray(DATASETS.projects.key).length;
+            status((eqCount || dtCount || prCount) ? `Cloud data loaded (${eqCount} equipment, ${dtCount} downtime, ${prCount} projects)` : "Cloud data loaded (no records found)", true);
             return { ok: true };
         } catch (error) {
             lastError = error?.message || String(error);
@@ -4052,6 +4102,72 @@ window.addEventListener("cloudsync:status", (event) => {
             return [normalizePlant(eq.plant), String(eq.type || '').trim().toLowerCase()].join("||");
         }
 
+        // CALIBRATION TRACKER WORKLOAD CALCULATOR
+        // This must be global because renderCalibTable() is outside
+        // renderSummaryModule(). The summary has its own local calculator;
+        // the previous version accidentally called that local function here,
+        // causing the calibration page to stop rendering after the gauges.
+        function calcCalibForTracker(list, dateType='all', dateValue='') {
+            let done=0, overdueDone=0, overdue=0, pending=0, stsok=0, na=0;
+            const groups = new Map();
+            (list || []).forEach(eq => {
+                const plant = normalizePlant(eq.plant);
+                const type = String(eq.type || '').trim().toLowerCase();
+                const key = `${plant}||${type}`;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(eq);
+            });
+            const matchesDate = (entry) => {
+                if (dateType === 'all' || !dateValue) return true;
+                const a = entry?.sched || entry?.dateSched || '';
+                const b = entry?.calib || entry?.dateCalib || '';
+                return matchesSummaryDate(a, dateType, dateValue) || matchesSummaryDate(b, dateType, dateValue);
+            };
+            groups.forEach(group => {
+                const groupCodes = [...new Set(group.map(x => String(x.code || '').trim()).filter(Boolean))];
+                const cycles = [];
+                const byCycleKey = new Map();
+                (group || []).forEach(record => {
+                    normalizeSharedCalibrationCycles(record).forEach((cycle, cycleIndex) => {
+                        const cycleKey = String(cycle.id || `cycle-${cycleIndex + 1}`);
+                        let target = byCycleKey.get(cycleKey);
+                        if (!target) {
+                            target = {id: cycle.id || cycleKey, pr: cycle.pr || '', po: cycle.po || '', codes: [], external: [], internal: []};
+                            byCycleKey.set(cycleKey, target);
+                            cycles.push(target);
+                        }
+                        target.codes = [...new Set([...(target.codes || []), ...(cycle.codes || []), ...(record.code ? [record.code] : [])].map(v=>String(v||'').trim()).filter(Boolean))];
+                        ['external','internal'].forEach(type => {
+                            (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
+                                const n = normalizeCalibrationCycle(entry);
+                                const id = String(n.id || `${cycleKey}-${type}-${entryIndex}-${n.sched||n.calib||''}`);
+                                const existing = target[type].findIndex(x => String(x.id || '') === id);
+                                const value = {...n, id, codes:[...new Set([...(n.codes||[]), ...(record.code ? [record.code] : [])])]};
+                                if (existing >= 0) target[type][existing] = {...target[type][existing], ...value};
+                                else target[type].push(value);
+                            });
+                        });
+                    });
+                });
+                cycles.forEach(cycle => ['external','internal'].forEach(type => {
+                    (Array.isArray(cycle[type]) ? cycle[type] : []).forEach(entry => {
+                        if (!matchesDate(entry)) return;
+                        const codeCount = groupCodes.length;
+                        if (!codeCount) return;
+                        const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
+                        if (st === 'DONE') done += codeCount;
+                        else if (st === 'OVERDUE, DONE') { done += codeCount; overdueDone += codeCount; }
+                        else if (st === 'OVERDUE') overdue += codeCount;
+                        else if (st === 'PENDING') pending += codeCount;
+                        else if (st === 'STSOK') stsok += codeCount;
+                        else na += codeCount;
+                    });
+                });
+            });
+            const scheduled = done + overdueDone + overdue + pending + stsok;
+            return {done, overdueDone, overdue, pending, stsok, na, scheduled, toCalibrate: pending + stsok + overdue};
+        }
+
         function renderCalibTable() {
             // Collapse legacy duplicate rows before rendering. This does not change
             // the visual style; it only guarantees one underlying record per
@@ -4077,7 +4193,7 @@ window.addEventListener("cloudsync:status", (event) => {
             // KPI COUNTS = EQUIPMENT CODE x CALIBRATION OCCURRENCE.
             // Example: 3 codes and 3 occurrences = 9 total; 2 DONE occurrences
             // = 6 DONE and 1 PENDING occurrence = 3 PENDING.
-            const workload = calcCalib(filtered, 'all', '');
+            const workload = calcCalibForTracker(filtered, 'all', '');
             const tTotal = workload.scheduled;
             const tDone = workload.done;
             const tOverdue = workload.overdue;
