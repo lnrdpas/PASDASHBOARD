@@ -3932,7 +3932,7 @@ window.addEventListener("cloudsync:status", (event) => {
             return row;
         }
 
-        function makeSharedCalibrationCycle(cycle = {}, index = 0) {
+        function makeSharedCalibrationCycle(cycle = {}, index = 0, inheritedCodes = []) {
             const row = document.createElement("div");
             const cycleId = cycle.id || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8));
             row.className = "shared-calibration-cycle bg-slate-900/50 border border-slate-700/60 rounded-xl p-2.5 space-y-2";
@@ -3941,15 +3941,23 @@ window.addEventListener("cloudsync:status", (event) => {
             const internal = Array.isArray(cycle.internal) ? cycle.internal : [];
             const cyclePr = cycle.pr || '';
             const cyclePo = cycle.po || '';
+            const cycleCodes = Array.isArray(cycle.codes) && cycle.codes.length ? cycle.codes : inheritedCodes;
             row.innerHTML = `
                 <div class="flex items-center justify-between gap-2">
                     <div>
                         <span class="shared-cycle-number text-[10px] font-black text-white bg-slate-700/70 border border-slate-600 rounded px-2 py-1">Cycle ${index + 1}</span>
-                        <span class="ml-2 text-[9px] text-slate-500">External + Internal belong to this same cycle.</span>
+                        <span class="ml-2 text-[9px] text-slate-500">Codes and calibration entries belong to this cycle.</span>
                     </div>
                     <button type="button" onclick="removeSharedCalibrationCycle(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove this cycle">
                         <i class="fa-solid fa-trash-can text-[9px]"></i>
                     </button>
+                </div>
+                <div class="bg-slate-950/40 p-2 rounded-lg border border-blue-500/20">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[10px] font-bold text-slate-300"><i class="fa-solid fa-barcode text-blue-400 mr-1"></i>Equipment Codes in This Cycle</span>
+                        <button type="button" onclick="addCalibrationCodeRow(this)" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded-lg">+ Add Code</button>
+                    </div>
+                    <div class="calibration-code-list space-y-1.5"></div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div><label class="block text-slate-400 text-[9px]">PR No.</label><input type="text" class="cycle-pr w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-white outline-none text-[10px]" placeholder="PR Reference"></div>
@@ -3971,6 +3979,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="internal-entry-list space-y-1.5"></div>
                     </div>
                 </div>`;
+            const codeList = row.querySelector('.calibration-code-list');
+            (cycleCodes.length ? cycleCodes : ['']).forEach(code => codeList.appendChild(makeCalibrationCodeRow(code)));
             const extList = row.querySelector('.external-entry-list');
             const intList = row.querySelector('.internal-entry-list');
             (external.length ? external : [{}]).forEach(e => extList.appendChild(makeCalibrationEntryRow('external', e)));
@@ -3982,10 +3992,12 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function normalizeSharedCalibrationCycles(record = {}) {
             if (Array.isArray(record.calibrationCycles) && record.calibrationCycles.length) {
+                const fallbackCodes = Array.isArray(record.codes) ? record.codes.filter(Boolean) : (record.code ? [record.code] : []);
                 return record.calibrationCycles.map((c, i) => ({
                     id: c.id || ('cy_migrated_' + i),
                     pr: c.pr || '',
                     po: c.po || '',
+                    codes: Array.isArray(c.codes) && c.codes.length ? c.codes.filter(Boolean) : [...fallbackCodes],
                     external: (Array.isArray(c.external) ? c.external : []).map(normalizeCalibrationCycle),
                     internal: (Array.isArray(c.internal) ? c.internal : []).map(normalizeCalibrationCycle)
                 }));
@@ -3995,13 +4007,15 @@ window.addEventListener("cloudsync:status", (event) => {
             const extLegacy = ext.length ? ext : [{sched:record.extSched || '', calib:record.extCalib || '', by:record.extBy || ''}].filter(c => c.sched || c.calib || c.by);
             const intLegacy = int.length ? int : [{sched:record.intSched || '', calib:record.intCalib || '', by:record.intBy || ''}].filter(c => c.sched || c.calib || c.by);
             const n = Math.max(extLegacy.length, intLegacy.length, 1);
+            const fallbackCodes = Array.isArray(record.codes) ? record.codes.filter(Boolean) : (record.code ? [record.code] : []);
             return Array.from({length:n}, (_,i) => ({
                 id: 'cy_migrated_' + i,
                 pr: record.pr || '',
                 po: record.po || '',
+                codes: [...fallbackCodes],
                 external: extLegacy[i] ? [extLegacy[i]] : [],
                 internal: intLegacy[i] ? [intLegacy[i]] : []
-            })).filter(c => c.external.length || c.internal.length);
+            })).filter(c => c.external.length || c.internal.length || c.codes.length);
         }
 
         function addSharedCalibrationCycle(btn) {
@@ -4009,7 +4023,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const group = btn.closest('.calibration-group');
             const list = group?.querySelector('.shared-cycles-list');
             if (!list) return;
-            list.appendChild(makeSharedCalibrationCycle({}, list.children.length));
+            const currentCodes = [...new Set([...group.querySelectorAll("input[name='eq-code']")].map(i => i.value.trim()).filter(Boolean))];
+            list.appendChild(makeSharedCalibrationCycle({ codes: currentCodes }, list.children.length, currentCodes));
             renumberSharedCalibrationCycles(group);
         }
 
@@ -4064,29 +4079,27 @@ window.addEventListener("cloudsync:status", (event) => {
             const sharedCycles = Array.isArray(group.calibrationCycles) && group.calibrationCycles.length
                 ? group.calibrationCycles
                 : normalizeSharedCalibrationCycles(group);
+            const allCodes = [...new Set((group.codes || sharedCycles.flatMap(c => c.codes || [])).map(c => String(c || '').trim()).filter(Boolean))];
             wrapper.innerHTML = `
                 <div class="flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
-                        <span class="group-number text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5">Date Group</span>
-                        <span class="text-[9px] text-slate-500">The equipment codes below are shared across all cycles in this group. Adding a cycle does not add an instrument.</span>
+                        <span class="group-number text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5">Calibration Group</span>
+                        <span class="text-[9px] text-slate-500">Each cycle contains its equipment codes, PR/PO, and calibration entries.</span>
                     </div>
-                    <button type="button" onclick="removeCalibrationGroup(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove date group"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                    <button type="button" onclick="removeCalibrationGroup(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove calibration group"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
                 </div>
                 <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40 space-y-2">
                     <div class="flex items-center justify-between gap-2">
-                        <div><span class="text-[10px] font-black text-white">CALIBRATION CYCLES</span><span class="ml-2 text-[9px] text-slate-500">Each Cycle has its own PR/PO and can contain multiple External and Internal entries.</span></div>
+                        <div><span class="text-[10px] font-black text-white">CALIBRATION CYCLES</span><span class="ml-2 text-[9px] text-slate-500">Example: Cycle 1 → DP 1, DP 2. Adding Cycle 2 creates the next cycle with the same codes.</span></div>
                         <button type="button" onclick="addSharedCalibrationCycle(this)" class="bg-slate-700 hover:bg-slate-600 text-white px-2.5 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap">+ Add Calibration Cycle</button>
                     </div>
                     <div class="shared-cycles-list space-y-2"></div>
-                </div>
-                <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40">
-                    <div class="flex items-center justify-between mb-1.5"><span class="text-[10px] font-bold text-slate-300"><i class="fa-solid fa-barcode text-blue-400 mr-1"></i>Equipment Codes Shared Across Cycles</span><button type="button" onclick="addCalibrationCodeRow(this)" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded-lg">+ Add Code</button></div>
-                    <div class="calibration-code-list space-y-1.5"></div>
                 </div>`;
             const list = wrapper.querySelector('.shared-cycles-list');
-            (sharedCycles.length ? sharedCycles : [{}]).forEach((cycle, idx) => list.appendChild(makeSharedCalibrationCycle(cycle, idx)));
-            const codeList = wrapper.querySelector('.calibration-code-list');
-            (group.codes && group.codes.length ? group.codes : ['']).forEach(code => codeList.appendChild(makeCalibrationCodeRow(code)));
+            (sharedCycles.length ? sharedCycles : [{ codes: allCodes }]).forEach((cycle, idx) => {
+                const codes = allCodes.length ? allCodes : (cycle.codes || []);
+                list.appendChild(makeSharedCalibrationCycle({...cycle, codes}, idx, codes));
+            });
             renumberSharedCalibrationCycles(wrapper);
             return wrapper;
         }
@@ -4110,48 +4123,38 @@ window.addEventListener("cloudsync:status", (event) => {
 
         function addCalibrationCodeRow(btn) {
             if (!isAdminUser()) return;
-            const group = btn.closest(".calibration-group");
-            const list = group?.querySelector(".calibration-code-list");
-            if (list) list.appendChild(makeCalibrationCodeRow());
+            const group = btn.closest('.calibration-group');
+            if (!group) return;
+            const code = prompt('Enter equipment code:');
+            if (code === null) return;
+            const clean = String(code).trim();
+            if (!clean) return;
+            const existing = [...group.querySelectorAll("input[name='eq-code']")].map(i => i.value.trim().toLowerCase());
+            if (existing.includes(clean.toLowerCase())) {
+                alert('That equipment code is already listed.');
+                return;
+            }
+            group.querySelectorAll('.calibration-code-list').forEach(list => list.appendChild(makeCalibrationCodeRow(clean)));
             renumberCalibrationGroups();
         }
 
         function removeCalibrationCodeRow(btn) {
             if (!isAdminUser()) return;
-            const group = btn.closest(".calibration-group");
-            const row = btn.closest(".calib-code-row");
+            const group = btn.closest('.calibration-group');
+            const row = btn.closest('.calib-code-row');
+            const code = row?.querySelector("input[name='eq-code']")?.value.trim().toLowerCase();
             if (row) row.remove();
-            const list = group?.querySelector(".calibration-code-list");
-            if (list && !list.children.length) list.appendChild(makeCalibrationCodeRow());
-            renumberCalibrationGroups();
-        }
-
-        function renumberCalibrationGroups() {
-            document.querySelectorAll("#calibration-groups-container .calibration-group").forEach((group, gidx) => {
-                const label = group.querySelector(".group-number");
-                if (label) label.innerText = `Date Group ${gidx + 1}`;
-                group.querySelectorAll(".calib-code-row").forEach((row, idx) => {
-                    const counter = row.querySelector(".code-counter");
-                    if (counter) counter.innerText = `${idx + 1}.`;
+            if (group && code) {
+                group.querySelectorAll("input[name='eq-code']").forEach(input => {
+                    if (input.value.trim().toLowerCase() === code) input.closest('.calib-code-row')?.remove();
                 });
-                renumberSharedCalibrationCycles(group);
-            });
-            syncEquipmentCountPreview();
-        }
-
-        function openEquipModal() {
-            if (!isAdminUser()) return;
-            document.getElementById("eq-id").value = "";
-            document.getElementById("modal-equip-title").innerText = "Add Calibration Entries";
-            clearEquipmentSharedFields();
-            const container = document.getElementById("calibration-groups-container");
-            container.innerHTML = "";
-            addCalibrationGroup();
-            document.getElementById("modal-equipment").classList.remove("hidden");
-        }
-
-        function closeEquipModal() {
-            document.getElementById("modal-equipment").classList.add("hidden");
+            }
+            if (group) {
+                group.querySelectorAll('.calibration-code-list').forEach(list => {
+                    if (!list.children.length) list.appendChild(makeCalibrationCodeRow());
+                });
+            }
+            renumberCalibrationGroups();
         }
 
         function collectCalibrationGroups() {
@@ -4160,20 +4163,20 @@ window.addEventListener("cloudsync:status", (event) => {
                     id: row.dataset.cycleId || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
                     pr: row.querySelector('.cycle-pr')?.value.trim() || '',
                     po: row.querySelector('.cycle-po')?.value.trim() || '',
+                    codes: [...row.querySelectorAll("input[name='eq-code']")].map(i => i.value.trim()).filter(Boolean),
                     external: collectCalibrationEntries(row, 'external'),
                     internal: collectCalibrationEntries(row, 'internal')
-                })).filter(c => c.external.length || c.internal.length);
+                })).filter(c => c.codes.length || c.external.length || c.internal.length || c.pr || c.po);
+                const codes = [...new Set(calibrationCycles.flatMap(c => c.codes).map(c => String(c || '').trim()).filter(Boolean))];
                 return {
-                    pr: group.querySelector('.group-pr')?.value.trim() || '',
-                    po: group.querySelector('.group-po')?.value.trim() || '',
                     calibrationCycles,
                     externalCalibrations: calibrationCycles.flatMap(c => c.external),
                     internalCalibrations: calibrationCycles.flatMap(c => c.internal),
                     pr: calibrationCycles.find(c => c.pr)?.pr || '',
                     po: calibrationCycles.find(c => c.po)?.po || '',
-                    codes: [...group.querySelectorAll("input[name='eq-code']")].map(i => i.value.trim()).filter(Boolean)
+                    codes
                 };
-            }).filter(g => g.codes.length && (g.calibrationCycles.length || g.pr || g.po));
+            }).filter(g => g.codes.length && g.calibrationCycles.length);
         }
 
         function getSharedEquipmentData() {
@@ -4243,7 +4246,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 const nowIso = new Date().toISOString();
 
                 groups.forEach(group => {
-                    const cycleData = replaceSharedCalibrationCycles(group.calibrationCycles || []);
+                    const allCycleData = replaceSharedCalibrationCycles(group.calibrationCycles || []);
                     group.codes.forEach(code => {
                         const cleanCode = String(code || '').trim();
                         if (!cleanCode) return;
