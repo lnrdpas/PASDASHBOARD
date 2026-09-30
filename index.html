@@ -3443,13 +3443,50 @@ window.addEventListener("cloudsync:status", (event) => {
                 return [...map.values()];
             };
 
+            // Build one complete cycle/occurrence set from ALL records in the same Plant + Instrument Type group.
+            // This prevents data loss when Supabase/local storage has one equipment-code record
+            // carrying an occurrence that another code record does not carry.
+            const collectGroupCalibrationCycles = group => {
+                const merged = [];
+                const byCycleKey = new Map();
+                (group || []).forEach(record => {
+                    const cycles = normalizeSharedCalibrationCycles(record);
+                    cycles.forEach((cycle, cycleIndex) => {
+                        const cycleKey = String(cycle.id || `cycle-${cycleIndex + 1}`);
+                        let target = byCycleKey.get(cycleKey);
+                        if (!target) {
+                            target = { id: cycle.id || cycleKey, pr: cycle.pr || '', po: cycle.po || '', codes: [], external: [], internal: [] };
+                            byCycleKey.set(cycleKey, target);
+                            merged.push(target);
+                        }
+                        target.codes = [...new Set([...(target.codes || []), ...(Array.isArray(cycle.codes) ? cycle.codes : []), ...(record.code ? [record.code] : [])].map(v=>String(v||'').trim()).filter(Boolean))];
+                        target.pr = target.pr || cycle.pr || '';
+                        target.po = target.po || cycle.po || '';
+                        ['external','internal'].forEach(type => {
+                            const targetEntries = target[type];
+                            (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
+                                const normalized = normalizeCalibrationCycle(entry);
+                                const entryId = String(normalized.id || '');
+                                const existing = entryId ? targetEntries.findIndex(x=>String(x.id||'')===entryId) : -1;
+                                if (existing >= 0) {
+                                    targetEntries[existing] = { ...targetEntries[existing], ...normalized, codes:[...new Set([...(targetEntries[existing].codes||[]), ...(normalized.codes||[]), ...(record.code ? [record.code] : [])])] };
+                                } else {
+                                    targetEntries.push({ ...normalized, id: entryId || `${cycleKey}-${type}-${entryIndex}-${normalized.sched||normalized.calib||''}`, codes:[...new Set([...(normalized.codes||[]), ...(record.code ? [record.code] : [])])] });
+                                }
+                            });
+                        });
+                    });
+                });
+                return merged;
+            };
+
             const calcCalib = (list, dateType='all', dateValue='') => {
                 // CALIBRATION WORKLOAD LOGIC:
                 // Every calibration occurrence is one requirement PER equipment code
                 // assigned to that occurrence. 3 codes x 3 occurrences = 9.
                 // Adding a code increases every applicable occurrence. Adding an
                 // occurrence increases the total by the codes assigned to it.
-                let done=0, overdue=0, pending=0, stsok=0, na=0;
+                let done=0, overdueDone=0, overdue=0, pending=0, stsok=0, na=0;
                 const groups = new Map();
                 (list || []).forEach(eq => {
                     const plant = normalizePlant(eq.plant);
@@ -3467,8 +3504,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 groups.forEach(group => {
                     const groupCodes = [...new Set(group.map(x=>String(x.code||'').trim()).filter(Boolean))];
                     const groupCodeSet = new Set(groupCodes.map(x=>x.toLowerCase()));
-                    const representative = group[0];
-                    const cycles = normalizeSharedCalibrationCycles(representative);
+                    const cycles = collectGroupCalibrationCycles(group);
                     cycles.forEach(cycle => ['external','internal'].forEach(type => {
                         const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
                         entries.forEach(entry => {
@@ -3480,7 +3516,8 @@ window.addEventListener("cloudsync:status", (event) => {
                             const codeCount = applicableCodes.length;
                             if (!codeCount) return;
                             const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
-                            if (st === 'DONE' || st === 'OVERDUE, DONE') done += codeCount;
+                            if (st === 'DONE') done += codeCount;
+                            else if (st === 'OVERDUE, DONE') { done += codeCount; overdueDone += codeCount; }
                             else if (st === 'OVERDUE') overdue += codeCount;
                             else if (st === 'PENDING') pending += codeCount;
                             else if (st === 'STSOK') stsok += codeCount;
@@ -3489,7 +3526,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     }));
                 });
                 const scheduled = done + overdue + pending + stsok;
-                return {done, scheduled, toCalibrate: overdue + pending + stsok, overdue, pending, stsok, na, compliance:scheduled?Math.round(done/scheduled*100):0};
+                return {done, overdueDone, scheduled, toCalibrate: overdue + pending + stsok, overdue, pending, stsok, na, compliance:scheduled?Math.round(done/scheduled*100):0};
             };
             const calcDowntime = list => {
                 let hrs=0; (list||[]).forEach(dt=>{ const d=(new Date(dt.end)-new Date(dt.start))/3600000; if(d>0) hrs+=d; });
@@ -3670,15 +3707,11 @@ window.addEventListener("cloudsync:status", (event) => {
                 projectByPlant[p] = { "In Progress": 0, Planning: 0, "On Hold": 0, Completed: 0 };
             });
 
-            // Supporting calibration details are counted once per unique equipment code.
-            uniqueEquipmentCodes(filteredEq).forEach(eq => {
-                const plant = normalizePlant(eq.plant);
-                if (!calibByPlant[plant]) return;
-                const statuses = [getSubCalibStatusForRecord(eq,'external'), getSubCalibStatusForRecord(eq,'internal')].filter(st => st !== 'NA');
-                if (!statuses.length) return;
-                calibByPlant[plant].scheduled++;
-                const overall = getCalibStatus(eq);
-                if (overall === 'DONE' || overall === 'OVERDUE, DONE') calibByPlant[plant].done++;
+            // Supporting details use the SAME occurrence x equipment-code workload logic as the main KPI.
+            allSummaryPlants.forEach(plant => {
+                const plantRecords = filteredEq.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
+                const w = calcCalib(plantRecords, primaryType, primaryValue);
+                calibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
             });
 
             filteredPr.forEach(pr => {
@@ -3690,13 +3723,10 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const compareCalibByPlant = {};
             allSummaryPlants.forEach(p => compareCalibByPlant[p] = {done:0, scheduled:0});
-            uniqueEquipmentCodes(comparisonEq).forEach(eq => {
-                const plant = normalizePlant(eq.plant); if (!compareCalibByPlant[plant]) return;
-                const statuses = [getSubCalibStatusForRecord(eq,'external'), getSubCalibStatusForRecord(eq,'internal')].filter(st => st !== 'NA');
-                if (!statuses.length) return;
-                compareCalibByPlant[plant].scheduled++;
-                const overall = getCalibStatus(eq);
-                if (overall === 'DONE' || overall === 'OVERDUE, DONE') compareCalibByPlant[plant].done++;
+            allSummaryPlants.forEach(plant => {
+                const plantRecords = comparisonEq.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
+                const w = calcCalib(plantRecords, compareType, compareValue);
+                compareCalibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
             });
             const calibSupp = document.getElementById("summary-per-plant-calib");
             calibSupp.innerHTML = isCompare ? `
@@ -3906,7 +3936,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const tTotal = workload.scheduled;
             const tDone = workload.done;
             const tOverdue = workload.overdue;
-            const tOverdueDone = 0;
+            const tOverdueDone = workload.overdueDone || 0;
             const tPending = workload.pending;
             const tStsok = workload.stsok;
             const tNa = workload.na;
@@ -3923,7 +3953,7 @@ window.addEventListener("cloudsync:status", (event) => {
             groupedForBreakdown.forEach(group=>{
                 const codes=[...new Set(group.map(x=>String(x.code||'').trim()).filter(Boolean))];
                 const codeSet=new Set(codes.map(x=>x.toLowerCase()));
-                const cycles=normalizeSharedCalibrationCycles(group[0]);
+                const cycles=collectGroupCalibrationCycles(group);
                 cycles.forEach(cycle=>['external','internal'].forEach(type=>{
                     (Array.isArray(cycle[type])?cycle[type]:[]).forEach(entry=>{
                         const assigned=Array.isArray(entry?.codes)?entry.codes.map(x=>String(x||'').trim()).filter(Boolean):[];
@@ -3998,7 +4028,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 const instrumentCodes = [...new Set(group.map(eq => String(eq.code || '').trim()).filter(Boolean))];
                 const occurrenceMap = new Map();
                 group.forEach(eq => {
-                    normalizeSharedCalibrationCycles(eq).forEach((cycle, cycleIndex) => {
+                    collectGroupCalibrationCycles(group).forEach((cycle, cycleIndex) => {
+                        if (eq !== group[0]) return;
                         const cycleId = cycleHistoryKey(cycle, cycleIndex);
                         ['external','internal'].forEach(type => {
                             (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
