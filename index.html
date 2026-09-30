@@ -3577,7 +3577,7 @@ window.addEventListener("cloudsync:status", (event) => {
             };
             const primaryCalib=calcCalib(filteredEq, primaryType, primaryValue), compareCalib=isCompare?calcCalib(comparisonEq, compareType, compareValue):null;
             const calibChartIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
-            const calibChartPrimary = calibChartIgnoreFilter ? calcCalib(equipmentList, primaryType, primaryValue) : primaryCalib;
+            const calibChartPrimary = calibChartIgnoreFilter ? calcCalib(equipmentList, 'all', '') : primaryCalib;
             const calibChartCompare = (!calibChartIgnoreFilter && isCompare) ? compareCalib : null;
             window._summaryCompareCalib = calibChartCompare?.compliance || 0;
             const primaryDown=calcDowntime(filteredDt), compareDown=isCompare?calcDowntime(comparisonDt):null;
@@ -3740,6 +3740,11 @@ window.addEventListener("cloudsync:status", (event) => {
                 ? allSummaryPlants
                 : allSummaryPlants.filter(p => normalizePlant(p) === normalizePlant(currentPlant));
 
+            const calibSupportingIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
+            const projectSupportingIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
+            const calibSupportingIsCompare = isCompare && !calibSupportingIgnoreFilter;
+            const projectSupportingIsCompare = isCompare && !projectSupportingIgnoreFilter;
+
             const calibByPlant = {};
             const projectByPlant = {};
             allSummaryPlants.forEach(p => {
@@ -3749,12 +3754,13 @@ window.addEventListener("cloudsync:status", (event) => {
 
             // Supporting details use the SAME occurrence x equipment-code workload logic as the main KPI.
             allSummaryPlants.forEach(plant => {
-                const plantRecords = filteredEq.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
-                const w = calcCalib(plantRecords, primaryType, primaryValue);
+                const sourceRecords = calibSupportingIgnoreFilter ? equipmentList : filteredEq;
+                const plantRecords = sourceRecords.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
+                const w = calibSupportingIgnoreFilter ? calcCalib(plantRecords, 'all', '') : calcCalib(plantRecords, primaryType, primaryValue);
                 calibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
             });
 
-            filteredPr.forEach(pr => {
+            (projectSupportingIgnoreFilter ? projectsList : filteredPr).forEach(pr => {
                 const plant = normalizePlant(pr.plant);
                 if (!projectByPlant[plant]) return;
                 const status = String(pr.status || "Planning").trim();
@@ -3769,7 +3775,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 compareCalibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
             });
             const calibSupp = document.getElementById("summary-per-plant-calib");
-            calibSupp.innerHTML = isCompare ? `
+            calibSupp.innerHTML = calibSupportingIsCompare ? `
                 <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryDisplay || 'Date 1')} vs ${escapeHtml(compareDisplay || 'Date 2')}</div>
                 <div class="grid grid-cols-5 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
                     <span>Plant</span><span>Period</span><span class="text-center">Done</span><span class="text-center">Scheduled</span><span class="text-center">Percent</span>
@@ -3797,7 +3803,10 @@ window.addEventListener("cloudsync:status", (event) => {
             const compareProjectByPlant = {};
             allSummaryPlants.forEach(p => compareProjectByPlant[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
             comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
-            projSupp.innerHTML = isCompare ? `
+            if (projectSupportingIgnoreFilter) {
+                allSummaryPlants.forEach(p => compareProjectByPlant[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
+            }
+            projSupp.innerHTML = projectSupportingIsCompare ? `
                 <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryDisplay || 'Date 1')} vs ${escapeHtml(compareDisplay || 'Date 2')}</div>
                 <div class="grid grid-cols-6 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span>Period</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
                 ${summaryPlants.map(p=>{const a=projectByPlant[p]||{},b=compareProjectByPlant[p]||{};return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-6 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryDisplay || 'Date 1')}</span><strong class="text-center text-blue-400">${a['In Progress']||0}</strong><strong class="text-center text-amber-400">${a.Planning||0}</strong><strong class="text-center text-red-400">${a['On Hold']||0}</strong><strong class="text-center text-emerald-400">${a.Completed||0}</strong></div><div class="grid grid-cols-6 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareDisplay || 'Date 2')}</span><strong class="text-center text-blue-300">${b['In Progress']||0}</strong><strong class="text-center text-amber-300">${b.Planning||0}</strong><strong class="text-center text-red-300">${b['On Hold']||0}</strong><strong class="text-center text-emerald-300">${b.Completed||0}</strong></div></div>`;}).join('')}
@@ -4208,8 +4217,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                                 const codes = Array.isArray(e.codes) && e.codes.length ? e.codes : (item.codes.length ? item.codes : instrumentCodes);
                                 const typeLabel = item.type === 'external' ? 'EXTERNAL CALIBRATION' : 'INTERNAL CALIBRATION';
                                 const typeCls = item.type === 'external' ? 'text-blue-300' : 'text-purple-300';
-                                const editFn = `openCalibrationOccurrenceEditor(${JSON.stringify(ids)},${JSON.stringify(item.cycleId)},${JSON.stringify(item.type)},${JSON.stringify(e.id || '')})`;
-                                const deleteFn = `deleteCalibrationOccurrence(${JSON.stringify(ids)},${JSON.stringify(item.cycleId)},${JSON.stringify(item.type)},${JSON.stringify(e.id || '')})`;
                                 return `<div class="rounded-lg border border-slate-700/60 bg-slate-900/45 p-2.5">
                                     <div class="flex flex-wrap items-start justify-between gap-2">
                                         <div class="min-w-0">
@@ -4218,10 +4225,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                                                 ${badge(status)}
                                             </div>
                                             <div class="text-[10px] text-slate-300 mt-1"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ') || '-'}</strong></div>
-                                        </div>
-                                        <div class="flex gap-1.5 shrink-0">
-                                            <button type="button" onclick='${editFn}' class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-white">Edit</button>
-                                            <button type="button" onclick='${deleteFn}' class="px-2 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[9px] font-bold text-red-300">Delete</button>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[9px]">
@@ -5063,10 +5066,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                                             <span class="px-1.5 py-0.5 rounded border text-[8px] font-black ${statusClass(status)}">${escapeHtml(status)}</span>
                                         </div>
                                         <div class="text-[10px] text-slate-300 mt-1"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ') || '-'}</strong></div>
-                                    </div>
-                                    <div class="flex gap-1.5 shrink-0">
-                                        <button type="button" onclick='openCalibrationOccurrenceEditor(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${JSON.stringify(r.entryId)})' class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-white">Edit</button>
-                                        <button type="button" onclick='deleteCalibrationOccurrence(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${JSON.stringify(r.entryId)})' class="px-2 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[9px] font-bold text-red-300">Delete</button>
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[9px]">
