@@ -3952,7 +3952,43 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 1: CALIBRATION TRACKER ---
+        // The Executive Summary and Calibration Tracker must read the same live
+        // equipment/calibration dataset. CloudSync writes the merged equipment
+        // dataset to localStorage; this helper refreshes the tracker source from
+        // that saved dataset without throwing away in-memory calibration fields.
+        function hydrateCalibrationTrackerData() {
+            try {
+                const raw = localStorage.getItem("suite_equipment_data");
+                const saved = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(saved) || !saved.length) return;
+
+                const byKey = new Map();
+                (equipmentList || []).forEach(record => {
+                    const code = String(record?.code || '').trim();
+                    if (!code) return;
+                    byKey.set(`${normalizePlant(record.plant)}||${code.toLowerCase()}`, record);
+                });
+
+                saved.forEach(savedRecord => {
+                    const code = String(savedRecord?.code || '').trim();
+                    if (!code) return;
+                    const key = `${normalizePlant(savedRecord.plant)}||${code.toLowerCase()}`;
+                    const current = byKey.get(key);
+                    if (current) {
+                        byKey.set(key, mergeEquipmentCalibration(current, savedRecord));
+                    } else {
+                        byKey.set(key, savedRecord);
+                    }
+                });
+
+                equipmentList = [...byKey.values()];
+            } catch (err) {
+                console.warn('Calibration Tracker data hydration:', err);
+            }
+        }
+
         function renderCalibModule() {
+            hydrateCalibrationTrackerData();
             renderCalibGauges();
             renderCalibTable();
         }
@@ -4027,10 +4063,9 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         function renderCalibTable() {
-            // Collapse legacy duplicate rows before rendering. This does not change
-            // the visual style; it only guarantees one underlying record per
-            // Plant + Equipment Code while retaining all calibration occurrences.
-            dedupeEquipmentCodes();
+            // Do not mutate/dedupe the source dataset while rendering. Multiple
+            // rows for the same code can contain different calibration occurrences;
+            // the card builder below combines those records without deleting data.
             const search = document.getElementById("calib-search").value.toLowerCase();
             const statusFilter = document.getElementById("calib-filter-status").value;
 
