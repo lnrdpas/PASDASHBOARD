@@ -3787,7 +3787,10 @@ window.addEventListener("cloudsync:status", (event) => {
                 Completed: list.filter(pr => String(pr.status || "").trim() === "Completed").length
             });
             const projectChartIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
-            const projectOverallPrimary = projectChartIgnoreFilter ? projectOverall(projectsList.filter(pr => currentPlant === "ALL" || normalizePlant(pr.plant) === normalizePlant(currentPlant))) : projectOverall(filteredPr);
+            const projectChartPlantRecords = currentPlant === "ALL"
+                ? projectsList
+                : projectsList.filter(pr => normalizePlant(pr.plant) === normalizePlant(currentPlant));
+            const projectOverallPrimary = projectChartIgnoreFilter ? projectOverall(projectChartPlantRecords) : projectOverall(filteredPr);
             const projectOverallCompare = (!projectChartIgnoreFilter && isCompare) ? projectOverall(comparisonPr) : null;
 
             const projSupp = document.getElementById("summary-per-plant-projects");
