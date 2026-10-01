@@ -3748,13 +3748,16 @@ window.addEventListener("cloudsync:status", (event) => {
             });
 
             // Supporting details use the SAME occurrence x equipment-code workload logic as the main KPI.
+            const calibSupportingIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
             allSummaryPlants.forEach(plant => {
-                const plantRecords = filteredEq.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
-                const w = calcCalib(plantRecords, primaryType, primaryValue);
+                const plantRecords = (calibSupportingIgnoreFilter ? equipmentList : filteredEq)
+                    .filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
+                const w = calcCalib(plantRecords, calibSupportingIgnoreFilter ? 'all' : primaryType, calibSupportingIgnoreFilter ? '' : primaryValue);
                 calibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
             });
 
-            filteredPr.forEach(pr => {
+            const projectSupportingIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
+            (projectSupportingIgnoreFilter ? projectsList : filteredPr).forEach(pr => {
                 const plant = normalizePlant(pr.plant);
                 if (!projectByPlant[plant]) return;
                 const status = String(pr.status || "Planning").trim();
