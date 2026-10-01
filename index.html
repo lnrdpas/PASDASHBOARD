@@ -4211,8 +4211,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                                 const codes = Array.isArray(e.codes) && e.codes.length ? e.codes : (item.codes.length ? item.codes : instrumentCodes);
                                 const typeLabel = item.type === 'external' ? 'EXTERNAL CALIBRATION' : 'INTERNAL CALIBRATION';
                                 const typeCls = item.type === 'external' ? 'text-blue-300' : 'text-purple-300';
-                                const editFn = `openCalibrationOccurrenceEditor(${JSON.stringify(ids)},${JSON.stringify(item.cycleId)},${JSON.stringify(item.type)},${JSON.stringify(e.id || '')})`;
-                                const deleteFn = `deleteCalibrationOccurrence(${JSON.stringify(ids)},${JSON.stringify(item.cycleId)},${JSON.stringify(item.type)},${JSON.stringify(e.id || '')})`;
                                 return `<div class="rounded-lg border border-slate-700/60 bg-slate-900/45 p-2.5">
                                     <div class="flex flex-wrap items-start justify-between gap-2">
                                         <div class="min-w-0">
@@ -4221,10 +4219,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                                                 ${badge(status)}
                                             </div>
                                             <div class="text-[10px] text-slate-300 mt-1"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ') || '-'}</strong></div>
-                                        </div>
-                                        <div class="flex gap-1.5 shrink-0">
-                                            <button type="button" onclick='${editFn}' class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-white">Edit</button>
-                                            <button type="button" onclick='${deleteFn}' class="px-2 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[9px] font-bold text-red-300">Delete</button>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[9px]">
@@ -5057,8 +5051,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                             const status = calibrationOccurrenceStatus(r);
                             const ids = r.recordIds.map(x => String(x));
                             const codes = r.codes.length ? r.codes : instrumentCodes;
-                            const editId = ids[0] || '';
-                            return `<div class="rounded-lg border border-slate-700/60 bg-slate-900/45 p-2.5">
+                                        return `<div class="rounded-lg border border-slate-700/60 bg-slate-900/45 p-2.5">
                                 <div class="flex flex-wrap items-start justify-between gap-2">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
@@ -5066,10 +5059,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                                             <span class="px-1.5 py-0.5 rounded border text-[8px] font-black ${statusClass(status)}">${escapeHtml(status)}</span>
                                         </div>
                                         <div class="text-[10px] text-slate-300 mt-1"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ') || '-'}</strong></div>
-                                    </div>
-                                    <div class="flex gap-1.5 shrink-0">
-                                        <button type="button" onclick='openCalibrationOccurrenceEditor(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${JSON.stringify(r.entryId)})' class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-white">Edit</button>
-                                        <button type="button" onclick='deleteCalibrationOccurrence(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${JSON.stringify(r.entryId)})' class="px-2 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[9px] font-bold text-red-300">Delete</button>
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[9px]">
