@@ -5375,14 +5375,34 @@ function calcCalib(list, dateType='all', dateValue='') {
             const bucket=list=>(list||[]).map((x,i)=>({...x,label:x.code||x.equipment||'Unassigned Code',code:x.code||x.equipment||'Unassigned Code',equipment:x.code||x.equipment||'—',equipmentCategory:x.equipmentCategory||x.category||'—',category:x.equipmentCategory||x.category||'—',trouble:x.trouble||'Unclassified Trouble',troubleList:x.troubleList||[],occurrences:x.occurrences||0}));
             const pp=bucket(buildUptimePareto(primaryLogs)), cc=bucket(buildUptimePareto(compareLogs));
             const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
-            const labs=pp.map((x,i)=>isCompare?[`${x.code||x.equipment||'Unassigned Code'}`,`${x.equipmentCategory||x.category||'Unclassified Equipment'}`,`vs ${cc[i]?.code||'—'}`,`${cc[i]?.equipmentCategory||'—'}`]:[`${x.code||x.equipment||'Unassigned Code'}`,`${x.equipmentCategory||x.category||'Unclassified Equipment'}`]);
-            const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[];
-            const combinedValues=isCompare?pd.map((v,i)=>v+(cd[i]||0)):pd.slice();
-            const combinedTotal=combinedValues.reduce((a,b)=>a+b,0);
-            let combinedRun=0;
-            const cumulativePct=combinedValues.map(x=>{combinedRun+=x;return combinedTotal?Number((combinedRun/combinedTotal*100).toFixed(1)):0;});
-            const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30},{type:'line',label:'Cumulative %',data:cumulativePct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30},{type:'line',label:'Cumulative %',data:cumulativePct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}];
-            chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].code} — ${pp[i].equipmentCategory} | vs ${cc[i]?.code||'—'} — ${cc[i]?.equipmentCategory||'—'}`:`${pp[i].code} — ${pp[i].equipmentCategory}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Equipment Category: ${pp[i].equipmentCategory||pp[i].category||'—'}`,`Trouble: ${pp[i].trouble||'—'}`,`Occurrences: ${pp[i].occurrences||0}`,isCompare?`Comparison Equipment Category: ${cc[i]?.equipmentCategory||'—'}`:'',isCompare?`Comparison Trouble: ${cc[i]?.trouble||'—'}`:''];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+            // Keep one stable equipment identity per bar position: Equipment Code + Equipment Category.
+            // In comparison mode, both periods use the same equipment labels; a missing period is zero.
+            const byEquipmentKey = new Map();
+            pp.forEach(x => {
+                const key = `${String(x.code||'Unassigned Code').toUpperCase()}||${String(x.equipmentCategory||x.category||'Unclassified Equipment').toUpperCase()}`;
+                byEquipmentKey.set(key, { code:x.code||'Unassigned Code', equipmentCategory:x.equipmentCategory||x.category||'Unclassified Equipment', primary:x });
+            });
+            cc.forEach(x => {
+                const key = `${String(x.code||'Unassigned Code').toUpperCase()}||${String(x.equipmentCategory||x.category||'Unclassified Equipment').toUpperCase()}`;
+                if(!byEquipmentKey.has(key)) byEquipmentKey.set(key, { code:x.code||'Unassigned Code', equipmentCategory:x.equipmentCategory||x.category||'Unclassified Equipment' });
+                byEquipmentKey.get(key).compare=x;
+            });
+            const paretoRows = [...byEquipmentKey.values()].sort((a,b)=>{
+                const at=(a.primary?.duration||0)+(a.compare?.duration||0);
+                const bt=(b.primary?.duration||0)+(b.compare?.duration||0);
+                return bt-at;
+            });
+            const labs = paretoRows.map(x => [String(x.code||'Unassigned Code'), String(x.equipmentCategory||'Unclassified Equipment')]);
+            const pd = paretoRows.map(x => Number((x.primary?.duration||0).toFixed(1)));
+            const cd = isCompare ? paretoRows.map(x => Number((x.compare?.duration||0).toFixed(1))) : [];
+            const cumulativeBasis = paretoRows.map(x => (x.primary?.duration||0) + (isCompare ? (x.compare?.duration||0) : 0));
+            const cumulativeTotal = cumulativeBasis.reduce((a,b)=>a+b,0);
+            let cumulativeRun=0;
+            const cumulativePct=cumulativeBasis.map(x=>{cumulativeRun+=x;return cumulativeTotal?Number((cumulativeRun/cumulativeTotal*100).toFixed(1)):0;});
+            const ds=isCompare
+                ? [{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30,categoryPercentage:.72,barPercentage:.82},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30,categoryPercentage:.72,barPercentage:.82},{type:'line',label:'Cumulative %',data:cumulativePct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}]
+                : [{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30,categoryPercentage:.72,barPercentage:.82},{type:'line',label:'Cumulative %',data:cumulativePct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}];
+            chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;const r=paretoRows[i]||{};return `${r.code||'Unassigned Code'} — ${r.equipmentCategory||'Unclassified Equipment'}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;const r=paretoRows[i]||{};const datasetIndex=it[0]?.datasetIndex||0;const x=datasetIndex===1?(r.compare||r.primary):(r.primary||r.compare);return [`Equipment Code: ${r.code||'—'}`,`Equipment Category: ${r.equipmentCategory||'—'}`,`Trouble: ${x?.trouble||'—'}`,`Occurrences: ${x?.occurrences||0}`];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             window.__expandedParetoUptime = { primaryLogs: primaryLogs.slice(), compareLogs: compareLogs.slice(), primaryLabel: primaryValue || 'All Time', compareLabel: compareValue || '', isCompare };
             const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto by Equipment Code — ${primaryValue} vs ${compareValue}`:`Downtime Pareto by Equipment Code — ${primaryValue||'All Time'}`;
         }
