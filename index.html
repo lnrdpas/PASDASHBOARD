@@ -1593,7 +1593,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                 <button type="button" id="uptime-pareto-expand-btn" onclick="openUptimeParetoTrouble()" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] text-slate-200 font-bold whitespace-nowrap">↗ Expand / View All Trouble</button>
                             </div>
                         </div>
-                        <div class="chart-box-container flex-1 my-2">
+                        <div class="chart-box-container flex-1 my-2 min-h-[340px]">
                             <canvas id="chart-downtime-pareto"></canvas>
                         </div>
                     </div>
@@ -2059,6 +2059,33 @@ window.addEventListener("cloudsync:status", (event) => {
             </div>
             <div class="pt-2 flex justify-end">
                 <button onclick="closeDowntimeCategoryManagerModal()" class="px-4 py-1.5 rounded-xl bg-slate-700 text-slate-200 text-xs font-semibold">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-pareto-trouble" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-[95] hidden no-print items-center justify-center p-4">
+        <div class="w-full max-w-6xl max-h-[90vh] overflow-hidden bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col">
+            <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-700">
+                <div>
+                    <h3 id="pareto-trouble-title" class="text-sm font-bold text-white">Pareto — View All Trouble</h3>
+                    <p class="text-[10px] text-slate-400 mt-0.5">Equipment Code + Equipment Category / Indication</p>
+                </div>
+                <button type="button" onclick="closeParetoTrouble()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-bold text-slate-200">Close</button>
+            </div>
+            <div class="flex-1 min-h-0 overflow-auto p-4 space-y-4">
+                <div class="bg-slate-950/50 border border-slate-700/70 rounded-xl p-3">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <div>
+                            <div class="text-xs font-bold text-white">Downtime Pareto Graph</div>
+                            <div id="pareto-trouble-graph-note" class="text-[9px] text-slate-400">Ranked highest to lowest by Equipment Code + Equipment Category / Indication</div>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-[360px]">
+                        <canvas id="pareto-trouble-graph"></canvas>
+                    </div>
+                    <div id="pareto-trouble-indications" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+                </div>
+                <div id="pareto-trouble-content"></div>
             </div>
         </div>
     </div>
@@ -3399,86 +3426,6 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 0: SUMMARY ---
-
-        let paretoTroublePopupChart = null;
-
-        function paretoTroubleRows(items) {
-            return (items || []).map((x, i) => ({
-                rank: i + 1,
-                equipment: x.equipment || '—',
-                equipmentCategory: x.equipmentCategory || '—',
-                duration: Number(x.duration || 0),
-                category: x.category || '—',
-                lines: x.line || '—',
-                failureCategories: x.failureCategories instanceof Map ? [...x.failureCategories.entries()].sort((a,b)=>b[1]-a[1]) : []
-            }));
-        }
-
-        function openParetoTrouble(data, sourceTitle) {
-            const modal=document.getElementById('modal-pareto-trouble');
-            if(!modal) return;
-            const primary=paretoTroubleRows(data?.primary);
-            const compare=paretoTroubleRows(data?.compare);
-            const isCompare=!!data?.isCompare;
-            const count=Math.max(primary.length, isCompare ? compare.length : 0);
-            const labels=Array.from({length:count},(_,i)=>`Data ${i+1}`);
-            const pd=labels.map((_,i)=>Number(primary[i]?.duration||0));
-            const cd=isCompare?labels.map((_,i)=>Number(compare[i]?.duration||0)):[];
-            const total=pd.reduce((a,b)=>a+b,0)+(isCompare?cd.reduce((a,b)=>a+b,0):0);
-            let run=0;
-            const cum=labels.map((_,i)=>{run+=pd[i]+(isCompare?cd[i]:0);return total?Number((run/total*100).toFixed(1)):0;});
-
-            document.getElementById('pareto-trouble-title').textContent=`${sourceTitle || 'Pareto'} — View All Trouble`;
-            document.getElementById('pareto-trouble-subtitle').textContent=isCompare
-                ? `${data.primaryLabel || 'Period 1'} vs ${data.compareLabel || 'Period 2'} — Equipment Code + Equipment Category / Indication`
-                : 'Equipment Code + Equipment Category / Indication — Highest to Lowest';
-
-            const indication=document.getElementById('pareto-trouble-indications');
-            indication.innerHTML=labels.map((_,i)=>{
-                const a=primary[i], b=compare[i];
-                return `<div class="bg-slate-950/60 border border-slate-800 rounded-lg p-2 text-[10px]">
-                    <div class="font-black text-slate-300 mb-1">Data ${i+1}</div>
-                    <div class="text-amber-300"><span class="text-slate-500">${isCompare?'T1: ':''}</span>${escapeHtml(a?.equipment||'—')} — ${escapeHtml(a?.equipmentCategory||'—')}</div>
-                    ${isCompare?`<div class="text-blue-300"><span class="text-slate-500">T2: </span>${escapeHtml(b?.equipment||'—')} — ${escapeHtml(b?.equipmentCategory||'—')}</div>`:''}
-                </div>`;
-            }).join('');
-
-            const body=document.getElementById('pareto-trouble-content');
-            const renderTable=(title,rows)=>`<div class="bg-slate-950/40 border border-slate-800 rounded-xl overflow-hidden">
-                <div class="px-3 py-2 border-b border-slate-800 text-xs font-black text-white">${escapeHtml(title)}</div>
-                <div class="overflow-x-auto"><table class="w-full text-[10px]"><thead><tr class="text-slate-500 uppercase border-b border-slate-800">
-                    <th class="text-left px-3 py-2">Data</th><th class="text-left px-3 py-2">Equipment Code</th><th class="text-left px-3 py-2">Equipment Category / Indication</th><th class="text-left px-3 py-2">Trouble / Failure</th><th class="text-left px-3 py-2">Lines</th><th class="text-right px-3 py-2">Duration</th><th class="text-right px-3 py-2">Cumulative</th>
-                </tr></thead><tbody>${rows.map((r,i)=>{const c=cum[i]||0;const troubles=r.failureCategories.length?r.failureCategories.map(([k,v])=>`${escapeHtml(k)} (${Number(v).toFixed(1)} hrs)`).join('<br>'):'—';return `<tr class="border-b border-slate-800/70 align-top"><td class="px-3 py-2 font-bold text-slate-300">Data ${r.rank}</td><td class="px-3 py-2 text-white font-bold">${escapeHtml(r.equipment)}</td><td class="px-3 py-2 text-cyan-300">${escapeHtml(r.equipmentCategory)}</td><td class="px-3 py-2 text-slate-300">${troubles}</td><td class="px-3 py-2 text-slate-400">${escapeHtml(r.lines)}</td><td class="px-3 py-2 text-right text-red-300 font-bold">${r.duration.toFixed(1)} hrs</td><td class="px-3 py-2 text-right text-cyan-300">${c.toFixed(1)}%</td></tr>`;}).join('')}</tbody></table></div>
-            </div>`;
-            body.innerHTML=isCompare ? renderTable(data.primaryLabel || 'Period 1',primary)+renderTable(data.compareLabel || 'Period 2',compare) : renderTable(data.primaryLabel || 'Selected Period',primary);
-
-            modal.classList.remove('hidden');
-            requestAnimationFrame(()=>{
-                const canvas=document.getElementById('pareto-trouble-graph');
-                if(!canvas || typeof Chart==='undefined') return;
-                if(paretoTroublePopupChart) paretoTroublePopupChart.destroy();
-                const datasets=isCompare
-                    ? [{label:data.primaryLabel||'Period 1',data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:32},{label:data.compareLabel||'Period 2',data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:32}]
-                    : [{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:32}];
-                datasets.push({type:'line',label:'Cumulative %',data:cum,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'});
-                paretoTroublePopupChart=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#cbd5e1',boxWidth:11}},tooltip:{callbacks:{title:items=>`Data ${(items[0]?.dataIndex??0)+1}`,afterBody:items=>{const i=items[0]?.dataIndex??0;return [isCompare?`T1: ${primary[i]?.equipment||'—'} — ${primary[i]?.equipmentCategory||'—'}`:`${primary[i]?.equipment||'—'} — ${primary[i]?.equipmentCategory||'—'}`,isCompare?`T2: ${compare[i]?.equipment||'—'} — ${compare[i]?.equipmentCategory||'—'}`:''];}}}},scales:{x:{ticks:{color:'#cbd5e1',autoSkip:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
-            });
-        }
-
-        function closeParetoTrouble(){
-            const modal=document.getElementById('modal-pareto-trouble');
-            if(modal) modal.classList.add('hidden');
-            if(paretoTroublePopupChart){paretoTroublePopupChart.destroy();paretoTroublePopupChart=null;}
-        }
-
-        function openSummaryParetoTrouble(){
-            if(window.__summaryParetoTrouble) openParetoTrouble(window.__summaryParetoTrouble,'Executive Summary Pareto');
-        }
-
-        function openUptimeParetoTrouble(){
-            if(window.__uptimeParetoTrouble) openParetoTrouble(window.__uptimeParetoTrouble,'Uptime / Downtime Pareto');
-        }
-
         function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
             const yearVal = document.getElementById("summary-year-filter").value;
@@ -3713,8 +3660,8 @@ window.addEventListener("cloudsync:status", (event) => {
             const sortedLinePareto = buildPareto(filteredDt);
             const sortedComparePareto = isCompare ? buildPareto(comparisonDt) : [];
             window.__summaryParetoTrouble = {
-                primary: sortedLinePareto.slice(),
-                compare: sortedComparePareto.slice(),
+                primaryLogs: (filteredDt || []).slice(),
+                compareLogs: (comparisonDt || []).slice(),
                 isCompare,
                 primaryLabel: primaryDisplay || primaryValue || 'Period 1',
                 compareLabel: compareDisplay || compareValue || 'Period 2'
@@ -3924,10 +3871,178 @@ window.addEventListener("cloudsync:status", (event) => {
             renderSummaryCharts(calibChartPrimary.done, Math.max(0, calibChartPrimary.scheduled - calibChartPrimary.done), projectOverallPrimary, projectOverallCompare, sortedLinePareto, currentPlant, paretoComparison, projectChartIgnoreFilter, calibChartIgnoreFilter, calibChartCompare);
         }
 
+        function paretoTroubleBuild(logs) {
+            const map = new Map();
+            (logs || []).forEach(dt => {
+                const code = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
+                const equipmentCategory = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                const failureCategory = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                const duration = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+                const key = code.toLowerCase() + '|||' + equipmentCategory.toLowerCase();
+                if (!map.has(key)) map.set(key, { code, equipmentCategory, duration: 0, occurrences: 0, lines: new Set(), failures: new Map() });
+                const row = map.get(key);
+                row.duration += duration;
+                row.occurrences += 1;
+                row.lines.add(line);
+                const f = row.failures.get(failureCategory) || { duration: 0, occurrences: 0 };
+                f.duration += duration;
+                f.occurrences += 1;
+                row.failures.set(failureCategory, f);
+            });
+            return [...map.values()].map(row => ({
+                ...row,
+                lines: [...row.lines].sort(),
+                failures: [...row.failures.entries()].map(([category, value]) => ({ category, ...value })).sort((a,b) => b.duration - a.duration)
+            })).sort((a,b) => b.duration - a.duration || a.code.localeCompare(b.code) || a.equipmentCategory.localeCompare(b.equipmentCategory));
+        }
+
+        function renderParetoTroublePeriod(title, rows) {
+            const total = rows.reduce((sum, row) => sum + Number(row.duration || 0), 0);
+            let cumulative = 0;
+            return `
+                <div class="mb-5 last:mb-0">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-xs font-bold text-white">${escapeHtml(title)}</h4>
+                        <span class="text-[10px] text-slate-400">${total.toFixed(1)} hrs total · ${rows.length} equipment identities</span>
+                    </div>
+                    ${rows.length ? `
+                    <div class="overflow-x-auto border border-slate-700/70 rounded-xl">
+                        <table class="w-full text-[10px]">
+                            <thead class="bg-slate-800/90 text-slate-400 uppercase">
+                                <tr>
+                                    <th class="py-2 px-2 text-left">Rank</th>
+                                    <th class="py-2 px-2 text-left">Equipment Code</th>
+                                    <th class="py-2 px-2 text-left">Equipment Category / Indication</th>
+                                    <th class="py-2 px-2 text-left">Lines</th>
+                                    <th class="py-2 px-2 text-center">Total Duration</th>
+                                    <th class="py-2 px-2 text-center">Cumulative</th>
+                                    <th class="py-2 px-2 text-left">Trouble / Failure Categories</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800">
+                                ${rows.map((row, index) => {
+                                    cumulative += Number(row.duration || 0);
+                                    const pct = total ? (cumulative / total * 100) : 0;
+                                    const trouble = row.failures.map(f => `${escapeHtml(f.category)} — ${Number(f.duration || 0).toFixed(1)} hrs (${f.occurrences} occurrence${f.occurrences === 1 ? '' : 's'})`).join('<br>');
+                                    return `<tr class="hover:bg-slate-800/50 align-top">
+                                        <td class="py-2 px-2 font-bold text-slate-300">${index + 1}</td>
+                                        <td class="py-2 px-2 font-bold text-white">${escapeHtml(row.code)}</td>
+                                        <td class="py-2 px-2 text-cyan-300 font-semibold">${escapeHtml(row.equipmentCategory)}</td>
+                                        <td class="py-2 px-2 text-slate-300">${escapeHtml(row.lines.join(', ') || '—')}</td>
+                                        <td class="py-2 px-2 text-center text-red-400 font-bold">${Number(row.duration || 0).toFixed(1)} hrs<br><span class="text-[9px] text-slate-500 font-normal">${row.occurrences} occurrence${row.occurrences === 1 ? '' : 's'}</span></td>
+                                        <td class="py-2 px-2 text-center text-cyan-300 font-semibold">${pct.toFixed(1)}%</td>
+                                        <td class="py-2 px-2 text-slate-300 leading-5">${trouble || '—'}</td>
+                                    </tr>`;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>` : `<div class="border border-slate-700/60 rounded-xl p-6 text-center text-slate-500 italic">No downtime records found for this period.</div>`}
+                </div>`;
+        }
+
+        let paretoTroublePopupChart = null;
+
+        function openParetoTrouble(data, sourceTitle) {
+            const modal = document.getElementById('modal-pareto-trouble');
+            const content = document.getElementById('pareto-trouble-content');
+            const title = document.getElementById('pareto-trouble-title');
+            const canvas = document.getElementById('pareto-trouble-graph');
+            const indications = document.getElementById('pareto-trouble-indications');
+            if (!modal || !content || !data || !canvas || typeof Chart === 'undefined') return;
+            if (title) title.textContent = `${sourceTitle} — View All Trouble`;
+
+            const primary = paretoTroubleBuild(data.primaryLogs || []);
+            const compare = data.isCompare ? paretoTroubleBuild(data.compareLogs || []) : [];
+            const count = Math.max(primary.length, compare.length);
+            const labels = Array.from({length: count}, (_, i) => `Data ${i + 1}`);
+            const primaryDur = labels.map((_, i) => Number(primary[i]?.duration || 0));
+            const compareDur = labels.map((_, i) => Number(compare[i]?.duration || 0));
+            const total = primaryDur.reduce((a,b)=>a+b,0) + (data.isCompare ? compareDur.reduce((a,b)=>a+b,0) : 0);
+            let running = 0;
+            const cumulative = labels.map((_, i) => {
+                running += primaryDur[i] + (data.isCompare ? compareDur[i] : 0);
+                return total ? Number((running / total * 100).toFixed(1)) : 0;
+            });
+
+            if (paretoTroublePopupChart) paretoTroublePopupChart.destroy();
+            const datasets = data.isCompare
+                ? [
+                    {label:data.primaryLabel || 'Period 1', data:primaryDur, backgroundColor:'#f59e0b', borderRadius:5, maxBarThickness:34},
+                    {label:data.compareLabel || 'Period 2', data:compareDur, backgroundColor:'#3b82f6', borderRadius:5, maxBarThickness:34}
+                  ]
+                : [{label:'Downtime (hrs)', data:primaryDur, backgroundColor:'#ef4444', borderRadius:5, maxBarThickness:34}];
+            datasets.push({type:'line', label:'Cumulative %', data:cumulative, borderColor:'#22d3ee', backgroundColor:'#22d3ee', borderWidth:2, pointRadius:3, tension:.2, yAxisID:'y1'});
+            paretoTroublePopupChart = new Chart(canvas.getContext('2d'), {
+                type:'bar',
+                data:{labels,datasets},
+                options:{
+                    responsive:true, maintainAspectRatio:false,
+                    layout:{padding:{top:8,bottom:8,left:4,right:8}},
+                    plugins:{
+                        legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},
+                        tooltip:{callbacks:{
+                            title:items=>{
+                                const i=items[0]?.dataIndex ?? 0;
+                                const a=primary[i], b=compare[i];
+                                return data.isCompare
+                                    ? `Data ${i+1} — T1: ${a?.code||'—'} — ${a?.equipmentCategory||'—'} | T2: ${b?.code||'—'} — ${b?.equipmentCategory||'—'}`
+                                    : `Data ${i+1} — ${a?.code||'—'} — ${a?.equipmentCategory||'—'}`;
+                            },
+                            label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,
+                            afterBody:items=>{
+                                const i=items[0]?.dataIndex ?? 0;
+                                const a=primary[i], b=compare[i];
+                                return data.isCompare
+                                    ? [`T1: ${a?.code||'—'} — ${a?.equipmentCategory||'—'}`,`T2: ${b?.code||'—'} — ${b?.equipmentCategory||'—'}`]
+                                    : [`Equipment Code: ${a?.code||'—'}`,`Equipment Category: ${a?.equipmentCategory||'—'}`];
+                            }
+                        }}
+                    },
+                    scales:{
+                        x:{ticks:{color:'#cbd5e1',font:{size:9},autoSkip:false,maxRotation:0},grid:{display:false}},
+                        y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},
+                        y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}
+                    }
+                }
+            });
+
+            if (indications) {
+                indications.innerHTML = labels.map((_,i)=>{
+                    const a=primary[i], b=compare[i];
+                    const item = (x,label,cls) => x ? `<div class="border border-slate-700/60 rounded-lg px-2.5 py-2 bg-slate-900/70"><div class="text-[9px] ${cls} font-bold">${label} — Data ${i+1}</div><div class="text-[10px] text-white font-semibold mt-0.5">${escapeHtml(x.code)} — ${escapeHtml(x.equipmentCategory)}</div><div class="text-[9px] text-slate-400 mt-0.5">${Number(x.duration||0).toFixed(1)} hrs · ${x.occurrences||0} occurrence${x.occurrences===1?'':'s'} · ${escapeHtml((x.lines||[]).join(', ')||'—')}</div></div>` : '';
+                    return data.isCompare ? item(a,'T1','text-amber-300') + item(b,'T2','text-blue-300') : item(a,'','text-cyan-300');
+                }).join('');
+            }
+            const note=document.getElementById('pareto-trouble-graph-note');
+            if(note) note.textContent=data.isCompare ? 'T1 and T2 are independently ranked Highest → Lowest. Each Data position keeps its own Equipment Code + Equipment Category / Indication.' : 'All equipment identities are ranked Highest → Lowest. Identity = Equipment Code + Equipment Category / Indication.';
+            content.innerHTML = renderParetoTroublePeriod(data.primaryLabel || 'Period 1', primary) +
+                (data.isCompare ? renderParetoTroublePeriod(data.compareLabel || 'Period 2', compare) : '');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            requestAnimationFrame(()=>{ if(paretoTroublePopupChart){ paretoTroublePopupChart.resize(); paretoTroublePopupChart.update('none'); } });
+        }
+
+        function closeParetoTrouble() {
+            const modal = document.getElementById('modal-pareto-trouble');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            if (paretoTroublePopupChart) { paretoTroublePopupChart.destroy(); paretoTroublePopupChart = null; }
+        }
+
+        function openSummaryParetoTrouble() {
+            openParetoTrouble(window.__summaryParetoTrouble, 'Executive Summary Pareto');
+        }
+
+        function openUptimeParetoTrouble() {
+            openParetoTrouble(window.__uptimeParetoTrouble, 'Uptime / Downtime Pareto');
+        }
+
         function toggleSummaryParetoExpand(){
             summaryParetoExpanded = !summaryParetoExpanded;
             const b=document.getElementById('summary-pareto-expand-btn');
-            if(b) b.textContent = summaryParetoExpanded ? '↙ Show Top 4' : '↗ Expand All';
+            if(b) b.textContent = '↗ Expand / View All Trouble';
             renderSummaryModule();
         }
 
@@ -4857,14 +4972,16 @@ function calcCalib(list, dateType='all', dateValue='') {
                         return {...c, codes:[cleanCode], external:filterEntries(c.external), internal:filterEntries(c.internal)};
                     }).filter(c => c && (c.external.length || c.internal.length || c.pr || c.po));
                     // IMPORTANT: cycles belong to this equipment record and only to the codes assigned to that cycle.
-                    // EDIT: the submitted form is the source of truth. Do not merge old occurrences back.
-                    // This makes clearing/deleting a calibration date in Edit actually remove it.
+                    // EDIT MODE: the submitted form is the source of truth.
+                    // Do NOT merge old cycles/occurrences back, otherwise a cleared
+                    // calibration date reappears after Save. New records keep the
+                    // original merge behavior.
                     const mergedCycles = editId
                         ? incomingCyclesForCode.map(c => ({
                             ...c,
                             codes: [cleanCode],
-                            external: (Array.isArray(c.external) ? c.external : []).map(normalizeCalibrationCycleEntry),
-                            internal: (Array.isArray(c.internal) ? c.internal : []).map(normalizeCalibrationCycleEntry)
+                            external: (Array.isArray(c.external) ? c.external : []).map(normalizeCalibrationCycle),
+                            internal: (Array.isArray(c.internal) ? c.internal : []).map(normalizeCalibrationCycle)
                         })).filter(c => (c.external?.length || 0) + (c.internal?.length || 0) || c.pr || c.po)
                         : mergeSharedCalibrationCycles(beforeCycles, incomingCyclesForCode);
                     mergedCycles.forEach(c => { c.codes = [cleanCode]; });
@@ -5464,6 +5581,15 @@ function calcCalib(list, dateType='all', dateValue='') {
                 });
             }
 
+            // Keep the raw filtered records for the Pareto View All Trouble popup.
+            window.__uptimeParetoTrouble = {
+                primaryLogs: (primaryLogs || []).slice(),
+                compareLogs: (compareLogs || []).slice(),
+                isCompare,
+                primaryLabel: primaryValue || 'Period 1',
+                compareLabel: compareValue || 'Period 2'
+            };
+
             // Pareto identity = Equipment Code + Equipment Category/Indication.
             const buildUptimePareto=logs=>{
                 const map=new Map();
@@ -5480,16 +5606,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                 return [...map.values()].map(x=>({line:[...x.lines].join(', '),duration:x.duration,equipment:x.equipment,equipmentCategory:x.equipmentCategory,category:[...x.failureCategories.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||'Unclassified'})).sort((a,b)=>b.duration-a.duration);
             };
             const bucket=(list,expanded=false)=>{const a=expanded?(list||[]).slice():(list||[]).slice(0,4);while(!expanded&&a.length<4)a.push({line:'No Data',duration:0,equipment:'—',equipmentCategory:'—',category:'—'});return a;};
-            const uptimeParetoPrimaryAll = buildUptimePareto(primaryLogs);
-            const uptimeParetoCompareAll = buildUptimePareto(compareLogs);
-            window.__uptimeParetoTrouble = {
-                primary: uptimeParetoPrimaryAll.slice(),
-                compare: uptimeParetoCompareAll.slice(),
-                isCompare,
-                primaryLabel: primaryDisplay || primaryValue || 'Period 1',
-                compareLabel: compareDisplay || compareValue || 'Period 2'
-            };
-            const pp=bucket(uptimeParetoPrimaryAll,uptimeParetoExpanded), cc=bucket(uptimeParetoCompareAll,uptimeParetoExpanded);
+            const pp=bucket(buildUptimePareto(primaryLogs),uptimeParetoExpanded), cc=bucket(buildUptimePareto(compareLogs),uptimeParetoExpanded);
             const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
             const labs=pp.map((x,i)=>[x.equipment,x.equipmentCategory||'—',isCompare?`vs ${cc[i]?.equipment||'—'} — ${cc[i]?.equipmentCategory||'—'}`:'']);
             const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[]; let total=pd.reduce((a,b)=>a+b,0)+(isCompare?cd.reduce((a,b)=>a+b,0):0),run=0;const cpct=pp.map((x,i)=>{run+=pd[i]+(isCompare?cd[i]:0);return total?Number((run/total*100).toFixed(1)):0;});
@@ -5501,7 +5618,7 @@ function calcCalib(list, dateType='all', dateValue='') {
         function toggleUptimeParetoExpand(){
             uptimeParetoExpanded = !uptimeParetoExpanded;
             const b=document.getElementById('uptime-pareto-expand-btn');
-            if(b) b.textContent = uptimeParetoExpanded ? '↙ Show Top 4' : '↗ Expand All';
+            if(b) b.textContent = '↗ Expand / View All Trouble';
             renderDowntimeModule();
         }
 
@@ -6179,26 +6296,6 @@ function calcCalib(list, dateType='all', dateValue='') {
      class="fixed bottom-2 right-2 z-[9999] text-[10px] text-slate-500 bg-slate-900/80 border border-slate-700 rounded-lg px-2 py-1 no-print">
     Local save mode
 </div>
-
-
-    <div id="modal-pareto-trouble" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-[90] hidden no-print overflow-y-auto p-4">
-        <div class="max-w-7xl mx-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
-            <div class="flex items-center justify-between gap-3 p-4 border-b border-slate-700">
-                <div>
-                    <h3 id="pareto-trouble-title" class="text-sm font-black text-white">Pareto — View All Trouble</h3>
-                    <p id="pareto-trouble-subtitle" class="text-[10px] text-slate-400 mt-1">Equipment Code + Equipment Category / Indication</p>
-                </div>
-                <button type="button" onclick="closeParetoTrouble()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold">✕ Close</button>
-            </div>
-            <div class="p-4 space-y-4">
-                <div class="h-[360px] md:h-[460px] bg-slate-950/50 rounded-xl border border-slate-800 p-2">
-                    <canvas id="pareto-trouble-graph"></canvas>
-                </div>
-                <div id="pareto-trouble-indications" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
-                <div id="pareto-trouble-content"></div>
-            </div>
-        </div>
-    </div>
 
 </body>
 </html>
