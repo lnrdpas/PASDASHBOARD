@@ -2905,15 +2905,28 @@ window.addEventListener("cloudsync:status", (event) => {
         function populateCategoryDropdowns() {
             const dropdowns = document.querySelectorAll(".category-select-dropdown");
             dropdowns.forEach(sel => {
-                const currentVal = sel.value;
+                const currentVal = String(sel.value || "").trim();
                 sel.innerHTML = "";
-                equipmentCategories.forEach(cat => {
+                const categories = Array.isArray(equipmentCategories) ? equipmentCategories.filter(v => String(v || "").trim()) : [];
+                // Never leave the required Equipment Class select empty. Older saved
+                // browser state can contain an empty category list; that used to make
+                // the browser silently block the calibration form submission.
+                if (!categories.length) {
+                    const fallback = document.createElement("option");
+                    fallback.value = currentVal || "General Equipment";
+                    fallback.innerText = currentVal || "General Equipment";
+                    fallback.selected = true;
+                    sel.appendChild(fallback);
+                    return;
+                }
+                categories.forEach(cat => {
                     const opt = document.createElement("option");
                     opt.value = cat;
                     opt.innerText = cat;
                     if (cat === currentVal) opt.selected = true;
                     sel.appendChild(opt);
                 });
+                if (!sel.value) sel.value = categories[0];
             });
         }
 
@@ -4517,18 +4530,20 @@ function calcCalib(list, dateType='all', dateValue='') {
             const title = document.getElementById("modal-equip-title");
             if (title) title.innerText = "Add Calibration Entries";
 
+            // Populate the required Equipment Class select BEFORE clearing/setting
+            // the form. Otherwise a stale/empty category list can make HTML5 form
+            // validation block Save without calling handleEquipSubmit().
+            populateCategoryDropdowns();
+            const typeSelect = document.getElementById("eq-shared-type");
+            if (typeSelect && !typeSelect.value) typeSelect.value = (equipmentCategories[0] || "General Equipment");
+
             clearEquipmentSharedFields();
             container.innerHTML = "";
             addCalibrationGroup();
             modal.classList.remove("hidden");
 
-            // Keep the category dropdown current even if categories were changed
-            // immediately before opening this modal.
             populateCategoryDropdowns();
-            const typeSelect = document.getElementById("eq-shared-type");
-            if (typeSelect && !typeSelect.value && equipmentCategories.length) {
-                typeSelect.value = equipmentCategories[0];
-            }
+            if (typeSelect && !typeSelect.value) typeSelect.value = (equipmentCategories[0] || "General Equipment");
             syncEquipmentCountPreview();
         }
 
@@ -5130,9 +5145,22 @@ function calcCalib(list, dateType='all', dateValue='') {
             const group = equipmentList.filter(item => getEquipmentGroupKey(item) === groupKey);
             document.getElementById("eq-id").value = group.map(item => item.id).join(",");
             document.getElementById("modal-equip-title").innerText = group.length > 1 ? "Edit Calibration Record / Equipment Codes" : "Edit Calibration Entry";
+            // Rebuild the required Equipment Class select first, then restore the
+            // saved type. Setting .value before options exist leaves the select empty
+            // and HTML5 required validation silently prevents Save.
+            populateCategoryDropdowns();
             clearEquipmentSharedFields();
             document.getElementById("eq-shared-plant").value = selected.plant || "Plant 1";
-            document.getElementById("eq-shared-type").value = selected.type || "";
+            const typeSelect = document.getElementById("eq-shared-type");
+            if (typeSelect) {
+                if (![...typeSelect.options].some(o => o.value === String(selected.type || ""))) {
+                    const opt = document.createElement("option");
+                    opt.value = selected.type || "General Equipment";
+                    opt.innerText = selected.type || "General Equipment";
+                    typeSelect.appendChild(opt);
+                }
+                typeSelect.value = selected.type || typeSelect.value || "General Equipment";
+            }
             const container = document.getElementById("calibration-groups-container");
             container.innerHTML = "";
             addCalibrationGroup({
