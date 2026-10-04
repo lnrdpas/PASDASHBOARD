@@ -4046,13 +4046,29 @@ function renderSummaryModule() {
             if(chartSummaryProjects)chartSummaryProjects.destroy();
             const statusLabels=['In Progress','Planning','On Hold','Completed'];const pv=statusLabels.map(k=>Number(projectOverallPrimary?.[k]||0));const pc=!projectChartIgnoreFilter&&!!projectOverallCompare&&isCompare;const cv=pc?statusLabels.map(k=>Number(projectOverallCompare?.[k]||0)):[];const pl=pc?statusLabels.flatMap(x=>[`${paretoComparison.primaryLabel} — ${x}`,`${paretoComparison.compareLabel} — ${x}`]):statusLabels;const vals=pc?statusLabels.flatMap((_,i)=>[pv[i],cv[i]]):pv;
             chartSummaryProjects=new Chart(projCanvas.getContext('2d'),{type:'doughnut',data:{labels:pl,datasets:[{data:vals,backgroundColor:pc?['#3b82f6','#60a5fa','#eab308','#facc15','#ef4444','#f87171','#22c55e','#4ade80']:['#3b82f6','#eab308','#ef4444','#22c55e'],borderColor:'#1e293b',borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:6,font:{size:8},color:'#cbd5e1'}}}}});
-            if(chartSummaryPareto){try{chartSummaryPareto.destroy();}catch(e){}chartSummaryPareto=null;}
-            const rawP=Array.isArray(paretoComparison?.primary)?paretoComparison.primary:[],rawC=Array.isArray(paretoComparison?.compare)?paretoComparison.compare:[];const aligned=isCompare?alignParetoByCode(rawP,rawC):{primary:rawP,compare:[]};let p=Array.isArray(aligned.primary)?aligned.primary.slice():[],c=Array.isArray(aligned.compare)?aligned.compare.slice():[];
-            if(isCompare){const pm=new Map(p.map(x=>[String(x.code||'Uncoded').trim().toLowerCase(),x])),cm=new Map(c.map(x=>[String(x.code||'Uncoded').trim().toLowerCase(),x]));const keys=[...new Set([...pm.keys(),...cm.keys()])];keys.sort((a,b)=>Math.max(Number(pm.get(b)?.duration||0),Number(cm.get(b)?.duration||0))-Math.max(Number(pm.get(a)?.duration||0),Number(cm.get(a)?.duration||0)));p=keys.map(k=>pm.get(k)||{code:cm.get(k)?.code||'Uncoded',equipment:cm.get(k)?.equipment||'—',line:cm.get(k)?.line||'—',category:cm.get(k)?.category||'—',duration:0});c=keys.map(k=>cm.get(k)||{code:pm.get(k)?.code||'Uncoded',equipment:pm.get(k)?.equipment||'—',line:pm.get(k)?.line||'—',category:pm.get(k)?.category||'—',duration:0});}else p.sort((a,b)=>Number(b.duration||0)-Number(a.duration||0));
-            const labels=p.map(x=>String(x.code||'Uncoded')),pd=p.map(x=>Number(Number(x.duration||0).toFixed(1))),cd=isCompare?c.map(x=>Number(Number(x.duration||0).toFixed(1))):[],pt=pd.reduce((a,b)=>a+b,0),ct=cd.reduce((a,b)=>a+b,0);let rp=0,rc=0;const cp=pd.map(v=>{rp+=v;return pt?Number((rp/pt*100).toFixed(1)):0}),cc=cd.map(v=>{rc+=v;return ct?Number((rc/ct*100).toFixed(1)):0});
-            const ds=isCompare?[{label:paretoComparison.primaryLabel||'Period 1',data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:28},{label:paretoComparison.compareLabel||'Period 2',data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:28},{type:'line',label:`Cumulative % — ${paretoComparison.primaryLabel||'Period 1'}`,data:cp,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'},{type:'line',label:`Cumulative % — ${paretoComparison.compareLabel||'Period 2'}`,data:cc.length?cc:labels.map(()=>0),borderColor:'#a78bfa',backgroundColor:'#a78bfa',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30},{type:'line',label:'Cumulative %',data:cp,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}];
-            try{chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels:labels.length?labels:['No downtime data'],datasets:labels.length?ds:[{label:'Downtime (hrs)',data:[0],backgroundColor:'#475569'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`}}},scales:{x:{ticks:{color:'#cbd5e1',font:{size:9},autoSkip:false,maxRotation:45,minRotation:0}},y:{beginAtZero:true,ticks:{color:'#94a3b8'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});}catch(err){console.error('Executive Summary Pareto render failed',err);drawExecutiveParetoFallback(paretoCanvas,labels,pd,cd,cp,cc,isCompare);chartSummaryPareto=null;}
-            requestAnimationFrame(()=>{if(chartSummaryPareto){chartSummaryPareto.resize();chartSummaryPareto.update('none');}});
+            // EXECUTIVE PARETO: render directly to the canvas instead of relying on Chart.js.
+            // This guarantees the Pareto remains visible even when another Chart.js instance
+            // has a rendering/layout problem.
+            if(chartSummaryPareto){try{chartSummaryPareto.destroy();}catch(e){} chartSummaryPareto=null;}
+            const paretoLabels = labels.length ? labels : ['No downtime data'];
+            const paretoPrimary = labels.length ? pd : [0];
+            const paretoCompare = labels.length && isCompare ? cd : [];
+            const paretoCumPrimary = labels.length ? cp : [0];
+            const paretoCumCompare = labels.length && isCompare ? cc : [];
+            drawExecutiveParetoFallback(paretoCanvas, paretoLabels, paretoPrimary, paretoCompare, paretoCumPrimary, paretoCumCompare, isCompare && labels.length>0);
+            const paretoCtx=paretoCanvas.getContext('2d');
+            if(paretoCtx && !labels.length){
+                const box=paretoCanvas.parentElement;
+                const w=Math.max(320,Math.floor((box&&box.clientWidth)||800));
+                const h=Math.max(260,Math.floor((box&&box.clientHeight)||330));
+                paretoCtx.save();
+                paretoCtx.fillStyle='#94a3b8';
+                paretoCtx.font='bold 12px Arial';
+                paretoCtx.textAlign='center';
+                paretoCtx.textBaseline='middle';
+                paretoCtx.fillText('No downtime data for the selected period',w/2,h/2);
+                paretoCtx.restore();
+            }
             const title=document.getElementById('summary-pareto-title');if(title)title.textContent=isCompare?`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel}`;
         }
 
