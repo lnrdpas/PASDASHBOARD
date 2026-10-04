@@ -4024,6 +4024,12 @@ function renderSummaryModule() {
                 return;
             }
             const paretoBox=paretoCanvas.parentElement;
+            if(paretoBox){
+                paretoBox.style.display='flex';
+                paretoBox.style.width='100%';
+                paretoBox.style.minHeight='330px';
+                paretoCanvas.style.display='block';
+            }
             if(!paretoBox || paretoBox.clientWidth<20 || paretoBox.clientHeight<20){
                 requestAnimationFrame(()=>renderSummaryCharts(cDone,cRemaining,projectOverallPrimary,projectOverallCompare,sortedLinePareto,selectedPlant,paretoComparison,projectChartIgnoreFilter,calibChartIgnoreFilter,calibChartCompare));
                 return;
@@ -4104,6 +4110,7 @@ function renderSummaryModule() {
             }) : [];
 
             const hasData = primaryData.some(v => v > 0) || compareData.some(v => v > 0);
+            try {
             if(!hasData) {
                 chartSummaryPareto = new Chart(paretoCanvas.getContext('2d'), {
                     type:'bar',
@@ -4162,6 +4169,11 @@ function renderSummaryModule() {
                         }
                     }
                 });
+            }
+            } catch (paretoRenderError) {
+                console.error('Executive Summary Pareto Chart.js render failed; using native canvas fallback.', paretoRenderError);
+                drawExecutiveParetoFallback(paretoCanvas, labels, primaryData, compareData, cumPrimary, cumCompare, isCompare);
+                chartSummaryPareto = null;
             }
 
             requestAnimationFrame(()=>{
