@@ -4660,7 +4660,7 @@ function calcCalib(list, dateType='all', dateValue='') {
             return row;
         }
 
-        function makeSharedCalibrationCycle(cycle = {}, index = 0) {
+        function makeSharedCalibrationCycle(cycle = {}, index = 0, sharedGroupCodes = []) {
             const row = document.createElement("div");
             const cycleId = cycle.id || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8));
             row.className = "shared-calibration-cycle bg-slate-900/50 border border-slate-700/60 rounded-xl p-2.5 space-y-2";
@@ -4681,12 +4681,9 @@ function calcCalib(list, dateType='all', dateValue='') {
                 <div class="px-2.5 py-2 rounded-lg bg-slate-950/50 border border-slate-700/40 text-[9px] text-slate-500">
                     <i class="fa-solid fa-receipt text-amber-400 mr-1"></i> Each External/Internal calibration entry has its own PR No. and PO No.
                 </div>
-                <div class="bg-slate-950/40 p-2 rounded-lg border border-cyan-500/20 space-y-1.5">
-                    <div class="flex items-center justify-between gap-2">
-                        <div><span class="text-[9px] font-black text-cyan-300">EQUIPMENT CODES FOR THIS CYCLE</span><p class="text-[8px] text-slate-500">Only these codes receive the calibration data entered below.</p></div>
-                        <button type="button" onclick="addCycleCodeRow(this)" class="text-[9px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded-lg">+ Add Code</button>
-                    </div>
-                    <div class="cycle-code-list grid grid-cols-1 sm:grid-cols-2 gap-1.5"></div>
+                <div class="bg-slate-950/40 p-2 rounded-lg border border-cyan-500/20">
+                    <div class="text-[9px] font-black text-cyan-300">SHARED EQUIPMENT CODES</div>
+                    <p class="text-[8px] text-slate-500">All equipment codes in this Calibration Group share the calibration data, including schedule, calibration date, calibrated by, PR/PO and all calibration cycles.</p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div class="external-entry-section bg-slate-950/40 p-2 rounded-lg border border-blue-500/20 space-y-1.5">
@@ -4704,9 +4701,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                         <div class="internal-entry-list space-y-1.5"></div>
                     </div>
                 </div>`;
-            const cycleCodeList = row.querySelector('.cycle-code-list');
-            const initialCodes = [...new Set(cycleCodes.map(v => String(v || '').trim()).filter(Boolean))];
-            (initialCodes.length ? initialCodes : ['']).forEach(code => cycleCodeList.appendChild(makeCalibrationCodeRow(code)));
+            const initialCodes = [...new Set((sharedGroupCodes.length ? sharedGroupCodes : cycleCodes).map(v => String(v || '').trim()).filter(Boolean))];
             const extList = row.querySelector('.external-entry-list');
             const intList = row.querySelector('.internal-entry-list');
             (external.length ? external : [{}]).forEach(e => extList.appendChild(makeCalibrationEntryRow('external', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || '', codes:initialCodes})));
@@ -4811,7 +4806,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                 <div class="flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
                         <span class="group-number text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-0.5">Calibration Group</span>
-                        <span class="text-[9px] text-slate-500">Equipment codes are assigned inside each cycle. Multiple cycles and multiple External/Internal entries are retained.</span>
+                        <span class="text-[9px] text-slate-500">All equipment codes in this entry share the same calibration data. Multiple cycles and multiple External/Internal entries are retained.</span>
                     </div>
                     <button type="button" onclick="removeCalibrationGroup(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove group"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
                 </div>
@@ -4824,7 +4819,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                 </div>
                 <div class="bg-slate-950/40 p-2 rounded-lg border border-slate-700/40 space-y-2">
                     <div class="flex items-center justify-between gap-2">
-                        <div><span class="text-[10px] font-black text-white">CALIBRATION CYCLES</span><span class="ml-2 text-[9px] text-slate-500">Each cycle owns its equipment codes, PR/PO and all calibration occurrences.</span></div>
+                        <div><span class="text-[10px] font-black text-white">CALIBRATION CYCLES</span><span class="ml-2 text-[9px] text-slate-500">Each cycle shares the group equipment codes, PR/PO and all calibration occurrences.</span></div>
                         <button type="button" onclick="addSharedCalibrationCycle(this)" class="bg-slate-700 hover:bg-slate-600 text-white px-2.5 py-1 rounded-lg text-[9px] font-bold whitespace-nowrap">+ Add Calibration Cycle</button>
                     </div>
                     <div class="shared-cycles-list space-y-2"></div>
@@ -4833,7 +4828,8 @@ function calcCalib(list, dateType='all', dateValue='') {
             const groupCodes = Array.isArray(group.codes) && group.codes.length ? group.codes : sharedCycles.flatMap(c => Array.isArray(c.codes) ? c.codes : []);
             (groupCodes.length ? [...new Set(groupCodes.filter(Boolean))] : ['']).forEach(code => codeList.appendChild(makeCalibrationCodeRow(code)));
             const list = wrapper.querySelector('.shared-cycles-list');
-            (sharedCycles.length ? sharedCycles : [{}]).forEach((cycle, idx) => list.appendChild(makeSharedCalibrationCycle(cycle, idx)));
+            const sharedCodesForCycles = [...new Set(groupCodes.filter(Boolean).map(v => String(v).trim()))];
+            (sharedCycles.length ? sharedCycles : [{}]).forEach((cycle, idx) => list.appendChild(makeSharedCalibrationCycle({...cycle, codes: sharedCodesForCycles}, idx, sharedCodesForCycles)));
             renumberSharedCalibrationCycles(wrapper);
             return wrapper;
         }
@@ -4911,11 +4907,8 @@ function calcCalib(list, dateType='all', dateValue='') {
                     id: row.dataset.cycleId || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
                     pr: '',
                     po: '',
-                    codes: (() => {
-                        const cycleCodes = [...row.querySelectorAll('.cycle-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean);
-                        if (cycleCodes.length) return [...new Set(cycleCodes)];
-                        return [...new Set([...group.querySelectorAll('.calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean))];
-                    })(),
+                    // OLD BEHAVIOR: every equipment code in the group shares every cycle and every calibration occurrence.
+                    codes: [...new Set([...group.querySelectorAll('.calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean))],
                     external: collectCalibrationEntries(row, 'external'),
                     internal: collectCalibrationEntries(row, 'internal')
                 })).filter(c => c.external.length || c.internal.length || c.pr || c.po);
@@ -5083,20 +5076,14 @@ function calcCalib(list, dateType='all', dateValue='') {
                     // A code's cycles are rebuilt from the edited form, so deleted/changed
                     // calibration occurrences are actually deleted/changed instead of being
                     // permanently re-merged into the old record.
-                    const incomingCycles = (groups.flatMap(g => g.calibrationCycles || []) || []).map(c => {
-                        const cycleCodes = Array.isArray(c.codes) ? c.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
-                        if (cycleCodes.length && !cycleCodes.some(v => v.toLowerCase() === cleanCode.toLowerCase())) return null;
-                        const filterEntries = entries => (Array.isArray(entries) ? entries : []).filter(entry => {
-                            const entryCodes = Array.isArray(entry.codes) ? entry.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
-                            return !entryCodes.length || entryCodes.some(v => v.toLowerCase() === cleanCode.toLowerCase());
-                        }).map(entry => ({...entry, codes:[cleanCode]}));
-                        return {
-                            ...c,
-                            codes:[cleanCode],
-                            external:filterEntries(c.external),
-                            internal:filterEntries(c.internal)
-                        };
-                    }).filter(c => c && ((c.external?.length || 0) + (c.internal?.length || 0) > 0));
+                    // OLD BEHAVIOR: the entire calibration group is shared by every equipment code.
+                    // Do not filter cycles or entries by code; copy the complete group data to each code record.
+                    const incomingCycles = (groups.flatMap(g => g.calibrationCycles || []) || []).map(c => ({
+                        ...c,
+                        codes: allCodeRecords.map(x => String(x.code || '').trim()).filter(Boolean),
+                        external: (c.external || []).map(x => ({...x, codes: allCodeRecords.map(y => String(y.code || '').trim()).filter(Boolean)})),
+                        internal: (c.internal || []).map(x => ({...x, codes: allCodeRecords.map(y => String(y.code || '').trim()).filter(Boolean)}))
+                    })).filter(c => c && ((c.external?.length || 0) + (c.internal?.length || 0) > 0));
 
                     const rebuiltCycles = incomingCycles.map(c => ({
                         ...c,
@@ -5143,16 +5130,13 @@ function calcCalib(list, dateType='all', dateValue='') {
                         if (group.pr) record.pr = group.pr;
                         if (group.po) record.po = group.po;
                         const beforeCycles = normalizeSharedCalibrationCycles(record);
-                        const incomingCyclesForCode = (group.calibrationCycles || []).map(c => {
-                            const cycleCodes = Array.isArray(c.codes) ? c.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
-                            const selectedCycleCodes = cycleCodes.length ? cycleCodes : group.codes;
-                            if (!selectedCycleCodes.some(v => v.toLowerCase() === cleanCode.toLowerCase())) return null;
-                            const filterEntries = entries => (Array.isArray(entries) ? entries : []).filter(entry => {
-                                const entryCodes = Array.isArray(entry.codes) ? entry.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
-                                return !entryCodes.length || entryCodes.some(v => v.toLowerCase() === cleanCode.toLowerCase());
-                            }).map(entry => ({...entry, codes:[cleanCode]}));
-                            return {...c, codes:[cleanCode], external:filterEntries(c.external), internal:filterEntries(c.internal)};
-                        }).filter(c => c && (c.external.length || c.internal.length || c.pr || c.po));
+                        // OLD BEHAVIOR: every code in the same entry receives the complete calibration data.
+                        const incomingCyclesForCode = (group.calibrationCycles || []).map(c => ({
+                            ...c,
+                            codes:[cleanCode],
+                            external:(c.external || []).map(x => ({...x, codes:[cleanCode]})),
+                            internal:(c.internal || []).map(x => ({...x, codes:[cleanCode]}))
+                        })).filter(c => c && (c.external.length || c.internal.length || c.pr || c.po));
                         const mergedCycles = mergeSharedCalibrationCycles(beforeCycles, incomingCyclesForCode);
                         mergedCycles.forEach(c => { c.codes = [cleanCode]; });
                         record.calibrationCycles = mergedCycles;
