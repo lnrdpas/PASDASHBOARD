@@ -4495,6 +4495,44 @@ function calcCalib(list, dateType='all', dateValue='') {
         }
 
         // Equipment Modal & Calibration Group Entry handlers
+        // Open the main calibration-entry modal in a clean ADD state.
+        // These functions are intentionally kept separate from Edit so that
+        // clicking + Add Calibration Entry can never reuse stale edit IDs/data.
+        function openEquipModal() {
+            if (!isAdminUser()) return;
+            const modal = document.getElementById("modal-equipment");
+            const form = document.getElementById("form-equipment");
+            const container = document.getElementById("calibration-groups-container");
+            if (!modal || !form || !container) return;
+
+            // ADD mode: absolutely clear any previous Edit state.
+            const idEl = document.getElementById("eq-id");
+            if (idEl) idEl.value = "";
+            const title = document.getElementById("modal-equip-title");
+            if (title) title.innerText = "Add Calibration Entries";
+
+            clearEquipmentSharedFields();
+            container.innerHTML = "";
+            addCalibrationGroup();
+            modal.classList.remove("hidden");
+
+            // Keep the category dropdown current even if categories were changed
+            // immediately before opening this modal.
+            populateCategoryDropdowns();
+            const typeSelect = document.getElementById("eq-shared-type");
+            if (typeSelect && !typeSelect.value && equipmentCategories.length) {
+                typeSelect.value = equipmentCategories[0];
+            }
+            syncEquipmentCountPreview();
+        }
+
+        function closeEquipModal() {
+            const modal = document.getElementById("modal-equipment");
+            if (modal) modal.classList.add("hidden");
+            const idEl = document.getElementById("eq-id");
+            if (idEl) idEl.value = "";
+        }
+
         function clearEquipmentSharedFields() {
             const defaults = {
                 "eq-shared-plant": "Plant 1",
