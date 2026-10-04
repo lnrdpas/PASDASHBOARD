@@ -2303,11 +2303,16 @@ window.addEventListener("cloudsync:status", (event) => {
         let CURRENT_ACCESS_PAGES = ["summary", "calibration", "uptime", "calendar", "projects"];
 
         function isAdminUser() {
-            return CURRENT_ROLE === "admin";
+            // The Main Account is always a full-access administrator.
+            // Do not let a stale sessionStorage role downgrade the Main Account
+            // to viewer after a refresh/session restore.
+            const cloudProfile = window.CloudAuth?.getProfile?.();
+            return CURRENT_ROLE === "admin" || CURRENT_IS_MAIN === true || cloudProfile?.is_main === true;
         }
 
         function isMainAccount() {
-            return CURRENT_IS_MAIN === true;
+            const cloudProfile = window.CloudAuth?.getProfile?.();
+            return CURRENT_IS_MAIN === true || cloudProfile?.is_main === true;
         }
 
         function applyAccessUI() {
@@ -2395,8 +2400,9 @@ window.addEventListener("cloudsync:status", (event) => {
             if (!Array.isArray(CURRENT_ACCESS_PAGES) || !CURRENT_ACCESS_PAGES.length) CURRENT_ACCESS_PAGES = ["summary", "projects"];
 
             if (isAuth) {
-                CURRENT_ROLE = loggedRole;
                 CURRENT_IS_MAIN = loggedIsMain;
+                // Main Account must never be downgraded to viewer by stale session data.
+                CURRENT_ROLE = (loggedIsMain || loggedRole === "admin") ? "admin" : "viewer";
                 document.getElementById("login-screen").classList.add("hidden");
                 document.getElementById("app-content").classList.remove("hidden");
                 applyAccessUI();
@@ -2452,8 +2458,8 @@ window.addEventListener("cloudsync:status", (event) => {
                         : (Array.isArray(result.profile.access_pages) && result.profile.access_pages.length ? result.profile.access_pages : ["summary", "projects"]);
                     sessionStorage.setItem("logged_access_pages", JSON.stringify(accessPages));
                     CURRENT_ACCESS_PAGES = accessPages;
-                    CURRENT_ROLE = result.profile.role === "admin" ? "admin" : "viewer";
                     CURRENT_IS_MAIN = result.profile.is_main === true;
+                    CURRENT_ROLE = (CURRENT_IS_MAIN || result.profile.role === "admin") ? "admin" : "viewer";
                     err.classList.add("hidden");
                     await checkAuth();
                     return;
@@ -2479,8 +2485,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 const localPages = role === "admin" ? ["summary", "calibration", "uptime", "calendar", "projects"] : (foundSub?.access_pages || ["summary", "projects"]);
                 sessionStorage.setItem("logged_access_pages", JSON.stringify(localPages));
                 CURRENT_ACCESS_PAGES = localPages;
-                CURRENT_ROLE = role;
                 CURRENT_IS_MAIN = u === AUTH_USER;
+                CURRENT_ROLE = (CURRENT_IS_MAIN || role === "admin") ? "admin" : "viewer";
                 err.classList.add("hidden");
                 await checkAuth();
             } else {
