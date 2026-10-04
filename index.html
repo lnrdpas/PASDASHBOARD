@@ -4954,6 +4954,15 @@ function calcCalib(list, dateType='all', dateValue='') {
             equipmentList=result;
         }
 
+        function getSharedEquipmentData() {
+            const plantEl = document.getElementById("eq-shared-plant");
+            const typeEl = document.getElementById("eq-shared-type");
+            return {
+                plant: String(plantEl?.value || "Plant 1").trim(),
+                type: String(typeEl?.value || "").trim()
+            };
+        }
+
         function handleEquipSubmit(e) {
             e.preventDefault();
             if (!isAdminUser()) return;
