@@ -1440,7 +1440,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <button onclick="exportModuleReportWithGraph('calibration')" class="bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-rose-600/20">
                             <i class="fa-solid fa-file-pdf"></i> PDF Calibration Report
                         </button>
-                        <button onclick="openEquipModal()" class="admin-only bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-blue-600/20">
+                        <button type="button" id="calibration-add-entry-btn" onclick="openEquipModal()" class="admin-only bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-blue-600/20">
                             <i class="fa-solid fa-plus"></i> Add Entry
                         </button>
                     </div>
@@ -4518,13 +4518,14 @@ function calcCalib(list, dateType='all', dateValue='') {
         // These functions are intentionally kept separate from Edit so that
         // clicking + Add Calibration Entry can never reuse stale edit IDs/data.
         function openEquipModal() {
-            // Open the modal FIRST so a problem in initialization cannot make the
-            // Add button appear to do nothing. Any initialization error is shown.
+            // Always make the modal visible first. Initialization and permission
+            // checks must never make the Add button appear dead.
             const modal = document.getElementById("modal-equipment");
             if (!modal) {
-                alert("Calibration Add window is missing from this HTML. Please use the latest PASDASHBOARD file.");
+                alert("Calibration Add window is missing from this HTML.");
                 return;
             }
+            modal.classList.remove("hidden");
 
             let admin = false;
             try { admin = isAdminUser(); } catch (err) {
@@ -4532,11 +4533,9 @@ function calcCalib(list, dateType='all', dateValue='') {
                 return;
             }
             if (!admin) {
-                alert("Add Calibration is available only to FULL ACCESS / Admin users.");
+                alert("Calibration Add/Edit requires FULL ACCESS / Admin.");
                 return;
             }
-
-            modal.classList.remove("hidden");
 
             try {
                 const form = document.getElementById("form-equipment");
@@ -4839,6 +4838,25 @@ function calcCalib(list, dateType='all', dateValue='') {
             return wrapper;
         }
 
+        // Keep group/cycle labels and the instrument-count preview synchronized.
+        // This function was missing from the previous V4 build; Add/Edit called it
+        // during modal initialization, which caused the exact runtime error shown
+        // by the browser: "renumberCalibrationGroups is not defined".
+        function renumberCalibrationGroups() {
+            const container = document.getElementById("calibration-groups-container");
+            if (!container) return;
+            container.querySelectorAll(".calibration-group").forEach((group, gidx) => {
+                const label = group.querySelector(".group-number");
+                if (label) label.innerText = `Calibration Group ${gidx + 1}`;
+                group.querySelectorAll(".calib-code-row").forEach((row, idx) => {
+                    const counter = row.querySelector(".code-counter");
+                    if (counter) counter.innerText = `${idx + 1}.`;
+                });
+                renumberSharedCalibrationCycles(group);
+            });
+            syncEquipmentCountPreview();
+        }
+
         function addCalibrationGroup(group = {}) {
             if (!isAdminUser()) return;
             const container = document.getElementById("calibration-groups-container");
@@ -4889,7 +4907,7 @@ function calcCalib(list, dateType='all', dateValue='') {
 
         function collectCalibrationGroups() {
             return [...document.querySelectorAll("#calibration-groups-container .calibration-group")].map(group => {
-                const calibrationCycles = [...group.querySelectorAll(':scope > .bg-slate-950\/40 .shared-cycles-list .shared-calibration-cycle')].map(row => ({
+                const calibrationCycles = [...group.querySelectorAll('.shared-cycles-list .shared-calibration-cycle')].map(row => ({
                     id: row.dataset.cycleId || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
                     pr: '',
                     po: '',
@@ -5162,9 +5180,19 @@ function calcCalib(list, dateType='all', dateValue='') {
         }
 
         function editEquipment(id) {
-            if (!isAdminUser()) return;
-            const selected = equipmentList.find(item => item.id === id);
-            if (!selected) return;
+            const modal = document.getElementById("modal-equipment");
+            // Show the modal immediately so an initialization problem is visible.
+            if (modal) modal.classList.remove("hidden");
+            if (!isAdminUser()) {
+                alert("Calibration Add/Edit requires FULL ACCESS / Admin.");
+                return;
+            }
+            const selected = equipmentList.find(item => String(item.id) === String(id));
+            if (!selected) {
+                alert("Calibration record not found for editing (ID: " + id + ").");
+                if (modal) modal.classList.add("hidden");
+                return;
+            }
             const groupKey = getEquipmentGroupKey(selected);
             const group = equipmentList.filter(item => getEquipmentGroupKey(item) === groupKey);
             document.getElementById("eq-id").value = group.map(item => item.id).join(",");
@@ -6418,5 +6446,21 @@ function calcCalib(list, dateType='all', dateValue='') {
     Local save mode
 </div>
 
+<script>
+(function(){
+  function bindCalibrationControls(){
+    const add=document.getElementById('calibration-add-entry-btn');
+    if(add && !add.dataset.boundFallback){
+      add.dataset.boundFallback='1';
+      add.addEventListener('click',function(ev){
+        ev.preventDefault();
+        try{ window.openEquipModal(); }catch(err){ alert('Calibration Add error: '+(err?.message||err)); }
+      },true);
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bindCalibrationControls);
+  else bindCalibrationControls();
+})();
+</script>
 </body>
 </html>
