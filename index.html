@@ -3544,7 +3544,27 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 0: SUMMARY ---
-        function renderSummaryModule() {
+        const buildHighestEquipmentByLineShared = logs => {
+    const map = {};
+    (logs || []).forEach(dt => {
+        const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+        const code = String(getDowntimeEquipmentCode(dt) || dt.code || '').trim().replace(/\s+/g, ' ') || 'Uncoded';
+        const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+        const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+        const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+        if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
+        map[line].lineTotal += dur;
+        const key = `${code}|||${category}`;
+        if (!map[line].contributors[key]) map[line].contributors[key] = { line, code, equipment, category, duration: 0 };
+        map[line].contributors[key].duration += dur;
+    });
+    return Object.values(map).map(lineItem => {
+        const top = Object.values(lineItem.contributors).sort((a,b)=>b.duration-a.duration || String(a.code).localeCompare(String(b.code)))[0];
+        return top ? { ...top, lineTotal: lineItem.lineTotal } : null;
+    }).filter(Boolean).sort((a,b)=>b.lineTotal-a.lineTotal || String(a.line).localeCompare(String(b.line)));
+};
+
+function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
             const yearVal = document.getElementById("summary-year-filter").value;
             const monthVal = document.getElementById("summary-month-filter").value;
@@ -3807,28 +3827,11 @@ window.addEventListener("cloudsync:status", (event) => {
                 }
             }
 
-            // Top Equipment = ONE row per Line Category. Ranking follows the LINE'S TOTAL DOWNTIME.
-            // The displayed equipment is the highest-downtime Equipment + Failure Category contributor within that line.
-            const buildTopEquipmentByLine = logs => {
-                const map = {};
-                (logs || []).forEach(dt => {
-                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
-                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
-                    if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
-                    map[line].lineTotal += dur;
-                    const key = `${equipment}|||${category}`;
-                    if (!map[line].contributors[key]) map[line].contributors[key] = { line, equipment, category, duration: 0 };
-                    map[line].contributors[key].duration += dur;
-                });
-                return Object.values(map).map(lineItem => {
-                    const top = Object.values(lineItem.contributors).sort((a,b)=>b.duration-a.duration)[0];
-                    return { ...top, lineTotal: lineItem.lineTotal };
-                }).filter(Boolean).sort((a,b)=>b.lineTotal-a.lineTotal);
-            };
-            const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
-            const compareTopByLine = isCompare ? buildTopEquipmentByLine(comparisonDt) : [];
+            // Top Equipment by Line — shared calculation with Uptime/Downtime.
+            // Both modules use Equipment Code + Failure Category as the contributor key,
+            // so the same filtered downtime data always produces the same highest row.
+            const primaryTopByLine = buildHighestEquipmentByLineShared(filteredDt);
+            const compareTopByLine = isCompare ? buildHighestEquipmentByLineShared(comparisonDt) : [];
             const top5Body = document.getElementById("summary-top5-downtime-body");
             const top5PLabel = primaryDisplay || 'Selected Period';
             const top5CLabel = compareDisplay || 'Comparison';
@@ -4606,6 +4609,13 @@ function calcCalib(list, dateType='all', dateValue='') {
                 <div class="px-2.5 py-2 rounded-lg bg-slate-950/50 border border-slate-700/40 text-[9px] text-slate-500">
                     <i class="fa-solid fa-receipt text-amber-400 mr-1"></i> Each External/Internal calibration entry has its own PR No. and PO No.
                 </div>
+                <div class="bg-slate-950/40 p-2 rounded-lg border border-cyan-500/20 space-y-1.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <div><span class="text-[9px] font-black text-cyan-300">EQUIPMENT CODES FOR THIS CYCLE</span><p class="text-[8px] text-slate-500">Only these codes receive the calibration data entered below.</p></div>
+                        <button type="button" onclick="addCycleCodeRow(this)" class="text-[9px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded-lg">+ Add Code</button>
+                    </div>
+                    <div class="cycle-code-list grid grid-cols-1 sm:grid-cols-2 gap-1.5"></div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div class="external-entry-section bg-slate-950/40 p-2 rounded-lg border border-blue-500/20 space-y-1.5">
                         <div class="flex items-center justify-between gap-2">
@@ -4622,10 +4632,13 @@ function calcCalib(list, dateType='all', dateValue='') {
                         <div class="internal-entry-list space-y-1.5"></div>
                     </div>
                 </div>`;
+            const cycleCodeList = row.querySelector('.cycle-code-list');
+            const initialCodes = [...new Set(cycleCodes.map(v => String(v || '').trim()).filter(Boolean))];
+            (initialCodes.length ? initialCodes : ['']).forEach(code => cycleCodeList.appendChild(makeCalibrationCodeRow(code)));
             const extList = row.querySelector('.external-entry-list');
             const intList = row.querySelector('.internal-entry-list');
-            (external.length ? external : [{}]).forEach(e => extList.appendChild(makeCalibrationEntryRow('external', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || '', codes:Array.isArray(e.codes) && e.codes.length ? e.codes : cycleCodes})));
-            (internal.length ? internal : [{}]).forEach(e => intList.appendChild(makeCalibrationEntryRow('internal', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || '', codes:Array.isArray(e.codes) && e.codes.length ? e.codes : cycleCodes})));
+            (external.length ? external : [{}]).forEach(e => extList.appendChild(makeCalibrationEntryRow('external', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || '', codes:initialCodes})));
+            (internal.length ? internal : [{}]).forEach(e => intList.appendChild(makeCalibrationEntryRow('internal', {...e, pr:e.pr || cycle.pr || '', po:e.po || cycle.po || '', codes:initialCodes})));
             return row;
         }
 
@@ -4662,7 +4675,8 @@ function calcCalib(list, dateType='all', dateValue='') {
             const group = btn.closest('.calibration-group');
             const list = group?.querySelector('.shared-cycles-list');
             if (!list) return;
-            list.appendChild(makeSharedCalibrationCycle({}, list.children.length));
+            const groupCodes = [...group.querySelectorAll('.calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean);
+            list.appendChild(makeSharedCalibrationCycle({codes:[...new Set(groupCodes)]}, list.children.length));
             renumberSharedCalibrationCycles(group);
         }
 
@@ -4779,49 +4793,38 @@ function calcCalib(list, dateType='all', dateValue='') {
 
         function removeCalibrationCodeRow(btn) {
             if (!isAdminUser()) return;
-            const group = btn.closest(".calibration-group");
-            const row = btn.closest(".calib-code-row");
+            const cycle = btn.closest('.shared-calibration-cycle');
+            const row = btn.closest('.calib-code-row');
             if (row) row.remove();
-            const list = group?.querySelector(".calibration-code-list");
+            if (cycle) {
+                const list = cycle.querySelector('.cycle-code-list');
+                if (list && !list.children.length) list.appendChild(makeCalibrationCodeRow(''));
+                return;
+            }
+            const group = btn.closest('.calibration-group');
+            const list = group?.querySelector('.calibration-code-list');
             if (list && !list.children.length) list.appendChild(makeCalibrationCodeRow());
             renumberCalibrationGroups();
         }
 
-        function renumberCalibrationGroups() {
-            document.querySelectorAll("#calibration-groups-container .calibration-group").forEach((group, gidx) => {
-                const label = group.querySelector(".group-number");
-                if (label) label.innerText = `Date Group ${gidx + 1}`;
-                group.querySelectorAll(".calib-code-row").forEach((row, idx) => {
-                    const counter = row.querySelector(".code-counter");
-                    if (counter) counter.innerText = `${idx + 1}.`;
-                });
-                renumberSharedCalibrationCycles(group);
-            });
-            syncEquipmentCountPreview();
-        }
-
-        function openEquipModal() {
+        function addCycleCodeRow(btn) {
             if (!isAdminUser()) return;
-            document.getElementById("eq-id").value = "";
-            document.getElementById("modal-equip-title").innerText = "Add Calibration Entries";
-            clearEquipmentSharedFields();
-            const container = document.getElementById("calibration-groups-container");
-            container.innerHTML = "";
-            addCalibrationGroup();
-            document.getElementById("modal-equipment").classList.remove("hidden");
-        }
-
-        function closeEquipModal() {
-            document.getElementById("modal-equipment").classList.add("hidden");
+            const cycle = btn.closest('.shared-calibration-cycle');
+            const list = cycle?.querySelector('.cycle-code-list');
+            if (list) list.appendChild(makeCalibrationCodeRow(''));
         }
 
         function collectCalibrationGroups() {
             return [...document.querySelectorAll("#calibration-groups-container .calibration-group")].map(group => {
-                const calibrationCycles = [...group.querySelectorAll(':scope > .bg-slate-950\\/40 .shared-cycles-list .shared-calibration-cycle')].map(row => ({
+                const calibrationCycles = [...group.querySelectorAll(':scope > .bg-slate-950\/40 .shared-cycles-list .shared-calibration-cycle')].map(row => ({
                     id: row.dataset.cycleId || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
                     pr: '',
                     po: '',
-                    codes: [...row.querySelectorAll(':scope > .bg-slate-950\\/40 .calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean),
+                    codes: (() => {
+                        const cycleCodes = [...row.querySelectorAll('.cycle-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean);
+                        if (cycleCodes.length) return [...new Set(cycleCodes)];
+                        return [...new Set([...group.querySelectorAll('.calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean))];
+                    })(),
                     external: collectCalibrationEntries(row, 'external'),
                     internal: collectCalibrationEntries(row, 'internal')
                 })).filter(c => c.external.length || c.internal.length || c.pr || c.po);
@@ -4835,13 +4838,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                     codes
                 };
             }).filter(g => g.codes.length && (g.calibrationCycles.length || g.pr || g.po));
-        }
-
-        function getSharedEquipmentData() {
-            return {
-                plant: document.getElementById("eq-shared-plant").value,
-                type: document.getElementById("eq-shared-type").value
-            };
         }
 
         function normalizeCalibrationCycleEntry(c) {
@@ -5418,31 +5414,10 @@ function calcCalib(list, dateType='all', dateValue='') {
                 document.getElementById("comparison-result-text").innerHTML=`Comparing <strong>${primaryValue}</strong> (${cp.uptime}% uptime, ${cp.hrs.toFixed(1)} hrs downtime, ${cp.mtbf.toFixed(1)} hrs MTBF, ${cp.mttr} mins MTTR) against <strong>${compareValue}</strong> (${cc.uptime}% uptime, ${cc.hrs.toFixed(1)} hrs downtime, ${cc.mtbf.toFixed(1)} hrs MTBF, ${cc.mttr} mins MTTR).<br>Uptime Variance: <strong class="${dp>=0?'text-emerald-400':'text-red-400'}">${dp>=0?'+':''}${dp}%</strong> | Downtime Variance: <strong class="${dh<=0?'text-emerald-400':'text-red-400'}">${dh<=0?'':'+'}${dh} hrs</strong>.`;
             }else compCard.classList.add("hidden");
 
-            // Top Equipment by Line — Highest Downtime Only.
-            // Uses exactly the same filtered primary/compare periods as the Executive Summary.
-            // In comparison mode, Date 1 and Date 2 are displayed side-by-side for each line.
-            const buildHighestEquipmentByLine = logs => {
-                const map = {};
-                (logs || []).forEach(dt => {
-                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const code = String(dt.code || '').trim().replace(/\s+/g, ' ') || 'Uncoded';
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
-                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
-                    if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
-                    map[line].lineTotal += dur;
-                    const key = code + '||' + category;
-                    if (!map[line].contributors[key]) map[line].contributors[key] = { line, code, equipment, category, duration: 0 };
-                    map[line].contributors[key].duration += dur;
-                });
-                return Object.values(map).map(lineItem => {
-                    const top = Object.values(lineItem.contributors).sort((a,b) => b.duration - a.duration)[0];
-                    return top ? { ...top, lineTotal: lineItem.lineTotal } : null;
-                }).filter(Boolean).sort((a,b) => b.lineTotal - a.lineTotal);
-            };
-
-            const topPrimary = buildHighestEquipmentByLine(primaryLogs);
-            const topCompare = isCompare ? buildHighestEquipmentByLine(compareLogs) : [];
+            // Top Equipment by Line — uses the exact same shared calculation as Executive Summary.
+            // This guarantees matching line, Equipment Code, failure category, and downtime.
+            const topPrimary = buildHighestEquipmentByLineShared(primaryLogs);
+            const topCompare = isCompare ? buildHighestEquipmentByLineShared(compareLogs) : [];
             const topBody = document.getElementById('uptime-top-equipment-body');
             const topLabel = document.getElementById('uptime-top-equipment-filter-label');
             const topHeadRow = document.getElementById('uptime-top-equipment-head-row');
