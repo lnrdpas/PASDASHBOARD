@@ -4518,33 +4518,47 @@ function calcCalib(list, dateType='all', dateValue='') {
         // These functions are intentionally kept separate from Edit so that
         // clicking + Add Calibration Entry can never reuse stale edit IDs/data.
         function openEquipModal() {
-            if (!isAdminUser()) return;
+            // Open the modal FIRST so a problem in initialization cannot make the
+            // Add button appear to do nothing. Any initialization error is shown.
             const modal = document.getElementById("modal-equipment");
-            const form = document.getElementById("form-equipment");
-            const container = document.getElementById("calibration-groups-container");
-            if (!modal || !form || !container) return;
+            if (!modal) {
+                alert("Calibration Add window is missing from this HTML. Please use the latest PASDASHBOARD file.");
+                return;
+            }
 
-            // ADD mode: absolutely clear any previous Edit state.
-            const idEl = document.getElementById("eq-id");
-            if (idEl) idEl.value = "";
-            const title = document.getElementById("modal-equip-title");
-            if (title) title.innerText = "Add Calibration Entries";
+            let admin = false;
+            try { admin = isAdminUser(); } catch (err) {
+                alert("Access check error: " + (err?.message || err));
+                return;
+            }
+            if (!admin) {
+                alert("Add Calibration is available only to FULL ACCESS / Admin users.");
+                return;
+            }
 
-            // Populate the required Equipment Class select BEFORE clearing/setting
-            // the form. Otherwise a stale/empty category list can make HTML5 form
-            // validation block Save without calling handleEquipSubmit().
-            populateCategoryDropdowns();
-            const typeSelect = document.getElementById("eq-shared-type");
-            if (typeSelect && !typeSelect.value) typeSelect.value = (equipmentCategories[0] || "General Equipment");
-
-            clearEquipmentSharedFields();
-            container.innerHTML = "";
-            addCalibrationGroup();
             modal.classList.remove("hidden");
 
-            populateCategoryDropdowns();
-            if (typeSelect && !typeSelect.value) typeSelect.value = (equipmentCategories[0] || "General Equipment");
-            syncEquipmentCountPreview();
+            try {
+                const form = document.getElementById("form-equipment");
+                const container = document.getElementById("calibration-groups-container");
+                if (!form || !container) throw new Error("Calibration form elements are missing.");
+
+                const idEl = document.getElementById("eq-id");
+                if (idEl) idEl.value = "";
+                const title = document.getElementById("modal-equip-title");
+                if (title) title.innerText = "Add Calibration Entries";
+
+                populateCategoryDropdowns();
+                const typeSelect = document.getElementById("eq-shared-type");
+                if (typeSelect && !typeSelect.value) typeSelect.value = (equipmentCategories[0] || "General Equipment");
+                clearEquipmentSharedFields();
+                container.innerHTML = "";
+                addCalibrationGroup();
+                syncEquipmentCountPreview();
+            } catch (err) {
+                console.error("openEquipModal initialization error", err);
+                alert("Calibration Add window opened, but initialization failed: " + (err?.message || err));
+            }
         }
 
         function closeEquipModal() {
