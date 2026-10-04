@@ -1249,14 +1249,14 @@ window.addEventListener("cloudsync:status", (event) => {
                             <div class="space-y-2">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
-                                    <button type="button" id="summary-top-equipment-expand-btn" onclick="toggleTopEquipmentExpand('summary')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-slate-200 border border-slate-600 transition">Expand All</button>
+                                    <button id="summary-top-equipment-expand-btn" type="button" onclick="toggleTopEquipmentByLineExpand('summary')" class="text-[10px] px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold no-print"><i class="fa-solid fa-expand mr-1"></i> Expand All</button>
                                 </div>
                                 <div class="overflow-x-auto rounded-xl border border-slate-700/50">
                                     <table class="w-full text-left text-xs text-slate-300">
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
                                                 <th class="py-1.5 px-2">Line Category</th>
-                                                <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">Equipment Code</th>
+                                                <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">Equipment Code / Equipment Category</th>
                                                 <th id="summary-top5-primary-failure-head" class="py-2.5 px-3">Failure Category</th>
                                                 <th id="summary-top5-primary-time-head" class="py-2.5 px-3 text-center">Downtime</th>
                                             </tr>
@@ -1535,7 +1535,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                     <input type="text" id="dt-code" required placeholder="e.g. PI-56, VFD-02" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
                                 </div>
                                 <div>
-                                    <label class="block text-slate-300 font-semibold mb-1">Equipment *</label>
+                                    <label class="block text-slate-300 font-semibold mb-1">Equipment Category / Indication *</label>
                                     <select id="dt-equipment" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none dt-equipment-select-dropdown">
                                     </select>
                                 </div>
@@ -1601,7 +1601,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         </div>
                         <div class="flex items-center gap-2">
                             <span id="uptime-top-equipment-filter-label" class="text-[9px] text-slate-400 font-semibold"></span>
-                            <button type="button" id="uptime-top-equipment-expand-btn" onclick="toggleTopEquipmentExpand('uptime')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-slate-200 border border-slate-600 transition">Expand All</button>
+                            <button id="uptime-top-equipment-expand-btn" type="button" onclick="toggleTopEquipmentByLineExpand('uptime')" class="text-[10px] px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold no-print"><i class="fa-solid fa-expand mr-1"></i> Expand All</button>
                         </div>
                     </div>
                     <div class="overflow-x-auto rounded-xl border border-slate-700/50">
@@ -1609,7 +1609,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                 <tr id="uptime-top-equipment-head-row">
                                     <th class="py-2.5 px-3">Line Category</th>
-                                    <th id="uptime-top-primary-head" class="py-2.5 px-3">Equipment Code</th>
+                                    <th id="uptime-top-primary-head" class="py-2.5 px-3">Equipment Code / Equipment Category</th>
                                     <th id="uptime-top-primary-category-head" class="py-2.5 px-3">Failure Category</th>
                                     <th id="uptime-top-primary-time-head" class="py-2.5 px-3 text-center">Downtime</th>
                                 </tr>
@@ -2679,6 +2679,7 @@ window.addEventListener("cloudsync:status", (event) => {
         let chartDowntimePareto = null;
         // Keep inline project timelines open when background cloud refreshes redraw the project cards.
         const expandedProjectTimelines = new Set();
+        let expandedTopEquipmentByLine = { summary: false, uptime: false };
 
         window.onload = function() {
             // Require login again after every browser refresh.
@@ -3394,25 +3395,6 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 0: SUMMARY ---
-        let topEquipmentExpandedSummary = false;
-        let topEquipmentExpandedUptime = false;
-
-        function toggleTopEquipmentExpand(which) {
-            if (which === 'summary') {
-                topEquipmentExpandedSummary = !topEquipmentExpandedSummary;
-                renderSummaryModule();
-            } else if (which === 'uptime') {
-                topEquipmentExpandedUptime = !topEquipmentExpandedUptime;
-                renderDowntimeModule();
-            }
-        }
-
-        function updateTopEquipmentExpandButton(id, expanded) {
-            const btn = document.getElementById(id);
-            if (!btn) return;
-            btn.textContent = expanded ? 'Show Top 4' : 'Expand All';
-        }
-
         function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
             const yearVal = document.getElementById("summary-year-filter").value;
@@ -3672,13 +3654,15 @@ window.addEventListener("cloudsync:status", (event) => {
                 const map = {};
                 (logs || []).forEach(dt => {
                     const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const equipment = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
-                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                    const code = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
+                    const equipmentCategory = String(dt.equipment || 'Unclassified Equipment Category').trim().replace(/\s+/g, ' ');
+                    const failureCategory = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
                     const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
                     if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
                     map[line].lineTotal += dur;
-                    const key = `${equipment}|||${category}`;
-                    if (!map[line].contributors[key]) map[line].contributors[key] = { line, equipment, category, duration: 0 };
+                    // Equipment identity is Equipment Code + Equipment Category.
+                    const key = `${code.toUpperCase()}|||${equipmentCategory.toUpperCase()}`;
+                    if (!map[line].contributors[key]) map[line].contributors[key] = { line, code, equipmentCategory, category: failureCategory, duration: 0 };
                     map[line].contributors[key].duration += dur;
                 });
                 return Object.values(map).map(lineItem => {
@@ -3688,6 +3672,8 @@ window.addEventListener("cloudsync:status", (event) => {
             };
             const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
             const compareTopByLine = isCompare ? buildTopEquipmentByLine(comparisonDt) : [];
+            const summaryTopPrimaryDisplay = expandedTopEquipmentByLine.summary ? primaryTopByLine : primaryTopByLine.slice(0, 4);
+            const summaryTopCompareDisplay = expandedTopEquipmentByLine.summary ? compareTopByLine : compareTopByLine.slice(0, 4);
             const top5Body = document.getElementById("summary-top5-downtime-body");
             const top5PLabel = primaryDisplay || 'Selected Period';
             const top5CLabel = compareDisplay || 'Comparison';
@@ -3698,7 +3684,6 @@ window.addEventListener("cloudsync:status", (event) => {
             if (top5PrimaryFailureHead) top5PrimaryFailureHead.textContent = `${top5PLabel} — Failure Category`;
             if (top5PrimaryTimeHead) top5PrimaryTimeHead.textContent = `${top5PLabel} — Downtime`;
             top5Body.innerHTML = "";
-            updateTopEquipmentExpandButton('summary-top-equipment-expand-btn', topEquipmentExpandedSummary);
 
             // In comparison mode, show the same Line once and place Date 1 / Date 2
             // equipment, failure category and downtime side-by-side. In single-period
@@ -3715,25 +3700,25 @@ window.addEventListener("cloudsync:status", (event) => {
                         <th colspan="3" class="py-1.5 px-2 text-center text-blue-300 border-l border-slate-700/60">${escapeHtml(top5CLabel)}</th>`;
                     const subRow = document.createElement('tr');
                     subRow.className = 'summary-top5-compare-subhead bg-slate-900/70 text-slate-500 text-[9px] uppercase';
-                    subRow.innerHTML = `<th class="py-1 px-2"></th><th class="py-1 px-2 border-l border-slate-700/60">Equipment Code</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th><th class="py-1 px-2 border-l border-slate-700/60">Equipment Code</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th>`;
+                    subRow.innerHTML = `<th class="py-1 px-2"></th><th class="py-1 px-2 border-l border-slate-700/60">Equipment Code / Equipment Category</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th><th class="py-1 px-2 border-l border-slate-700/60">Equipment Code / Equipment Category</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th>`;
                     thead.appendChild(subRow);
                 } else {
                     top5HeadRow.innerHTML = `
                         <th class="py-1.5 px-2">Line Category</th>
-                        <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Equipment Code</th>
+                        <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Equipment Code / Equipment Category</th>
                         <th id="summary-top5-primary-failure-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Failure Category</th>
                         <th id="summary-top5-primary-time-head" class="py-2.5 px-3 text-center">${escapeHtml(top5PLabel)} — Downtime</th>`;
                 }
             }
 
-            if (primaryTopByLine.length === 0 && (!isCompare || compareTopByLine.length === 0)) {
+            if (summaryTopPrimaryDisplay.length === 0 && (!isCompare || summaryTopCompareDisplay.length === 0)) {
                 top5Body.innerHTML = `<tr><td colspan="${isCompare ? 7 : 4}" class="text-center py-4 text-slate-500 italic">No downtime records found for the selected period${isCompare ? 's' : ''}.</td></tr>`;
             } else if (isCompare) {
-                const pMap = new Map(primaryTopByLine.map(x => [x.line, x]));
-                const cMap = new Map(compareTopByLine.map(x => [x.line, x]));
-                const lines = [...new Set([...primaryTopByLine.map(x => x.line), ...compareTopByLine.map(x => x.line)])]
+                const pMap = new Map(summaryTopPrimaryDisplay.map(x => [x.line, x]));
+                const cMap = new Map(summaryTopCompareDisplay.map(x => [x.line, x]));
+                const lines = [...new Set([...summaryTopPrimaryDisplay.map(x => x.line), ...summaryTopCompareDisplay.map(x => x.line)])]
                     .sort((a,b) => Number(cMap.get(b)?.lineTotal || 0) + Number(pMap.get(b)?.lineTotal || 0) - Number(cMap.get(a)?.lineTotal || 0) - Number(pMap.get(a)?.lineTotal || 0));
-                lines.slice(0, topEquipmentExpandedSummary ? lines.length : 4).forEach(line => {
+                lines.forEach(line => {
                     const a = pMap.get(line), b = cMap.get(line);
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-slate-800/50 transition align-top';
@@ -3741,19 +3726,19 @@ window.addEventListener("cloudsync:status", (event) => {
                         if (!item) return kind === 'time' ? '<td class="py-2 px-2 text-center text-slate-600 border-l border-slate-700/40">—</td>' : '<td class="py-2 px-2 text-slate-600">—</td>';
                         if (kind === 'time') return `<td class="py-2 px-2 text-center ${kind==='time'?'text-red-400 font-bold':''}">${Number(item.duration || 0).toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration || 0).toFixed(1)} hrs</div></td>`;
                         if (kind === 'category') return `<td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>`;
-                        return `<td class="py-2 px-2 text-slate-200">${escapeHtml(item.equipment || '—')}</td>`;
+                        return `<td class="py-2 px-2 text-slate-200">${escapeHtml(item.code || '—')}<div class="text-[9px] text-slate-500 mt-0.5">Equipment Category: ${escapeHtml(item.equipmentCategory || '—')}</div></td>`;
                     };
                     const bEquipment = b ? `<td class="py-2 px-2 text-slate-200 border-l border-slate-700/40">${escapeHtml(b.equipment || '—')}</td>` : `<td class="py-2 px-2 text-slate-600 border-l border-slate-700/40">—</td>`;
                     tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${escapeHtml(line)}</td>${cell(a,'equipment')}${cell(a,'category')}${cell(a,'time')}${bEquipment}${cell(b,'category')}${cell(b,'time')}`;
                     top5Body.appendChild(tr);
                 });
             } else {
-                primaryTopByLine.slice(0, topEquipmentExpandedSummary ? primaryTopByLine.length : 4).forEach(item => {
+                summaryTopPrimaryDisplay.forEach(item => {
                     const tr = document.createElement("tr");
                     tr.className = "hover:bg-slate-800/50 transition align-top";
                     tr.innerHTML = `
                         <td class="py-2 px-2 font-semibold text-white">${escapeHtml(item.line)}</td>
-                        <td class="py-2 px-3 text-slate-200">${escapeHtml(item.equipment || '—')}</td>
+                        <td class="py-2 px-3 text-slate-200">${escapeHtml(item.code || '—')}<div class="text-[9px] text-slate-500 mt-0.5">Equipment Category: ${escapeHtml(item.equipmentCategory || '—')}</div></td>
                         <td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>
                         <td class="py-2 px-3 text-center text-red-400 font-bold">${item.duration.toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration).toFixed(1)} hrs</div></td>
                     `;
@@ -5244,13 +5229,15 @@ function calcCalib(list, dateType='all', dateValue='') {
                 const map = {};
                 (logs || []).forEach(dt => {
                     const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const equipment = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
-                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                    const code = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
+                    const equipmentCategory = String(dt.equipment || 'Unclassified Equipment Category').trim().replace(/\s+/g, ' ');
+                    const failureCategory = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
                     const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
                     if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
                     map[line].lineTotal += dur;
-                    const key = equipment + '||' + category;
-                    if (!map[line].contributors[key]) map[line].contributors[key] = { line, equipment, category, duration: 0 };
+                    // Equipment identity is Equipment Code + Equipment Category.
+                    const key = `${code.toUpperCase()}|||${equipmentCategory.toUpperCase()}`;
+                    if (!map[line].contributors[key]) map[line].contributors[key] = { line, code, equipmentCategory, category: failureCategory, duration: 0 };
                     map[line].contributors[key].duration += dur;
                 });
                 return Object.values(map).map(lineItem => {
@@ -5261,8 +5248,9 @@ function calcCalib(list, dateType='all', dateValue='') {
 
             const topPrimary = buildHighestEquipmentByLine(primaryLogs);
             const topCompare = isCompare ? buildHighestEquipmentByLine(compareLogs) : [];
+            const uptimeTopPrimaryDisplay = expandedTopEquipmentByLine.uptime ? topPrimary : topPrimary.slice(0, 4);
+            const uptimeTopCompareDisplay = expandedTopEquipmentByLine.uptime ? topCompare : topCompare.slice(0, 4);
             const topBody = document.getElementById('uptime-top-equipment-body');
-            updateTopEquipmentExpandButton('uptime-top-equipment-expand-btn', topEquipmentExpandedUptime);
             const topLabel = document.getElementById('uptime-top-equipment-filter-label');
             const topHeadRow = document.getElementById('uptime-top-equipment-head-row');
 
@@ -5295,7 +5283,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                 } else {
                     topHeadRow.innerHTML = `
                         <th class="py-2.5 px-3">Line Category</th>
-                        <th class="py-2.5 px-3">${escapeHtml(primaryValue || 'Selected Period')} — Equipment Code</th>
+                        <th class="py-2.5 px-3">${escapeHtml(primaryValue || 'Selected Period')} — Equipment Code / Equipment Category</th>
                         <th class="py-2.5 px-3">${escapeHtml(primaryValue || 'Selected Period')} — Failure Category</th>
                         <th class="py-2.5 px-3 text-center">${escapeHtml(primaryValue || 'Selected Period')} — Downtime</th>`;
                 }
@@ -5303,21 +5291,21 @@ function calcCalib(list, dateType='all', dateValue='') {
 
             if (topBody) {
                 topBody.innerHTML = '';
-                if (!topPrimary.length && (!isCompare || !topCompare.length)) {
+                if (!uptimeTopPrimaryDisplay.length && (!isCompare || !uptimeTopCompareDisplay.length)) {
                     topBody.innerHTML = `<tr><td colspan="${isCompare ? 7 : 4}" class="text-center py-6 text-slate-500 italic">No downtime records found for the selected Uptime/Downtime filter.</td></tr>`;
                 } else if (isCompare) {
-                    const pMap = new Map(topPrimary.map(x => [x.line, x]));
-                    const cMap = new Map(topCompare.map(x => [x.line, x]));
-                    const lines = [...new Set([...topPrimary.map(x => x.line), ...topCompare.map(x => x.line)])]
+                    const pMap = new Map(uptimeTopPrimaryDisplay.map(x => [x.line, x]));
+                    const cMap = new Map(uptimeTopCompareDisplay.map(x => [x.line, x]));
+                    const lines = [...new Set([...uptimeTopPrimaryDisplay.map(x => x.line), ...uptimeTopCompareDisplay.map(x => x.line)])]
                         .sort((a,b) => ((pMap.get(b)?.lineTotal || 0) + (cMap.get(b)?.lineTotal || 0)) - ((pMap.get(a)?.lineTotal || 0) + (cMap.get(a)?.lineTotal || 0)));
 
-                    lines.slice(0, topEquipmentExpandedUptime ? lines.length : 4).forEach(line => {
+                    lines.forEach(line => {
                         const pItem = pMap.get(line);
                         const cItem = cMap.get(line);
                         const tr = document.createElement('tr');
                         tr.className = 'hover:bg-slate-800/50 transition align-top';
                         const equipmentCell = (item, comparison=false) => item
-                            ? `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''} text-slate-200">${escapeHtml(item.equipment || '—')}</td>`
+                            ? `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''} text-slate-200">${escapeHtml(item.code || '—')}<div class="text-[9px] text-slate-500 mt-0.5">Equipment Category: ${escapeHtml(item.equipmentCategory || '—')}</div></td>`
                             : `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''} text-slate-600">—</td>`;
                         const categoryCell = item => item
                             ? `<td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>`
@@ -5329,12 +5317,12 @@ function calcCalib(list, dateType='all', dateValue='') {
                         topBody.appendChild(tr);
                     });
                 } else {
-                    topPrimary.slice(0, topEquipmentExpandedUptime ? topPrimary.length : 4).forEach(item => {
+                    uptimeTopPrimaryDisplay.forEach(item => {
                         const tr = document.createElement('tr');
                         tr.className = 'hover:bg-slate-800/50 transition align-top';
                         tr.innerHTML = `
                             <td class="py-2 px-2 font-semibold text-white">${escapeHtml(item.line)}</td>
-                            <td class="py-2 px-3 text-slate-200">${escapeHtml(item.equipment || '—')}</td>
+                            <td class="py-2 px-3 text-slate-200">${escapeHtml(item.code || '—')}<div class="text-[9px] text-slate-500 mt-0.5">Equipment Category: ${escapeHtml(item.equipmentCategory || '—')}</div></td>
                             <td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>
                             <td class="py-2 px-3 text-center text-red-400 font-bold">${Number(item.duration || 0).toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration || 0).toFixed(1)} hrs</div></td>`;
                         topBody.appendChild(tr);
@@ -5396,6 +5384,16 @@ function calcCalib(list, dateType='all', dateValue='') {
 
         function closeDowntimeForm() {
             document.getElementById('downtime-entry-panel')?.classList.add('hidden');
+        }
+
+        function toggleTopEquipmentByLineExpand(module) {
+            expandedTopEquipmentByLine[module] = !expandedTopEquipmentByLine[module];
+            const btn = document.getElementById(`${module}-top-equipment-expand-btn`);
+            if (btn) btn.innerHTML = expandedTopEquipmentByLine[module]
+                ? '<i class="fa-solid fa-compress mr-1"></i> Show Top 4'
+                : '<i class="fa-solid fa-expand mr-1"></i> Expand All';
+            if (module === 'summary') renderSummaryModule();
+            if (module === 'uptime') renderDowntimeModule();
         }
 
         function handleDowntimeSubmit(e) {
