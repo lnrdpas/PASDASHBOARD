@@ -4828,14 +4828,20 @@ function calcCalib(list, dateType='all', dateValue='') {
                     external: collectCalibrationEntries(row, 'external'),
                     internal: collectCalibrationEntries(row, 'internal')
                 })).filter(c => c.external.length || c.internal.length || c.pr || c.po);
-                const codes = [...new Set([...group.querySelectorAll('.calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean))];
+                const codeInputs = [...group.querySelectorAll('.calibration-code-list input[name="eq-code"]')];
+                const codeRecords = codeInputs.map(i => ({
+                    code: i.value.trim(),
+                    recordId: i.dataset.recordId || ''
+                })).filter(x => x.code);
+                const codes = [...new Set(codeRecords.map(x => x.code))];
                 return {
                     pr: calibrationCycles.flatMap(c => [...(c.external || []), ...(c.internal || [])]).find(e => e.pr)?.pr || '',
                     po: calibrationCycles.flatMap(c => [...(c.external || []), ...(c.internal || [])]).find(e => e.po)?.po || '',
                     calibrationCycles,
                     externalCalibrations: calibrationCycles.flatMap(c => c.external),
                     internalCalibrations: calibrationCycles.flatMap(c => c.internal),
-                    codes
+                    codes,
+                    codeRecords
                 };
             }).filter(g => g.codes.length && (g.calibrationCycles.length || g.pr || g.po));
         }
@@ -4914,51 +4920,89 @@ function calcCalib(list, dateType='all', dateValue='') {
             e.preventDefault();
             if (!isAdminUser()) return;
 
-            const editId = document.getElementById("eq-id").value;
+            const editId = String(document.getElementById("eq-id").value || '').trim();
             const shared = getSharedEquipmentData();
             const groups = collectCalibrationGroups();
-            const codes = [...new Set(groups.flatMap(g => g.codes).map(c => String(c || '').trim().toLowerCase()).filter(Boolean))];
-            if (!codes.length) return alert("Please enter at least one equipment code.");
             if (!groups.length) return alert("Please enter at least one calibration cycle or PR/PO group.");
+
+            const allCodeRecords = groups.flatMap(g => g.codeRecords || []);
+            const codes = [...new Set(allCodeRecords.map(x => String(x.code || '').trim()).filter(Boolean))];
+            if (!codes.length) return alert("Please enter at least one equipment code.");
 
             const workingIds = editId ? editId.split(",").map(v => Number(v)).filter(Boolean) : [];
             const selectedExisting = new Set(workingIds);
 
-            groups.forEach(group => {
-                group.codes.forEach(code => {
-                    const cleanCode = String(code || '').trim();
+            // EDIT MODE: replace the selected records with the contents of the form.
+            // This makes changing/removing an existing code or calibration occurrence work.
+            if (workingIds.length) {
+                const selectedRecords = workingIds.map(id => equipmentList.find(item => Number(item.id) === id)).filter(Boolean);
+                const usedIds = new Set();
+                const assignedRecordIds = new Set();
+
+                allCodeRecords.forEach((codeRec, codeIndex) => {
+                    const cleanCode = String(codeRec.code || '').trim();
                     if (!cleanCode) return;
                     let record = null;
-                    if (editId) record = equipmentList.find(item => selectedExisting.has(item.id) && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
-                    if (!record) record = equipmentList.find(item => normalizePlant(item.plant) === normalizePlant(shared.plant) && String(item.type || '').trim() === String(shared.type || '').trim() && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
 
+                    // First choice: the exact record that was attached to this code input when Edit opened.
+                    if (codeRec.recordId) {
+                        record = selectedRecords.find(item => String(item.id) === String(codeRec.recordId) && !usedIds.has(item.id));
+                    }
+                    // Second choice: same code among the records selected for editing.
                     if (!record) {
-                        record = {id: Date.now() + Math.floor(Math.random()*1000000), ...shared, code:cleanCode, pr:'', po:'', extSched:'', extCalib:'', extBy:'', intSched:'', intCalib:'', intBy:'', externalCalibrations:[], internalCalibrations:[], calibrationCycles:[], calibrationHistory:[]};
+                        record = selectedRecords.find(item => String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase() && !usedIds.has(item.id));
+                    }
+                    // Third choice: an unused selected record, allowing an existing code to be renamed.
+                    if (!record) {
+                        record = selectedRecords.find(item => !usedIds.has(item.id));
+                    }
+                    // If the user added a new code while editing, create a new record.
+                    if (!record) {
+                        record = {
+                            id: Date.now() + Math.floor(Math.random() * 1000000) + codeIndex,
+                            ...shared,
+                            code: cleanCode,
+                            pr: '', po: '', extSched: '', extCalib: '', extBy: '',
+                            intSched: '', intCalib: '', intBy: '',
+                            externalCalibrations: [], internalCalibrations: [],
+                            calibrationCycles: [], calibrationHistory: []
+                        };
                         equipmentList.push(record);
                     }
+                    usedIds.add(record.id);
+                    assignedRecordIds.add(record.id);
+
                     record.plant = shared.plant;
                     record.type = shared.type;
-                    if (group.pr) record.pr = group.pr;
-                    if (group.po) record.po = group.po;
+                    record.code = cleanCode;
 
-                    const beforeCycles = normalizeSharedCalibrationCycles(record);
-                    const incomingCyclesForCode = (group.calibrationCycles || []).map(c => {
+                    // A code's cycles are rebuilt from the edited form, so deleted/changed
+                    // calibration occurrences are actually deleted/changed instead of being
+                    // permanently re-merged into the old record.
+                    const incomingCycles = (groups.flatMap(g => g.calibrationCycles || []) || []).map(c => {
                         const cycleCodes = Array.isArray(c.codes) ? c.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
-                        const selectedCycleCodes = cycleCodes.length ? cycleCodes : group.codes;
-                        const codeMatches = selectedCycleCodes.map(v => v.toLowerCase()).includes(cleanCode.toLowerCase());
-                        if (!codeMatches) return null;
+                        if (cycleCodes.length && !cycleCodes.some(v => v.toLowerCase() === cleanCode.toLowerCase())) return null;
                         const filterEntries = entries => (Array.isArray(entries) ? entries : []).filter(entry => {
                             const entryCodes = Array.isArray(entry.codes) ? entry.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
-                            return !entryCodes.length || entryCodes.map(v => v.toLowerCase()).includes(cleanCode.toLowerCase());
+                            return !entryCodes.length || entryCodes.some(v => v.toLowerCase() === cleanCode.toLowerCase());
                         }).map(entry => ({...entry, codes:[cleanCode]}));
-                        return {...c, codes:[cleanCode], external:filterEntries(c.external), internal:filterEntries(c.internal)};
-                    }).filter(c => c && (c.external.length || c.internal.length || c.pr || c.po));
-                    // IMPORTANT: cycles belong to this equipment record and only to the codes assigned to that cycle.
-                    const mergedCycles = mergeSharedCalibrationCycles(beforeCycles, incomingCyclesForCode);
-                    mergedCycles.forEach(c => { c.codes = [cleanCode]; });
-                    record.calibrationCycles = mergedCycles;
-                    record.externalCalibrations = flattenSharedCalibrationCycles(mergedCycles, 'external');
-                    record.internalCalibrations = flattenSharedCalibrationCycles(mergedCycles, 'internal');
+                        return {
+                            ...c,
+                            codes:[cleanCode],
+                            external:filterEntries(c.external),
+                            internal:filterEntries(c.internal)
+                        };
+                    }).filter(c => c && ((c.external?.length || 0) + (c.internal?.length || 0) > 0));
+
+                    const rebuiltCycles = incomingCycles.map(c => ({
+                        ...c,
+                        codes:[cleanCode],
+                        external:(c.external || []).map(x => ({...x, codes:[cleanCode]})),
+                        internal:(c.internal || []).map(x => ({...x, codes:[cleanCode]}))
+                    }));
+                    record.calibrationCycles = rebuiltCycles;
+                    record.externalCalibrations = flattenSharedCalibrationCycles(rebuiltCycles, 'external');
+                    record.internalCalibrations = flattenSharedCalibrationCycles(rebuiltCycles, 'internal');
                     const latestExt = latestCalibrationCycle(record.externalCalibrations);
                     const latestInt = latestCalibrationCycle(record.internalCalibrations);
                     record.extSched = latestExt.sched || '';
@@ -4967,34 +5011,55 @@ function calcCalib(list, dateType='all', dateValue='') {
                     record.intSched = latestInt.sched || '';
                     record.intCalib = latestInt.calib || '';
                     record.intBy = latestInt.by || '';
-
-                    if (!Array.isArray(record.calibrationHistory)) record.calibrationHistory = [];
-                    mergedCycles.forEach((cycle, idx) => {
-                        const hasData = (cycle.external?.length || 0) + (cycle.internal?.length || 0) > 0;
-                        if (!hasData) return;
-                        const key = cycleHistoryKey(cycle, idx);
-                        const snapshot = {
-                            cycleId: key,
-                            cycle: idx + 1,
-                            recordedAt: new Date().toISOString(),
-                            pr: '',
-                            po: '',
-                            externalCalibrations: cycle.external || [],
-                            internalCalibrations: cycle.internal || [],
-                            extSched: latestCalibrationCycle(cycle.external || []).sched || '',
-                            extCalib: latestCalibrationCycle(cycle.external || []).calib || '',
-                            extBy: latestCalibrationCycle(cycle.external || []).by || '',
-                            intSched: latestCalibrationCycle(cycle.internal || []).sched || '',
-                            intCalib: latestCalibrationCycle(cycle.internal || []).calib || '',
-                            intBy: latestCalibrationCycle(cycle.internal || []).by || ''
-                        };
-                        const existingIndex = record.calibrationHistory.findIndex(h => String(h.cycleId || '') === key);
-                        if (existingIndex >= 0) record.calibrationHistory[existingIndex] = snapshot;
-                        else record.calibrationHistory.push(snapshot);
-                    });
-                    if (record.calibrationHistory.length > 100) record.calibrationHistory = record.calibrationHistory.slice(-100);
+                    const firstGroup = groups.find(g => (g.codeRecords || []).some(x => String(x.code).toLowerCase() === cleanCode.toLowerCase()));
+                    record.pr = firstGroup?.pr || record.pr || '';
+                    record.po = firstGroup?.po || record.po || '';
                 });
-            });
+
+                // Records removed from the Edit form are removed from this selected card only.
+                equipmentList = equipmentList.filter(item => !selectedExisting.has(item.id) || assignedRecordIds.has(item.id));
+            } else {
+                // ADD MODE: preserve the existing merge behavior so adding another occurrence
+                // never overwrites an existing equipment record.
+                groups.forEach(group => {
+                    group.codes.forEach(code => {
+                        const cleanCode = String(code || '').trim();
+                        if (!cleanCode) return;
+                        let record = equipmentList.find(item =>
+                            normalizePlant(item.plant) === normalizePlant(shared.plant) &&
+                            String(item.type || '').trim() === String(shared.type || '').trim() &&
+                            String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase()
+                        );
+                        if (!record) {
+                            record = {id: Date.now() + Math.floor(Math.random()*1000000), ...shared, code:cleanCode, pr:'', po:'', extSched:'', extCalib:'', extBy:'', intSched:'', intCalib:'', intBy:'', externalCalibrations:[], internalCalibrations:[], calibrationCycles:[], calibrationHistory:[]};
+                            equipmentList.push(record);
+                        }
+                        record.plant = shared.plant;
+                        record.type = shared.type;
+                        if (group.pr) record.pr = group.pr;
+                        if (group.po) record.po = group.po;
+                        const beforeCycles = normalizeSharedCalibrationCycles(record);
+                        const incomingCyclesForCode = (group.calibrationCycles || []).map(c => {
+                            const cycleCodes = Array.isArray(c.codes) ? c.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
+                            const selectedCycleCodes = cycleCodes.length ? cycleCodes : group.codes;
+                            if (!selectedCycleCodes.some(v => v.toLowerCase() === cleanCode.toLowerCase())) return null;
+                            const filterEntries = entries => (Array.isArray(entries) ? entries : []).filter(entry => {
+                                const entryCodes = Array.isArray(entry.codes) ? entry.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
+                                return !entryCodes.length || entryCodes.some(v => v.toLowerCase() === cleanCode.toLowerCase());
+                            }).map(entry => ({...entry, codes:[cleanCode]}));
+                            return {...c, codes:[cleanCode], external:filterEntries(c.external), internal:filterEntries(c.internal)};
+                        }).filter(c => c && (c.external.length || c.internal.length || c.pr || c.po));
+                        const mergedCycles = mergeSharedCalibrationCycles(beforeCycles, incomingCyclesForCode);
+                        mergedCycles.forEach(c => { c.codes = [cleanCode]; });
+                        record.calibrationCycles = mergedCycles;
+                        record.externalCalibrations = flattenSharedCalibrationCycles(mergedCycles,'external');
+                        record.internalCalibrations = flattenSharedCalibrationCycles(mergedCycles,'internal');
+                        const le=latestCalibrationCycle(record.externalCalibrations), li=latestCalibrationCycle(record.internalCalibrations);
+                        record.extSched=le.sched||''; record.extCalib=le.calib||''; record.extBy=le.by||'';
+                        record.intSched=li.sched||''; record.intCalib=li.calib||''; record.intBy=li.by||'';
+                    });
+                });
+            }
 
             dedupeEquipmentCodes();
             saveStorage();
@@ -5021,8 +5086,18 @@ function calcCalib(list, dateType='all', dateValue='') {
                 pr: selected.pr || "",
                 po: selected.po || "",
                 calibrationCycles: normalizeSharedCalibrationCycles(selected),
-                codes: group.map(item => item.code || "")
+                codes: group.map(item => item.code || ""),
+                codeRecordIds: group.map(item => item.id)
             });
+            // Attach each existing equipment record ID to its code input. This makes
+            // Edit deterministic even when the same instrument type has many codes.
+            const editGroup = container.querySelector('.calibration-group');
+            if (editGroup) {
+                const inputs = [...editGroup.querySelectorAll('.calibration-code-list input[name="eq-code"]')];
+                group.forEach((item, idx) => {
+                    if (inputs[idx]) inputs[idx].dataset.recordId = String(item.id);
+                });
+            }
             document.getElementById("modal-equipment").classList.remove("hidden");
         }
 
