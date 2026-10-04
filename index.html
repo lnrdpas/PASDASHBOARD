@@ -1332,7 +1332,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-chart-bar text-amber-400"></i> <span id="summary-pareto-title">Downtime Pareto by Line Category</span>
+                            <i class="fa-solid fa-chart-bar text-amber-400"></i> <span id="summary-pareto-title">Downtime Pareto by Equipment Code</span>
                         </h4>
                         <div class="chart-box-container summary-pareto-chart-box">
                             <canvas id="chart-summary-pareto"></canvas>
@@ -3594,45 +3594,35 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (currentPlant !== "ALL" && normalizePlant(dt.plant) !== normalizePlant(currentPlant)) return false;
                 return matchesSummaryDate(dt.start, compareType, compareValue);
             }) : [];
-            // Executive Summary Pareto: SAME representation and styling as Uptime/Downtime.
-            // Rank total downtime by Equipment Code, not by line or equipment name.
             const buildPareto = logs => {
                 const map = {};
                 (logs || []).forEach(dt => {
-                    const code = String(dt.code || '').trim() || 'Uncoded';
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim();
-                    const line = String(dt.line || 'Unclassified Line').trim();
-                    const category = String(dt.category || 'Unclassified').trim();
-                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
-                    const key = code.toLowerCase();
-                    if (!map[key]) map[key] = { code, duration: 0, eq: {}, line: {}, cat: {} };
-                    map[key].duration += dur;
-                    map[key].eq[equipment] = (map[key].eq[equipment] || 0) + dur;
-                    map[key].line[line] = (map[key].line[line] || 0) + dur;
-                    map[key].cat[category] = (map[key].cat[category] || 0) + dur;
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
+                    if (!map[line]) map[line] = { line, duration: 0, equipment: {}, categories: {} };
+                    map[line].duration += dur;
+                    map[line].equipment[equipment] = (map[line].equipment[equipment] || 0) + dur;
+                    map[line].categories[category] = (map[line].categories[category] || 0) + dur;
                 });
-                return Object.values(map).map(x => ({
-                    code: x.code,
-                    label: x.code,
-                    duration: x.duration,
-                    equipment: Object.entries(x.eq).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—',
-                    line: Object.entries(x.line).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—',
-                    category: Object.entries(x.cat).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—'
-                })).sort((a,b)=>b.duration-a.duration).slice(0,10);
+                return Object.values(map).map(x => {
+                    const eq = Object.entries(x.equipment).sort((a,b)=>b[1]-a[1]);
+                    const cat = Object.entries(x.categories).sort((a,b)=>b[1]-a[1]);
+                    return { ...x, equipment: eq[0]?.[0] || 'Unclassified Equipment', category: cat[0]?.[0] || 'Unclassified' };
+                }).sort((a,b) => b.duration - a.duration);
             };
 
-            // Match comparison bars by the actual Equipment Code, never by rank.
-            const alignParetoByCode = (primaryItems, compareItems) => {
-                const p = primaryItems || [], c = compareItems || [];
-                if (!c.length) return { primary:p, compare:[] };
-                const pm = new Map(p.map(x => [String(x.code || 'Uncoded').trim().toLowerCase(), x]));
-                const cm = new Map(c.map(x => [String(x.code || 'Uncoded').trim().toLowerCase(), x]));
-                const keys = [...new Set([...pm.keys(), ...cm.keys()])];
-                keys.sort((a,b) => Math.max(Number(pm.get(b)?.duration || 0), Number(cm.get(b)?.duration || 0)) - Math.max(Number(pm.get(a)?.duration || 0), Number(cm.get(a)?.duration || 0)));
-                return {
-                    primary: keys.map(k => pm.get(k) || {code:cm.get(k)?.code || 'Uncoded',equipment:cm.get(k)?.equipment || '—',line:cm.get(k)?.line || '—',category:cm.get(k)?.category || '—',duration:0}),
-                    compare: keys.map(k => cm.get(k) || {code:pm.get(k)?.code || 'Uncoded',equipment:pm.get(k)?.equipment || '—',line:pm.get(k)?.line || '—',category:pm.get(k)?.category || '—',duration:0})
-                };
+            const makeParetoBuckets = items => {
+                const top = (items || []).slice(0, 3).map((x, i) => ({ rank:i+1, label:x.line, line:x.line, duration:x.duration, equipment:x.equipment, category:x.category }));
+                const rest = (items || []).slice(3);
+                if (rest.length) {
+                    const eqMap = {}; rest.forEach(x => eqMap[x.equipment] = (eqMap[x.equipment] || 0) + x.duration);
+                    const eqNames = Object.entries(eqMap).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+                    top.push({ rank:4, label:'Other', line:'Remaining Lines', duration:rest.reduce((a,x)=>a+x.duration,0), equipment:eqNames.join(', ') || 'Other Equipment', category:'Multiple' });
+                }
+                while(top.length < 4) top.push({rank:top.length+1,label:top.length===3?'Other':'No Data',line:'No Data',duration:0,equipment:'—',category:'—'});
+                return top.slice(0,4);
             };
 
             const uniqueEquipmentCodes = list => {
@@ -3782,16 +3772,60 @@ window.addEventListener("cloudsync:status", (event) => {
             setCompare('summary-calib-compare', isCompare ? `${primaryDisplay || 'Date 1'}: ${primaryCalib.compliance}% &nbsp;|&nbsp; ${compareDisplay || 'Date 2'}: ${compareCalib.compliance}%` : '', isCompare);
             setCompare('summary-projects-compare', isCompare ? `${primaryDisplay || 'Date 1'}: ${filteredPr.length} &nbsp;|&nbsp; ${compareDisplay || 'Date 2'}: ${comparisonPr.length}` : '', isCompare);
 
-            // Pareto data uses the exact same Equipment Code grouping as Uptime/Downtime.
-            const sortedLinePareto = buildPareto(filteredDt);
-            const sortedComparePareto = isCompare ? buildPareto(comparisonDt) : [];
-            const alignedPareto = isCompare ? alignParetoByCode(sortedLinePareto, sortedComparePareto) : {primary:sortedLinePareto, compare:[]};
+            // Executive Summary Pareto: total downtime by Equipment Code.
+            // This is intentionally isolated to the Executive Summary; the original
+            // Uptime/Downtime module and the rest of this file remain unchanged.
+            const buildSummaryParetoByCode = logs => {
+                const map = {};
+                (logs || []).forEach(dt => {
+                    const code = getDowntimeEquipmentCode(dt) || String(dt.equipment || 'Unclassified Equipment').trim();
+                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
+                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
+                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
+                    if (!map[code]) map[code] = { code, equipment, line, duration: 0, categories: {} };
+                    map[code].duration += dur;
+                    map[code].categories[category] = (map[code].categories[category] || 0) + dur;
+                });
+                return Object.values(map).map(x => {
+                    const cat = Object.entries(x.categories).sort((a,b) => b[1] - a[1]);
+                    return { ...x, category: cat[0]?.[0] || 'Unclassified' };
+                }).sort((a,b) => b.duration - a.duration);
+            };
+
+            const alignSummaryParetoByCode = (primaryItems, compareItems) => {
+                const pMap = new Map((primaryItems || []).map(x => [String(x.code || '').trim(), x]));
+                const cMap = new Map((compareItems || []).map(x => [String(x.code || '').trim(), x]));
+                const codes = [...new Set([...pMap.keys(), ...cMap.keys()])].filter(Boolean);
+                codes.sort((a,b) => Math.max(Number(pMap.get(b)?.duration || 0), Number(cMap.get(b)?.duration || 0)) - Math.max(Number(pMap.get(a)?.duration || 0), Number(cMap.get(a)?.duration || 0)));
+                return codes.map(code => {
+                    const p = pMap.get(code);
+                    const c = cMap.get(code);
+                    return {
+                        code,
+                        equipment: p?.equipment || c?.equipment || '—',
+                        line: p?.line || c?.line || '—',
+                        duration: Number(p?.duration || 0),
+                        category: p?.category || c?.category || '—',
+                        compareDuration: Number(c?.duration || 0),
+                        compareEquipment: c?.equipment || p?.equipment || '—',
+                        compareLine: c?.line || p?.line || '—',
+                        compareCategory: c?.category || p?.category || '—'
+                    };
+                });
+            };
+
+            const sortedLinePareto = buildSummaryParetoByCode(filteredDt);
+            const sortedComparePareto = isCompare ? buildSummaryParetoByCode(comparisonDt) : [];
+            const alignedPareto = isCompare ? alignSummaryParetoByCode(sortedLinePareto, sortedComparePareto) : sortedLinePareto;
+            const paretoPrimary = alignedPareto.map(x => ({ rank: 0, label: x.code, line: x.line, duration: x.duration, equipment: x.code, category: x.category }));
+            const paretoCompare = isCompare ? alignedPareto.map(x => ({ rank: 0, label: x.code, line: x.compareLine, duration: x.compareDuration, equipment: x.code, category: x.compareCategory })) : [];
             const paretoComparison = {
                 mode: isCompare ? compareType : 'single',
                 primaryLabel: primaryDisplay || 'Selected Period',
                 compareLabel: compareValue || '',
-                primary: alignedPareto.primary,
-                compare: alignedPareto.compare
+                primary: paretoPrimary,
+                compare: paretoCompare
             };
             const compareNote = document.getElementById('summary-compare-note');
             if (compareNote) {
@@ -4019,72 +4053,23 @@ window.addEventListener("cloudsync:status", (event) => {
                 data:{labels:projectPieLabels,datasets:[{data:projectPieValues,backgroundColor:projectPieColors,borderColor:'#1e293b',borderWidth:2,hoverOffset:4}]},
                 options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:6,font:{size:8},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw}`}}}}
             });
-            // EXECUTIVE SUMMARY PARETO — intentionally uses the SAME chart design as Uptime/Downtime.
             if(chartSummaryPareto) chartSummaryPareto.destroy();
-            const p = paretoComparison?.primary || [];
-            const c = paretoComparison?.compare || [];
-            const labels = p.map((x,i)=>[x.code||'Uncoded',x.equipment||'',x.line||'']);
-            const primary = p.map(x=>Number((x.duration||0).toFixed(1)));
-            const compare = isCompare ? c.map(x=>Number((x.duration||0).toFixed(1))) : [];
-            let total = primary.reduce((a,b)=>a+b,0) + (isCompare ? compare.reduce((a,b)=>a+b,0) : 0), run=0;
-            const cum = p.map((x,i)=>{
-                run += primary[i] + (isCompare ? compare[i] : 0);
-                return total ? Number((run/total*100).toFixed(1)) : 0;
-            });
-            const ds = isCompare
-                ? [{label:paretoComparison.primaryLabel,data:primary,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},
-                   {label:paretoComparison.compareLabel,data:compare,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]
-                : [{label:'Downtime (hrs)',data:primary,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];
+            const p=paretoComparison.primary||[], c=paretoComparison.compare||[];
+            const labels=p.map((x,i)=>[x.equipment||x.label||'—',x.line||'',isCompare&&c[i]?`vs ${c[i].equipment||'—'}`:'']);
+            const primary=p.map(x=>Number((x.duration||0).toFixed(1))); const compare=isCompare?c.map(x=>Number((x.duration||0).toFixed(1))):[];
+            let total=primary.reduce((a,b)=>a+b,0)+(isCompare?compare.reduce((a,b)=>a+b,0):0), run=0;
+            const cum=p.map((x,i)=>{run+=(primary[i]+(isCompare?compare[i]:0));return total?Number((run/total*100).toFixed(1)):0});
+            const ds=[];
+            if(isCompare){ds.push({label:paretoComparison.primaryLabel,data:primary,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:28});ds.push({label:paretoComparison.compareLabel,data:compare,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:28});}
+            else ds.push({label:'Downtime (hrs)',data:primary,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30});
             ds.push({type:'line',label:'Cumulative %',data:cum,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'});
-
-            const paretoLabels = labels.length ? labels : [['No Data','','']];
-            const paretoPrimary = labels.length ? primary : [0];
-            const paretoCompare = labels.length && isCompare ? compare : [];
-            const paretoCum = labels.length ? cum : [0];
-            const paretoDatasets = labels.length ? ds : [{label:'Downtime (hrs)',data:[0],backgroundColor:'#475569',borderRadius:5,maxBarThickness:30}];
-
-            chartSummaryPareto = new Chart(paretoCanvas.getContext('2d'), {
-                type:'bar',
-                data:{labels:paretoLabels,datasets:paretoDatasets},
-                options:{
-                    responsive:true,
-                    maintainAspectRatio:false,
-                    layout:{padding:{top:10,bottom:8}},
-                    plugins:{
-                        legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},
-                        tooltip:{callbacks:{
-                            title:items=>{
-                                const i=items[0]?.dataIndex||0;
-                                const a=p[i]||{};
-                                return a.code ? `${a.code} — ${a.equipment||'—'} | ${a.line||'—'}` : 'No downtime data';
-                            },
-                            label:ctx=>ctx.dataset.type==='line'
-                                ? `Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`
-                                : `${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,
-                            afterBody:items=>{
-                                const i=items[0]?.dataIndex||0;
-                                const a=p[i]||{}, b=c[i]||{};
-                                return a.code ? [
-                                    `Equipment Code: ${a.code||'Uncoded'}`,
-                                    `Primary failure: ${a.category||'—'}`,
-                                    isCompare ? `Comparison code: ${b.code||'Uncoded'} (same code)` : '',
-                                    isCompare ? `Comparison failure: ${b.category||'—'}` : ''
-                                ].filter(Boolean) : [];
-                            }
-                        }}
-                    },
-                    scales:{
-                        x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},
-                        y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},
-                        y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}
-                    }
-                }
-            });
+            if(!p.length && !c.length){
+                chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels:['No downtime data'],datasets:[{label:'Downtime (hrs)',data:[0],backgroundColor:'#475569',borderRadius:5,maxBarThickness:30}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{ticks:{color:'#94a3b8'}},y:{beginAtZero:true,ticks:{color:'#94a3b8'}}}}});
+            } else {
+            chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8,left:4,right:4}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{};const b=c[i]||{};return isCompare?`${a.line||'Line'} — ${a.equipment||'—'}  |  vs ${b.line||'Line'} — ${b.equipment||'—'}`:`${a.line||'Line'} — ${a.equipment||'—'}`},label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,afterBody:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{},b=c[i]||{};return [`Primary failure: ${a.category||'—'}`,isCompare?`Comparison failure: ${b.category||'—'}`:''];}}}},scales:{x:{ticks:{color:'#cbd5e1',font:{size:9},maxRotation:0,minRotation:0,autoSkip:false},grid:{display:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+            }
             requestAnimationFrame(()=>{ if(chartSummaryPareto){ chartSummaryPareto.resize(); chartSummaryPareto.update('none'); } });
-            const title=document.getElementById('summary-pareto-title');
-            if(title) title.textContent=isCompare
-                ? `Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`
-                : `Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel}`;
+            const title=document.getElementById('summary-pareto-title'); if(title) title.textContent=isCompare?`Downtime Pareto — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto — ${paretoComparison.primaryLabel}`;
         }
 
         // --- MODULE 1: CALIBRATION TRACKER ---
