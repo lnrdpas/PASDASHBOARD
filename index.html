@@ -1178,12 +1178,9 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
-                        <div class="flex items-center justify-between gap-2 w-full">
-                            <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-chart-bar text-amber-400"></i> <span id="summary-pareto-title">Downtime Pareto by Line Category</span>
-                            </h4>
-                            <button type="button" id="summary-pareto-expand-btn" onclick="toggleParetoExpand('summary')" class="text-[9px] font-bold text-blue-300 hover:text-white border border-slate-600 hover:border-blue-400 bg-slate-900/60 px-2 py-1 rounded-lg transition whitespace-nowrap">Expand All</button>
-                        </div>
+                        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-chart-bar text-amber-400"></i> <span id="summary-pareto-title">Downtime Pareto by Line Category</span>
+                        </h4>
                         <div class="chart-box-container summary-pareto-chart-box">
                             <canvas id="chart-summary-pareto"></canvas>
                         </div>
@@ -1251,7 +1248,10 @@ window.addEventListener("cloudsync:status", (event) => {
 
                             <div class="space-y-2">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
+                                    <div class="flex items-center gap-2">
+                                        <h5 class="text-xs font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-list-ol text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h5>
+                                        <button type="button" id="summary-top-equipment-expand-btn" onclick="toggleTopEquipmentExpand('summary')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-slate-200 border border-slate-600 transition">Expand All</button>
+                                    </div>
 
                                 </div>
                                 <div class="overflow-x-auto rounded-xl border border-slate-700/50">
@@ -1259,7 +1259,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
                                                 <th id="summary-top5-primary-equipment-head" class="py-1.5 px-2">Equipment Code / Equipment / Line</th>
-                                                <th id="summary-top5-primary-failure-head" class="py-1.5 px-3 min-w-[300px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>
+                                                <th id="summary-top5-primary-failure-head" class="py-1.5 px-2"><div class="flex items-center justify-between gap-6"><span>Category / Indication</span><span>Total Duration</span></div></th>
                                             </tr>
                                         </thead>
                                         <tbody id="summary-top5-downtime-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -1582,14 +1582,11 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
 
                     <div class="lg:col-span-7 bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl flex flex-col justify-between overflow-hidden">
-                        <div class="flex items-center justify-between pb-2 border-b border-slate-700/50 gap-2">
+                        <div class="flex items-center justify-between pb-2 border-b border-slate-700/50">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2">
                                 <i class="fa-solid fa-chart-bar text-blue-400"></i> <span id="dt-pareto-title">Downtime Pareto by Line Category</span>
                             </h3>
-                            <div class="flex items-center gap-2">
-                                <span id="dt-chart-plant-label" class="text-xs text-slate-400">All Plants Breakdown</span>
-                                <button type="button" id="dt-pareto-expand-btn" onclick="toggleParetoExpand('uptime')" class="text-[9px] font-bold text-blue-300 hover:text-white border border-slate-600 hover:border-blue-400 bg-slate-900/60 px-2 py-1 rounded-lg transition whitespace-nowrap">Expand All</button>
-                            </div>
+                            <span id="dt-chart-plant-label" class="text-xs text-slate-400">All Plants Breakdown</span>
                         </div>
                         <div class="chart-box-container flex-1 my-2">
                             <canvas id="chart-downtime-pareto"></canvas>
@@ -1600,7 +1597,10 @@ window.addEventListener("cloudsync:status", (event) => {
                 <div class="bg-slate-800/90 border border-amber-500/30 p-4 rounded-2xl space-y-3">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                            <h3 class="text-xs font-bold text-amber-300 uppercase tracking-wider"><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h3>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h3 class="text-xs font-bold text-amber-300 uppercase tracking-wider"><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i> Top Equipment by Line — Highest Downtime Only</h3>
+                                <button type="button" id="uptime-top-equipment-expand-btn" onclick="toggleTopEquipmentExpand('uptime')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-slate-200 border border-slate-600 transition">Expand All</button>
+                            </div>
                             <p class="text-[9px] text-slate-500 mt-0.5">Uses the Uptime/Downtime filters above. One highest-downtime equipment/failure category is shown for each line.</p>
                         </div>
                         <span id="uptime-top-equipment-filter-label" class="text-[9px] text-slate-400 font-semibold"></span>
@@ -1610,7 +1610,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                 <tr id="uptime-top-equipment-head-row">
                                     <th id="uptime-top-primary-head" class="py-2.5 px-3">Equipment Code / Equipment / Line</th>
-                                    <th id="uptime-top-primary-category-head" class="py-2.5 px-4 min-w-[300px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>
+                                    <th id="uptime-top-primary-category-head" class="py-2.5 px-3"><div class="flex items-center justify-between gap-6"><span>Category / Indication</span><span>Total Duration</span></div></th>
                                 </tr>
                             </thead>
                             <tbody id="uptime-top-equipment-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -2676,8 +2676,6 @@ window.addEventListener("cloudsync:status", (event) => {
         let chartSummaryProjects = null;
         let chartProjectsMill = null;
         let chartDowntimePareto = null;
-        let summaryParetoExpanded = false;
-        let uptimeParetoExpanded = false;
         // Keep inline project timelines open when background cloud refreshes redraw the project cards.
         const expandedProjectTimelines = new Set();
 
@@ -3395,6 +3393,25 @@ window.addEventListener("cloudsync:status", (event) => {
         }
 
         // --- MODULE 0: SUMMARY ---
+        let topEquipmentExpandedSummary = false;
+        let topEquipmentExpandedUptime = false;
+
+        function toggleTopEquipmentExpand(which) {
+            if (which === 'summary') {
+                topEquipmentExpandedSummary = !topEquipmentExpandedSummary;
+                renderSummaryModule();
+            } else {
+                topEquipmentExpandedUptime = !topEquipmentExpandedUptime;
+                renderDowntimeModule();
+            }
+        }
+
+        function updateTopEquipmentExpandButton(id, expanded) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.textContent = expanded ? 'Show Top 4' : 'Expand All';
+        }
+
         function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
             const yearVal = document.getElementById("summary-year-filter").value;
@@ -3464,12 +3481,16 @@ window.addEventListener("cloudsync:status", (event) => {
                 }).sort((a,b) => b.duration - a.duration);
             };
 
-            const makeParetoBuckets = (items, expanded=false, targetCount=4) => {
-                const source = (items || []).map((x, i) => ({ rank:i+1, label:x.line, line:x.line, duration:Number(x.duration||0), equipment:x.equipment||'—', category:x.category||'—' }));
-                const limit = expanded ? Math.max(targetCount, source.length) : 4;
-                const out = source.slice(0, limit);
-                while(out.length < limit) out.push({rank:out.length+1,label:'No Data',line:'No Data',duration:0,equipment:'—',category:'—'});
-                return out;
+            const makeParetoBuckets = items => {
+                const top = (items || []).slice(0, 3).map((x, i) => ({ rank:i+1, label:x.line, line:x.line, duration:x.duration, equipment:x.equipment, category:x.category }));
+                const rest = (items || []).slice(3);
+                if (rest.length) {
+                    const eqMap = {}; rest.forEach(x => eqMap[x.equipment] = (eqMap[x.equipment] || 0) + x.duration);
+                    const eqNames = Object.entries(eqMap).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+                    top.push({ rank:4, label:'Other', line:'Remaining Lines', duration:rest.reduce((a,x)=>a+x.duration,0), equipment:eqNames.join(', ') || 'Other Equipment', category:'Multiple' });
+                }
+                while(top.length < 4) top.push({rank:top.length+1,label:top.length===3?'Other':'No Data',line:'No Data',duration:0,equipment:'—',category:'—'});
+                return top.slice(0,4);
             };
 
             const uniqueEquipmentCodes = list => {
@@ -3629,8 +3650,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 mode: isCompare ? compareType : 'single',
                 primaryLabel: primaryDisplay || 'Selected Period',
                 compareLabel: compareValue || '',
-                primary: makeParetoBuckets(sortedLinePareto, summaryParetoExpanded, isCompare ? Math.max(4, sortedComparePareto.length) : 4),
-                compare: isCompare ? makeParetoBuckets(sortedComparePareto, summaryParetoExpanded, Math.max(4, sortedLinePareto.length)) : []
+                primary: makeParetoBuckets(sortedLinePareto),
+                compare: isCompare ? makeParetoBuckets(sortedComparePareto) : []
             };
             const compareNote = document.getElementById('summary-compare-note');
             if (compareNote) {
@@ -3667,19 +3688,20 @@ window.addEventListener("cloudsync:status", (event) => {
             const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
             const compareTopByLine = isCompare ? buildTopEquipmentByLine(comparisonDt) : [];
             const top5Body = document.getElementById("summary-top5-downtime-body");
+            updateTopEquipmentExpandButton('summary-top-equipment-expand-btn', topEquipmentExpandedSummary);
             const top5PLabel = primaryDisplay || 'Selected Period';
             const top5CLabel = compareDisplay || 'Comparison';
             const top5PrimaryEquipmentHead = document.getElementById("summary-top5-primary-equipment-head");
             const top5PrimaryFailureHead = document.getElementById("summary-top5-primary-failure-head");
             if (top5PrimaryEquipmentHead) top5PrimaryEquipmentHead.textContent = 'Equipment Code / Equipment / Line';
-            if (top5PrimaryFailureHead) top5PrimaryFailureHead.textContent = isCompare ? 'Category / Indication — Total Duration' : 'Category / Indication — Total Duration';
+            if (top5PrimaryFailureHead) top5PrimaryFailureHead.innerHTML = '<div class="flex items-center justify-between gap-6"><span>Category / Indication</span><span>Total Duration</span></div>';
             top5Body.innerHTML = '';
 
             const top5HeadRow = document.querySelector('#summary-top5-downtime-body')?.closest('table')?.querySelector('thead tr');
             if (top5HeadRow) {
                 top5HeadRow.innerHTML = `
                     <th id="summary-top5-primary-equipment-head" class="py-1.5 px-2">Equipment Code / Equipment / Line</th>
-                    <th id="summary-top5-primary-failure-head" class="py-1.5 px-3 min-w-[300px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>`;
+                    <th id="summary-top5-primary-failure-head" class="py-1.5 px-2"><div class="flex items-center justify-between gap-6"><span>Category / Indication</span><span>Total Duration</span></div></th>`;
             }
 
             if (primaryTopByLine.length === 0 && (!isCompare || compareTopByLine.length === 0)) {
@@ -3689,7 +3711,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 const cMap = new Map(compareTopByLine.map(x => [x.line, x]));
                 const lines = [...new Set([...primaryTopByLine.map(x => x.line), ...compareTopByLine.map(x => x.line)])]
                     .sort((a,b) => Number(cMap.get(b)?.duration || 0) + Number(pMap.get(b)?.duration || 0) - Number(cMap.get(a)?.duration || 0) - Number(pMap.get(a)?.duration || 0));
-                lines.forEach(line => {
+                lines.slice(0, topEquipmentExpandedSummary ? lines.length : 4).forEach(line => {
                     const a = pMap.get(line), b = cMap.get(line);
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-slate-800/50 transition align-top';
@@ -3697,18 +3719,18 @@ window.addEventListener("cloudsync:status", (event) => {
                         ? `<div class="font-semibold text-white">Code: ${escapeHtml(item.equipmentCode || '—')} — ${escapeHtml(item.equipment || '—')}</div><div class="text-[10px] text-slate-400 mt-0.5">Line: ${escapeHtml(item.line || line)}</div>`
                         : `<div class="text-slate-600">—</div>`;
                     const details = (item, label, border=false) => item
-                        ? `<div class="${border ? 'border-l border-slate-700/40 pl-3' : ''}"><div class="text-[9px] ${label === top5PLabel ? 'text-amber-300' : 'text-blue-300'} font-bold uppercase mb-0.5">${escapeHtml(label)}</div><div class="flex items-center justify-between gap-4"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span><span class="text-red-400 font-bold whitespace-nowrap">${Number(item.duration || 0).toFixed(1)} hrs</span></div></div>`
+                        ? `<div class="${border ? 'border-l border-slate-700/40 pl-3' : ''}"><div class="text-[9px] ${label === top5PLabel ? 'text-amber-300' : 'text-blue-300'} font-bold uppercase mb-0.5">${escapeHtml(label)}</div><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span><span class="ml-2 text-red-400 font-bold">${Number(item.duration || 0).toFixed(1)} hrs</span></div>`
                         : `<div class="${border ? 'border-l border-slate-700/40 pl-3' : ''} text-slate-600">${escapeHtml(label)}: —</div>`;
                     tr.innerHTML = `<td class="py-2 px-2">${identity(a)}${b ? `<div class="mt-2 pt-2 border-t border-slate-700/40">${identity(b)}</div>` : ''}</td><td class="py-2 px-2">${details(a, top5PLabel)}${b ? `<div class="mt-2 pt-2 border-t border-slate-700/40">${details(b, top5CLabel)}</div>` : ''}</td>`;
                     top5Body.appendChild(tr);
                 });
             } else {
-                primaryTopByLine.forEach(item => {
+                primaryTopByLine.slice(0, topEquipmentExpandedSummary ? primaryTopByLine.length : 4).forEach(item => {
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-slate-800/50 transition align-top';
                     tr.innerHTML = `
                         <td class="py-2 px-2"><div class="font-semibold text-white">Code: ${escapeHtml(item.equipmentCode || '—')} — ${escapeHtml(item.equipment || '—')}</div><div class="text-[10px] text-slate-400 mt-0.5">Line: ${escapeHtml(item.line || '—')}</div></td>
-                        <td class="py-2 px-2"><div class="flex items-center justify-between gap-4"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span><span class="text-red-400 font-bold whitespace-nowrap">${Number(item.duration || 0).toFixed(1)} hrs</span></div></td>`;
+                        <td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span><span class="ml-2 text-red-400 font-bold">${Number(item.duration || 0).toFixed(1)} hrs</span></td>`;
                     top5Body.appendChild(tr);
                 });
             }
@@ -3860,13 +3882,6 @@ window.addEventListener("cloudsync:status", (event) => {
             }
             requestAnimationFrame(()=>{ if(chartSummaryPareto){ chartSummaryPareto.resize(); chartSummaryPareto.update('none'); } });
             const title=document.getElementById('summary-pareto-title'); if(title) title.textContent=isCompare?`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel}`;
-            const expandBtn=document.getElementById('summary-pareto-expand-btn'); if(expandBtn) expandBtn.textContent=summaryParetoExpanded?'Show Top 4':'Expand All';
-            const summaryParetoBox=document.querySelector('.summary-pareto-chart-box');
-            const summaryParetoCanvas=document.getElementById('chart-summary-pareto');
-            const summaryParetoCount=Math.max(4, paretoComparison.primary.length, paretoComparison.compare.length);
-            const summaryParetoHeight=summaryParetoExpanded ? Math.max(330, summaryParetoCount * 58) : 330;
-            if(summaryParetoBox){ summaryParetoBox.style.height=summaryParetoHeight+'px'; summaryParetoBox.style.minHeight=summaryParetoHeight+'px'; summaryParetoBox.style.maxHeight='none'; }
-            if(summaryParetoCanvas){ summaryParetoCanvas.style.height=summaryParetoHeight+'px'; summaryParetoCanvas.style.maxHeight='none'; }
         }
 
         // --- GLOBAL CALIBRATION CALCULATION HELPERS ---
@@ -5216,11 +5231,12 @@ function calcCalib(list, dateType='all', dateValue='') {
             const topPrimary = buildHighestEquipmentByLine(primaryLogs);
             const topCompare = isCompare ? buildHighestEquipmentByLine(compareLogs) : [];
             const topBody = document.getElementById('uptime-top-equipment-body');
+            updateTopEquipmentExpandButton('uptime-top-equipment-expand-btn', topEquipmentExpandedUptime);
             const topLabel = document.getElementById('uptime-top-equipment-filter-label');
             const topHeadRow = document.getElementById('uptime-top-equipment-head-row');
 
             if (topLabel) topLabel.textContent = isCompare ? `${primaryValue || 'Period 1'} vs ${compareValue || 'Period 2'}` : (primaryValue || 'All Time');
-            if (topHeadRow) topHeadRow.innerHTML = `<th class="py-2.5 px-3">Equipment Code / Equipment / Line</th><th class="py-2.5 px-3 min-w-[240px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>`;
+            if (topHeadRow) topHeadRow.innerHTML = `<th class="py-2.5 px-3">Equipment Code / Equipment / Line</th><th class="py-2.5 px-3"><div class="flex items-center justify-between gap-6"><span>Category / Indication</span><span>Total Duration</span></div></th>`;
 
             if (topBody) {
                 topBody.innerHTML = '';
@@ -5231,7 +5247,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                     const cMap = new Map(topCompare.map(x => [x.line, x]));
                     const lines = [...new Set([...topPrimary.map(x => x.line), ...topCompare.map(x => x.line)])]
                         .sort((a,b) => ((pMap.get(b)?.duration || 0) + (cMap.get(b)?.duration || 0)) - ((pMap.get(a)?.duration || 0) + (cMap.get(a)?.duration || 0)));
-                    lines.forEach(line => {
+                    lines.slice(0, topEquipmentExpandedUptime ? lines.length : 4).forEach(line => {
                         const pItem = pMap.get(line), cItem = cMap.get(line);
                         const tr = document.createElement('tr');
                         tr.className = 'hover:bg-slate-800/50 transition align-top';
@@ -5239,16 +5255,16 @@ function calcCalib(list, dateType='all', dateValue='') {
                             ? `<div class="font-semibold text-white">Code: ${escapeHtml(item.equipmentCode || '—')} — ${escapeHtml(item.equipment || '—')}</div><div class="text-[10px] text-slate-400 mt-0.5">Line: ${escapeHtml(item.line || line)}</div>`
                             : `<div class="text-slate-600">—</div>`;
                         const details = (item, label) => item
-                            ? `<div><div class="text-[9px] ${label === (primaryValue || 'Period 1') ? 'text-amber-300' : 'text-blue-300'} font-bold uppercase mb-0.5">${escapeHtml(label)}</div><div class="flex items-center justify-between gap-4"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span><span class="text-red-400 font-bold whitespace-nowrap">${Number(item.duration || 0).toFixed(1)} hrs</span></div></div>`
+                            ? `<div><div class="text-[9px] ${label === (primaryValue || 'Period 1') ? 'text-amber-300' : 'text-blue-300'} font-bold uppercase mb-0.5">${escapeHtml(label)}</div><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span><span class="ml-2 text-red-400 font-bold">${Number(item.duration || 0).toFixed(1)} hrs</span></div>`
                             : `<div class="text-slate-600">${escapeHtml(label)}: —</div>`;
                         tr.innerHTML = `<td class="py-2 px-2">${identity(pItem)}${cItem ? `<div class="mt-2 pt-2 border-t border-slate-700/40">${identity(cItem)}</div>` : ''}</td><td class="py-2 px-2">${details(pItem, primaryValue || 'Period 1')}${cItem ? `<div class="mt-2 pt-2 border-t border-slate-700/40">${details(cItem, compareValue || 'Period 2')}</div>` : ''}</td>`;
                         topBody.appendChild(tr);
                     });
                 } else {
-                    topPrimary.forEach(item => {
+                    topPrimary.slice(0, topEquipmentExpandedUptime ? topPrimary.length : 4).forEach(item => {
                         const tr = document.createElement('tr');
                         tr.className = 'hover:bg-slate-800/50 transition align-top';
-                        tr.innerHTML = `<td class="py-2 px-3"><div class="font-semibold text-white">Code: ${escapeHtml(item.equipmentCode || '—')} — ${escapeHtml(item.equipment || '—')}</div><div class="text-[10px] text-slate-400 mt-0.5">Line: ${escapeHtml(item.line || '—')}</div></td><td class="py-2 px-3"><div class="flex items-center justify-between gap-4"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span><span class="text-red-400 font-bold whitespace-nowrap">${Number(item.duration || 0).toFixed(1)} hrs</span></div></td>`;
+                        tr.innerHTML = `<td class="py-2 px-3"><div class="font-semibold text-white">Code: ${escapeHtml(item.equipmentCode || '—')} — ${escapeHtml(item.equipment || '—')}</div><div class="text-[10px] text-slate-400 mt-0.5">Line: ${escapeHtml(item.line || '—')}</div></td><td class="py-2 px-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span><span class="ml-2 text-red-400 font-bold">${Number(item.duration || 0).toFixed(1)} hrs</span></td>`;
                         topBody.appendChild(tr);
                     });
                 }
@@ -5289,7 +5305,7 @@ function calcCalib(list, dateType='all', dateValue='') {
 
             // Shared Pareto representation: Top 3 lines + Other, with specific equipment and comparison period.
             const buildUptimePareto=logs=>{const map={};(logs||[]).forEach(dt=>{const line=String(dt.line||'Unclassified Line').trim();const eq=String(dt.code||'Unassigned Code').trim();const cat=String(dt.category||'Unclassified').trim();const dur=Math.max(0,(new Date(dt.end)-new Date(dt.start))/3600000);if(!map[line])map[line]={line,duration:0,eq:{},cat:{}};map[line].duration+=dur;map[line].eq[eq]=(map[line].eq[eq]||0)+dur;map[line].cat[cat]=(map[line].cat[cat]||0)+dur;});return Object.values(map).map(x=>({line:x.line,duration:x.duration,equipment:Object.entries(x.eq).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—',category:Object.entries(x.cat).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'})).sort((a,b)=>b.duration-a.duration);};
-            const bucket=list=>{const src=(list||[]).map((x,i)=>({...x,rank:i+1,label:x.line||'No Data'}));const target=isCompare?Math.max(4,buildUptimePareto(primaryLogs).length,buildUptimePareto(compareLogs).length):4;const limit=uptimeParetoExpanded?target:4;const out=src.slice(0,limit);while(out.length<limit)out.push({line:'No Data',duration:0,equipment:'—',category:'—',label:'No Data',rank:out.length+1});return out;};
+            const bucket=list=>{const a=(list||[]).slice(0,3).map(x=>({...x,label:x.line}));const r=(list||[]).slice(3);if(r.length){const em={};r.forEach(x=>em[x.equipment]=(em[x.equipment]||0)+x.duration);a.push({line:'Remaining Lines',duration:r.reduce((q,x)=>q+x.duration,0),equipment:Object.entries(em).sort((x,y)=>y[1]-x[1]).map(x=>x[0]).join(', ')||'Other Equipment',category:'Multiple',label:'Other'});}while(a.length<4)a.push({line:'No Data',duration:0,equipment:'—',category:'—',label:a.length===3?'Other':'No Data'});return a.slice(0,4);};
             const pp=bucket(buildUptimePareto(primaryLogs)), cc=bucket(buildUptimePareto(compareLogs));
             const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
             const labs=pp.map((x,i)=>[x.equipment,x.line,isCompare?`vs ${cc[i].equipment}`:'']);
@@ -5297,23 +5313,6 @@ function calcCalib(list, dateType='all', dateValue='') {
             const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];ds.push({type:'line',label:'Cumulative %',data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'});
             chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].line} — ${pp[i].equipment} | vs ${cc[i].line} — ${cc[i].equipment}`:`${pp[i].line} — ${pp[i].equipment}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto by Equipment Code — ${primaryValue} vs ${compareValue}`:`Downtime Pareto by Equipment Code — ${primaryValue||'All Time'}`;
-            const dtExpand=document.getElementById('dt-pareto-expand-btn'); if(dtExpand)dtExpand.textContent=uptimeParetoExpanded?'Show Top 4':'Expand All';
-            const uptimeParetoBox=document.getElementById('chart-downtime-pareto')?.closest('.chart-box-container');
-            const uptimeParetoCanvas=document.getElementById('chart-downtime-pareto');
-            const uptimeParetoCount=Math.max(4, pp.length, cc.length);
-            const uptimeParetoHeight=uptimeParetoExpanded ? Math.max(330, uptimeParetoCount * 58) : 330;
-            if(uptimeParetoBox){ uptimeParetoBox.style.height=uptimeParetoHeight+'px'; uptimeParetoBox.style.minHeight=uptimeParetoHeight+'px'; uptimeParetoBox.style.maxHeight='none'; }
-            if(uptimeParetoCanvas){ uptimeParetoCanvas.style.height=uptimeParetoHeight+'px'; uptimeParetoCanvas.style.maxHeight='none'; }
-        }
-
-        function toggleParetoExpand(which) {
-            if (which === 'summary') {
-                summaryParetoExpanded = !summaryParetoExpanded;
-                renderSummaryModule();
-            } else if (which === 'uptime') {
-                uptimeParetoExpanded = !uptimeParetoExpanded;
-                renderDowntimeModule();
-            }
         }
 
         function openDowntimeForm() {
