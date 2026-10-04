@@ -5033,13 +5033,13 @@ function calcCalib(list, dateType='all', dateValue='') {
             const codes = [...new Set(allCodeRecords.map(x => String(x.code || '').trim()).filter(Boolean))];
             if (!codes.length) return alert("Please enter at least one equipment code.");
 
-            const workingIds = editId ? editId.split(",").map(v => Number(v)).filter(Boolean) : [];
+            const workingIds = editId ? editId.split(',').map(v => String(v || '').trim()).filter(Boolean) : [];
             const selectedExisting = new Set(workingIds);
 
             // EDIT MODE: replace the selected records with the contents of the form.
             // This makes changing/removing an existing code or calibration occurrence work.
             if (workingIds.length) {
-                const selectedRecords = workingIds.map(id => equipmentList.find(item => Number(item.id) === id)).filter(Boolean);
+                const selectedRecords = workingIds.map(id => equipmentList.find(item => String(item.id) === String(id))).filter(Boolean);
                 const usedIds = new Set();
                 const assignedRecordIds = new Set();
 
@@ -5050,15 +5050,15 @@ function calcCalib(list, dateType='all', dateValue='') {
 
                     // First choice: the exact record that was attached to this code input when Edit opened.
                     if (codeRec.recordId) {
-                        record = selectedRecords.find(item => String(item.id) === String(codeRec.recordId) && !usedIds.has(item.id));
+                        record = selectedRecords.find(item => String(item.id) === String(codeRec.recordId) && !usedIds.has(String(item.id)));
                     }
                     // Second choice: same code among the records selected for editing.
                     if (!record) {
-                        record = selectedRecords.find(item => String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase() && !usedIds.has(item.id));
+                        record = selectedRecords.find(item => String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase() && !usedIds.has(String(item.id)));
                     }
                     // Third choice: an unused selected record, allowing an existing code to be renamed.
                     if (!record) {
-                        record = selectedRecords.find(item => !usedIds.has(item.id));
+                        record = selectedRecords.find(item => !usedIds.has(String(item.id)));
                     }
                     // If the user added a new code while editing, create a new record.
                     if (!record) {
@@ -5073,8 +5073,8 @@ function calcCalib(list, dateType='all', dateValue='') {
                         };
                         equipmentList.push(record);
                     }
-                    usedIds.add(record.id);
-                    assignedRecordIds.add(record.id);
+                    usedIds.add(String(record.id));
+                    assignedRecordIds.add(String(record.id));
 
                     record.plant = shared.plant;
                     record.type = shared.type;
@@ -5121,7 +5121,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                 });
 
                 // Records removed from the Edit form are removed from this selected card only.
-                equipmentList = equipmentList.filter(item => !selectedExisting.has(item.id) || assignedRecordIds.has(item.id));
+                equipmentList = equipmentList.filter(item => !selectedExisting.has(String(item.id)) || assignedRecordIds.has(String(item.id)));
             } else {
                 // ADD MODE: preserve the existing merge behavior so adding another occurrence
                 // never overwrites an existing equipment record.
@@ -5181,49 +5181,75 @@ function calcCalib(list, dateType='all', dateValue='') {
 
         function editEquipment(id) {
             const modal = document.getElementById("modal-equipment");
-            // Show the modal immediately so an initialization problem is visible.
-            if (modal) modal.classList.remove("hidden");
             if (!isAdminUser()) {
-                alert("Calibration Add/Edit requires FULL ACCESS / Admin.");
+                alert("Calibration Edit requires FULL ACCESS / Admin.");
                 return;
             }
+
+            // Match both numeric local IDs and string IDs returned from Supabase.
             const selected = equipmentList.find(item => String(item.id) === String(id));
             if (!selected) {
                 alert("Calibration record not found for editing (ID: " + id + ").");
-                if (modal) modal.classList.add("hidden");
                 return;
             }
+
             const groupKey = getEquipmentGroupKey(selected);
             const group = equipmentList.filter(item => getEquipmentGroupKey(item) === groupKey);
-            document.getElementById("eq-id").value = group.map(item => item.id).join(",");
-            document.getElementById("modal-equip-title").innerText = group.length > 1 ? "Edit Calibration Record / Equipment Codes" : "Edit Calibration Entry";
-            // Rebuild the required Equipment Class select first, then restore the
-            // saved type. Setting .value before options exist leaves the select empty
-            // and HTML5 required validation silently prevents Save.
+
+            // Store every record ID in this instrument group. The submit routine
+            // uses these IDs to update the existing records rather than creating
+            // a second calibration record.
+            const idEl = document.getElementById("eq-id");
+            if (idEl) idEl.value = group.map(item => String(item.id)).join(",");
+
+            const title = document.getElementById("modal-equip-title");
+            if (title) {
+                title.innerText = group.length > 1
+                    ? "Edit Calibration Record / Equipment Codes"
+                    : "Edit Calibration Entry";
+            }
+
+            // Rebuild the Equipment Class list before assigning the saved value.
+            // This follows the working reference behavior and prevents a required
+            // select from becoming blank during Edit.
             populateCategoryDropdowns();
             clearEquipmentSharedFields();
-            document.getElementById("eq-shared-plant").value = selected.plant || "Plant 1";
-            const typeSelect = document.getElementById("eq-shared-type");
-            if (typeSelect) {
-                if (![...typeSelect.options].some(o => o.value === String(selected.type || ""))) {
+
+            const plantEl = document.getElementById("eq-shared-plant");
+            if (plantEl) plantEl.value = selected.plant || "Plant 1";
+
+            const typeEl = document.getElementById("eq-shared-type");
+            if (typeEl) {
+                const savedType = String(selected.type || "General Equipment").trim() || "General Equipment";
+                if (![...typeEl.options].some(o => String(o.value) === savedType)) {
                     const opt = document.createElement("option");
-                    opt.value = selected.type || "General Equipment";
-                    opt.innerText = selected.type || "General Equipment";
-                    typeSelect.appendChild(opt);
+                    opt.value = savedType;
+                    opt.innerText = savedType;
+                    typeEl.appendChild(opt);
                 }
-                typeSelect.value = selected.type || typeSelect.value || "General Equipment";
+                typeEl.value = savedType;
             }
+
             const container = document.getElementById("calibration-groups-container");
+            if (!container) {
+                alert("Calibration edit window could not initialize the calibration group container.");
+                return;
+            }
             container.innerHTML = "";
+
+            // Load the complete group exactly as stored: all equipment codes,
+            // all calibration cycles, and all External/Internal occurrences.
             addCalibrationGroup({
                 pr: selected.pr || "",
                 po: selected.po || "",
                 calibrationCycles: normalizeSharedCalibrationCycles(selected),
                 codes: group.map(item => item.code || ""),
-                codeRecordIds: group.map(item => item.id)
+                codeRecordIds: group.map(item => String(item.id))
             });
-            // Attach each existing equipment record ID to its code input. This makes
-            // Edit deterministic even when the same instrument type has many codes.
+
+            // Attach the original record ID to each visible equipment-code input.
+            // This is the key part that makes Edit deterministic when a group has
+            // multiple equipment codes.
             const editGroup = container.querySelector('.calibration-group');
             if (editGroup) {
                 const inputs = [...editGroup.querySelectorAll('.calibration-code-list input[name="eq-code"]')];
@@ -5231,7 +5257,9 @@ function calcCalib(list, dateType='all', dateValue='') {
                     if (inputs[idx]) inputs[idx].dataset.recordId = String(item.id);
                 });
             }
-            document.getElementById("modal-equipment").classList.remove("hidden");
+
+            if (modal) modal.classList.remove("hidden");
+            renumberCalibrationGroups();
         }
 
         function closeCalibrationHistory() {
