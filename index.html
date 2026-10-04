@@ -4050,14 +4050,35 @@ function renderSummaryModule() {
             // This guarantees the Pareto remains visible even when another Chart.js instance
             // has a rendering/layout problem.
             if(chartSummaryPareto){try{chartSummaryPareto.destroy();}catch(e){} chartSummaryPareto=null;}
-            const paretoLabels = labels.length ? labels : ['No downtime data'];
-            const paretoPrimary = labels.length ? pd : [0];
-            const paretoCompare = labels.length && isCompare ? cd : [];
-            const paretoCumPrimary = labels.length ? cp : [0];
-            const paretoCumCompare = labels.length && isCompare ? cc : [];
-            drawExecutiveParetoFallback(paretoCanvas, paretoLabels, paretoPrimary, paretoCompare, paretoCumPrimary, paretoCumCompare, isCompare && labels.length>0);
+            // Build the native Pareto arrays from the actual comparison data.
+            // IMPORTANT: these variables must be derived here; the old patch referenced
+            // undefined labels/pd/cd/cp/cc variables, which stopped this function before
+            // the Pareto canvas could be drawn.
+            const alignedPareto = isCompare
+                ? alignParetoByCode(paretoComparison?.primary || [], paretoComparison?.compare || [])
+                : {primary: paretoComparison?.primary || [], compare: []};
+            const pItems = alignedPareto.primary || [];
+            const cItems = alignedPareto.compare || [];
+            const paretoLabels = pItems.map(x => String(x.code || x.label || 'Uncoded'));
+            const paretoPrimary = pItems.map(x => Number(x.duration || 0));
+            const paretoCompare = isCompare ? cItems.map(x => Number(x.duration || 0)) : [];
+            const pTotal = paretoPrimary.reduce((a,b)=>a+b,0) || 1;
+            const cTotal = paretoCompare.reduce((a,b)=>a+b,0) || 1;
+            let pRun = 0, cRun = 0;
+            const paretoCumPrimary = paretoPrimary.map(v => (pRun += v, (pRun/pTotal)*100));
+            const paretoCumCompare = isCompare ? paretoCompare.map(v => (cRun += v, (cRun/cTotal)*100)) : [];
+            const hasParetoData = paretoLabels.length > 0 && paretoPrimary.some(v => v > 0 || (isCompare && paretoCompare[paretoPrimary.indexOf(v)] > 0));
+            drawExecutiveParetoFallback(
+                paretoCanvas,
+                hasParetoData ? paretoLabels : ['No downtime data'],
+                hasParetoData ? paretoPrimary : [0],
+                hasParetoData && isCompare ? paretoCompare : [],
+                hasParetoData ? paretoCumPrimary : [0],
+                hasParetoData && isCompare ? paretoCumCompare : [],
+                hasParetoData && isCompare
+            );
             const paretoCtx=paretoCanvas.getContext('2d');
-            if(paretoCtx && !labels.length){
+            if(paretoCtx && !hasParetoData){
                 const box=paretoCanvas.parentElement;
                 const w=Math.max(320,Math.floor((box&&box.clientWidth)||800));
                 const h=Math.max(260,Math.floor((box&&box.clientHeight)||330));
