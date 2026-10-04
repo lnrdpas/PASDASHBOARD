@@ -859,6 +859,29 @@ window.addEventListener("cloudsync:status", (event) => {
         .summary-kpi-compare { font-size: 10px; line-height: 1.35; min-height: 15px; margin-top: 3px; color: #67e8f9; font-weight: 700; }
         .summary-period-note { font-size: 10px; line-height: 1.35; color: #94a3b8; }
         .pareto-info-note { font-size: 10px; line-height: 1.4; color: #94a3b8; }
+        .pareto-data-indication {
+            width: 100%;
+            overflow-x: auto;
+            border-top: 1px solid rgba(51,65,85,.55);
+            padding: 6px 2px 2px;
+        }
+        .pareto-data-indication-grid {
+            display: grid;
+            gap: 6px;
+            min-width: max-content;
+        }
+        .pareto-data-indication-item {
+            min-width: 118px;
+            text-align: center;
+            padding: 4px 5px;
+            border-radius: 7px;
+            background: rgba(15,23,42,.55);
+            border: 1px solid rgba(51,65,85,.45);
+        }
+        .pareto-data-indication-rank { font-size: 9px; font-weight: 800; color: #e2e8f0; text-transform: uppercase; }
+        .pareto-data-indication-period { font-size: 8px; font-weight: 800; color: #94a3b8; margin-top: 2px; }
+        .pareto-data-indication-code { font-size: 9px; font-weight: 800; color: #f8fafc; line-height: 1.2; word-break: break-word; }
+        .pareto-data-indication-category { font-size: 8px; color: #94a3b8; line-height: 1.2; margin-top: 1px; word-break: break-word; }
 
         @media print {
             @page {
@@ -1187,6 +1210,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="chart-box-container summary-pareto-chart-box">
                             <canvas id="chart-summary-pareto"></canvas>
                         </div>
+                        <div id="summary-pareto-data-indication" class="pareto-data-indication" aria-label="Pareto data indication"></div>
                     </div>
                 </div>
 
@@ -1596,6 +1620,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <div class="chart-box-container flex-1 my-2">
                             <canvas id="chart-downtime-pareto"></canvas>
                         </div>
+                        <div id="dt-pareto-data-indication" class="pareto-data-indication" aria-label="Pareto data indication"></div>
                     </div>
                 </div>
 
@@ -3892,6 +3917,7 @@ window.addEventListener("cloudsync:status", (event) => {
             requestAnimationFrame(()=>{ if(chartSummaryPareto){ chartSummaryPareto.resize(); chartSummaryPareto.update('none'); } });
             const title=document.getElementById('summary-pareto-title'); if(title) title.textContent=isCompare?`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel}`;
             const expandBtn=document.getElementById('summary-pareto-expand-btn'); if(expandBtn) expandBtn.textContent=summaryParetoExpanded?'Show Top 4':'Expand All';
+            renderParetoDataIndication('summary-pareto-data-indication', p, c, isCompare);
         }
 
         // --- GLOBAL CALIBRATION CALCULATION HELPERS ---
@@ -5379,6 +5405,37 @@ function calcCalib(list, dateType='all', dateValue='') {
             chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].line} — ${pp[i].equipment} | vs ${cc[i].line} — ${cc[i].equipment}`:`${pp[i].line} — ${pp[i].equipment}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto by Equipment Code — ${primaryValue} vs ${compareValue}`:`Downtime Pareto by Equipment Code — ${primaryValue||'All Time'}`;
             const dtExpand=document.getElementById('dt-pareto-expand-btn'); if(dtExpand)dtExpand.textContent=uptimeParetoExpanded?'Show Top 4':'Expand All';
+            renderParetoDataIndication('dt-pareto-data-indication', pp, cc, isCompare);
+        }
+
+        function renderParetoDataIndication(containerId, primary, compare, isCompare) {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+            const p = Array.isArray(primary) ? primary : [];
+            const c = Array.isArray(compare) ? compare : [];
+            const count = Math.max(p.length, isCompare ? c.length : 0, 4);
+            const esc = v => escapeHtml(String(v ?? '—'));
+            let html = `<div class="pareto-data-indication-grid" style="grid-template-columns:repeat(${count},minmax(118px,1fr));">`;
+            for (let i = 0; i < count; i++) {
+                const a = p[i] || {equipment:'—', category:'—'};
+                const b = c[i] || {equipment:'—', category:'—'};
+                html += `<div class="pareto-data-indication-item">`;
+                html += `<div class="pareto-data-indication-rank">Data ${i + 1}</div>`;
+                if (isCompare) {
+                    html += `<div class="pareto-data-indication-period">T1</div>`;
+                    html += `<div class="pareto-data-indication-code">${esc(a.equipment || '—')}</div>`;
+                    html += `<div class="pareto-data-indication-category">${esc(a.category || '—')}</div>`;
+                    html += `<div class="pareto-data-indication-period">T2</div>`;
+                    html += `<div class="pareto-data-indication-code">${esc(b.equipment || '—')}</div>`;
+                    html += `<div class="pareto-data-indication-category">${esc(b.category || '—')}</div>`;
+                } else {
+                    html += `<div class="pareto-data-indication-code">${esc(a.equipment || '—')}</div>`;
+                    html += `<div class="pareto-data-indication-category">${esc(a.category || '—')}</div>`;
+                }
+                html += `</div>`;
+            }
+            html += `</div>`;
+            el.innerHTML = html;
         }
 
         function toggleParetoExpand(which) {
