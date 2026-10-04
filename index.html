@@ -1259,7 +1259,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
                                                 <th id="summary-top5-primary-equipment-head" class="py-1.5 px-2">Equipment Code / Equipment / Line</th>
-                                                <th id="summary-top5-primary-failure-head" class="py-1.5 px-2 min-w-[240px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>
+                                                <th id="summary-top5-primary-failure-head" class="py-1.5 px-3 min-w-[300px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>
                                             </tr>
                                         </thead>
                                         <tbody id="summary-top5-downtime-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -1610,7 +1610,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                 <tr id="uptime-top-equipment-head-row">
                                     <th id="uptime-top-primary-head" class="py-2.5 px-3">Equipment Code / Equipment / Line</th>
-                                    <th id="uptime-top-primary-category-head" class="py-2.5 px-3 min-w-[240px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>
+                                    <th id="uptime-top-primary-category-head" class="py-2.5 px-4 min-w-[300px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>
                                 </tr>
                             </thead>
                             <tbody id="uptime-top-equipment-body" class="divide-y divide-slate-700/40 font-medium"></tbody>
@@ -3679,7 +3679,7 @@ window.addEventListener("cloudsync:status", (event) => {
             if (top5HeadRow) {
                 top5HeadRow.innerHTML = `
                     <th id="summary-top5-primary-equipment-head" class="py-1.5 px-2">Equipment Code / Equipment / Line</th>
-                    <th id="summary-top5-primary-failure-head" class="py-1.5 px-2 min-w-[240px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>`;
+                    <th id="summary-top5-primary-failure-head" class="py-1.5 px-3 min-w-[300px]"><div class="flex items-center justify-between gap-4"><span>Category / Indication</span><span class="whitespace-nowrap">Total Duration</span></div></th>`;
             }
 
             if (primaryTopByLine.length === 0 && (!isCompare || compareTopByLine.length === 0)) {
@@ -3861,6 +3861,12 @@ window.addEventListener("cloudsync:status", (event) => {
             requestAnimationFrame(()=>{ if(chartSummaryPareto){ chartSummaryPareto.resize(); chartSummaryPareto.update('none'); } });
             const title=document.getElementById('summary-pareto-title'); if(title) title.textContent=isCompare?`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel}`;
             const expandBtn=document.getElementById('summary-pareto-expand-btn'); if(expandBtn) expandBtn.textContent=summaryParetoExpanded?'Show Top 4':'Expand All';
+            const summaryParetoBox=document.querySelector('.summary-pareto-chart-box');
+            const summaryParetoCanvas=document.getElementById('chart-summary-pareto');
+            const summaryParetoCount=Math.max(4, paretoComparison.primary.length, paretoComparison.compare.length);
+            const summaryParetoHeight=summaryParetoExpanded ? Math.max(330, summaryParetoCount * 58) : 330;
+            if(summaryParetoBox){ summaryParetoBox.style.height=summaryParetoHeight+'px'; summaryParetoBox.style.minHeight=summaryParetoHeight+'px'; summaryParetoBox.style.maxHeight='none'; }
+            if(summaryParetoCanvas){ summaryParetoCanvas.style.height=summaryParetoHeight+'px'; summaryParetoCanvas.style.maxHeight='none'; }
         }
 
         // --- GLOBAL CALIBRATION CALCULATION HELPERS ---
@@ -5292,6 +5298,12 @@ function calcCalib(list, dateType='all', dateValue='') {
             chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].line} — ${pp[i].equipment} | vs ${cc[i].line} — ${cc[i].equipment}`:`${pp[i].line} — ${pp[i].equipment}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto by Equipment Code — ${primaryValue} vs ${compareValue}`:`Downtime Pareto by Equipment Code — ${primaryValue||'All Time'}`;
             const dtExpand=document.getElementById('dt-pareto-expand-btn'); if(dtExpand)dtExpand.textContent=uptimeParetoExpanded?'Show Top 4':'Expand All';
+            const uptimeParetoBox=document.getElementById('chart-downtime-pareto')?.closest('.chart-box-container');
+            const uptimeParetoCanvas=document.getElementById('chart-downtime-pareto');
+            const uptimeParetoCount=Math.max(4, pp.length, cc.length);
+            const uptimeParetoHeight=uptimeParetoExpanded ? Math.max(330, uptimeParetoCount * 58) : 330;
+            if(uptimeParetoBox){ uptimeParetoBox.style.height=uptimeParetoHeight+'px'; uptimeParetoBox.style.minHeight=uptimeParetoHeight+'px'; uptimeParetoBox.style.maxHeight='none'; }
+            if(uptimeParetoCanvas){ uptimeParetoCanvas.style.height=uptimeParetoHeight+'px'; uptimeParetoCanvas.style.maxHeight='none'; }
         }
 
         function toggleParetoExpand(which) {
