@@ -5377,11 +5377,11 @@ function calcCalib(list, dateType='all', dateValue='') {
             const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
             const labs=pp.map((x,i)=>isCompare?[`${x.code||x.equipment||'Unassigned Code'}`,`${x.equipmentCategory||x.category||'Unclassified Equipment'}`,`vs ${cc[i]?.code||'—'}`,`${cc[i]?.equipmentCategory||'—'}`]:[`${x.code||x.equipment||'Unassigned Code'}`,`${x.equipmentCategory||x.category||'Unclassified Equipment'}`]);
             const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[];
-            const primaryTotal=pd.reduce((a,b)=>a+b,0), compareTotal=cd.reduce((a,b)=>a+b,0);
-            let runPrimary=0, runCompare=0;
-            const cpct=pd.map(x=>{runPrimary+=x;return primaryTotal?Number((runPrimary/primaryTotal*100).toFixed(1)):0;});
-            const compareCpct=isCompare?cd.map(x=>{runCompare+=x;return compareTotal?Number((runCompare/compareTotal*100).toFixed(1)):0;}):[];
-            const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30},{type:'line',label:`Cumulative % — ${primaryValue}`,data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'},{type:'line',label:`Cumulative % — ${compareValue}`,data:compareCpct,borderColor:'#a78bfa',backgroundColor:'#a78bfa',borderWidth:2,borderDash:[5,3],pointRadius:3,tension:.2,yAxisID:'y1'}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30},{type:'line',label:'Cumulative %',data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}];
+            const combinedValues=isCompare?pd.map((v,i)=>v+(cd[i]||0)):pd.slice();
+            const combinedTotal=combinedValues.reduce((a,b)=>a+b,0);
+            let combinedRun=0;
+            const cumulativePct=combinedValues.map(x=>{combinedRun+=x;return combinedTotal?Number((combinedRun/combinedTotal*100).toFixed(1)):0;});
+            const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30},{type:'line',label:'Cumulative %',data:cumulativePct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30},{type:'line',label:'Cumulative %',data:cumulativePct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'}];
             chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].code} — ${pp[i].equipmentCategory} | vs ${cc[i]?.code||'—'} — ${cc[i]?.equipmentCategory||'—'}`:`${pp[i].code} — ${pp[i].equipmentCategory}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Equipment Category: ${pp[i].equipmentCategory||pp[i].category||'—'}`,`Trouble: ${pp[i].trouble||'—'}`,`Occurrences: ${pp[i].occurrences||0}`,isCompare?`Comparison Equipment Category: ${cc[i]?.equipmentCategory||'—'}`:'',isCompare?`Comparison Trouble: ${cc[i]?.trouble||'—'}`:''];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             window.__expandedParetoUptime = { primaryLogs: primaryLogs.slice(), compareLogs: compareLogs.slice(), primaryLabel: primaryValue || 'All Time', compareLabel: compareValue || '', isCompare };
             const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto by Equipment Code — ${primaryValue} vs ${compareValue}`:`Downtime Pareto by Equipment Code — ${primaryValue||'All Time'}`;
@@ -6063,22 +6063,20 @@ function calcCalib(list, dateType='all', dateValue='') {
                 byCode.get(key).compare = x;
                 if (!byCode.get(key).equipmentCategory) byCode.get(key).equipmentCategory = x.equipmentCategory;
             });
-            const rows = [...byCode.values()].sort((a,b) => (b.primary?.duration || 0) + (b.compare?.duration || 0) - (a.primary?.duration || 0) - (a.compare?.duration || 0));
-            const labels = rows.map(x => x.code || 'Unassigned Code');
+            const rows = [...byCode.values()].sort((a,b) => ((b.primary?.duration || 0) + (b.compare?.duration || 0)) - ((a.primary?.duration || 0) + (a.compare?.duration || 0)));
+            const labels = rows.map(x => `${x.code || 'Unassigned Code'} — ${x.equipmentCategory || 'Unclassified Equipment'}`);
             const primaryValues = rows.map(x => Number((x.primary?.duration || 0).toFixed(2)));
             const compareValues = rows.map(x => Number((x.compare?.duration || 0).toFixed(2)));
-            let primaryRun = 0, compareRun = 0;
-            const primaryTotal = primary.reduce((a,x)=>a+x.duration,0);
-            const compareTotal = compare.reduce((a,x)=>a+x.duration,0);
-            const primaryCumulative = rows.map(x => { primaryRun += x.primary?.duration || 0; return primaryTotal ? Number((primaryRun/primaryTotal*100).toFixed(1)) : 0; });
-            const compareCumulative = rows.map(x => { compareRun += x.compare?.duration || 0; return compareTotal ? Number((compareRun/compareTotal*100).toFixed(1)) : 0; });
+            const combinedValues = rows.map(x => (x.primary?.duration || 0) + (x.compare?.duration || 0));
+            const combinedTotal = combinedValues.reduce((a,x)=>a+x,0);
+            let combinedRun = 0;
+            const combinedCumulative = combinedValues.map(x => { combinedRun += x; return combinedTotal ? Number((combinedRun/combinedTotal*100).toFixed(1)) : 0; });
 
             const datasets = [];
             if (data.isCompare) {
                 datasets.push({label:data.primaryLabel || 'Period 1',data:primaryValues,backgroundColor:'#f59e0b',borderRadius:4,maxBarThickness:28,yAxisID:'y'});
                 datasets.push({label:data.compareLabel || 'Period 2',data:compareValues,backgroundColor:'#3b82f6',borderRadius:4,maxBarThickness:28,yAxisID:'y'});
-                datasets.push({type:'line',label:`Cumulative % — ${data.primaryLabel || 'Period 1'}`,data:primaryCumulative,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:2,tension:.15,yAxisID:'y1'});
-                datasets.push({type:'line',label:`Cumulative % — ${data.compareLabel || 'Period 2'}`,data:compareCumulative,borderColor:'#a78bfa',backgroundColor:'#a78bfa',borderWidth:2,borderDash:[5,3],pointRadius:2,tension:.15,yAxisID:'y1'});
+                datasets.push({type:'line',label:'Cumulative %',data:combinedCumulative,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:2,tension:.15,yAxisID:'y1'});
             } else {
                 datasets.push({label:'Downtime (hrs)',data:primaryValues,backgroundColor:'#ef4444',borderRadius:4,maxBarThickness:30,yAxisID:'y'});
                 datasets.push({type:'line',label:'Cumulative %',data:primaryCumulative,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:2,tension:.15,yAxisID:'y1'});
@@ -6089,7 +6087,7 @@ function calcCalib(list, dateType='all', dateValue='') {
 
             document.getElementById('expanded-pareto-modal-title').textContent = source === 'uptime' ? 'Uptime/Downtime — Expanded Pareto: All Equipment Codes' : 'Executive Summary — Expanded Pareto: All Equipment Codes';
             document.getElementById('expanded-pareto-modal-subtitle').textContent = data.isCompare
-                ? `${data.primaryLabel || 'Period 1'} vs ${data.compareLabel || 'Period 2'} — all equipment codes with equipment category, downtime and cumulative percentage.`
+                ? `${data.primaryLabel || 'Period 1'} vs ${data.compareLabel || 'Period 2'} — all equipment codes with equipment category, downtime and one cumulative percentage line.`
                 : `${data.primaryLabel || 'Selected Period'} — all equipment codes, ranked by downtime with cumulative percentage.`;
             const totalP = primary.reduce((a,x)=>a+x.duration,0), totalC = compare.reduce((a,x)=>a+x.duration,0);
             document.getElementById('expanded-pareto-summary').textContent = `${rows.length} equipment codes | ${data.primaryLabel || 'Period 1'}: ${totalP.toFixed(1)} hrs${data.isCompare ? ` | ${data.compareLabel || 'Period 2'}: ${totalC.toFixed(1)} hrs` : ''} | Cumulative line reaches 100% at the final equipment code.`;
