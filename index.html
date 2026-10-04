@@ -321,26 +321,6 @@ window.CloudSync = (() => {
         );
     }
 
-    // Recover data saved by earlier PASDASHBOARD/REV1 versions.
-    // The normalized database was originally deployed with REV1_OKAY_DASHBOARD
-    // and later changed to PASDASHBOARD. Read both IDs so existing records
-    // are not hidden simply because the app identifier changed.
-    function cloudAppIds() {
-        const current = String(window.CLOUD_CONFIG?.appId || "PASDASHBOARD");
-        return [...new Set([current, "PASDASHBOARD", "REV1_OKAY_DASHBOARD"].filter(Boolean))];
-    }
-
-    function mergeUniqueRows(rowArrays) {
-        const map = new Map();
-        (rowArrays || []).flat().forEach(row => {
-            if (!row) return;
-            const id = String(row.id ?? row.record_id ?? "");
-            const key = id || JSON.stringify(row);
-            if (!map.has(key)) map.set(key, row);
-        });
-        return [...map.values()];
-    }
-
     function status(message, ok = true) {
         window.dispatchEvent(new CustomEvent("cloudsync:status", {
             detail: { message, ok }
@@ -404,191 +384,76 @@ window.CloudSync = (() => {
         return String(id ?? `${Date.now()}-${index}`);
     }
 
-    function hasCalibrationData(record) {
-        if (!record || typeof record !== "object") return false;
-        return !!((Array.isArray(record.calibrationCycles) && record.calibrationCycles.length) ||
-            (Array.isArray(record.externalCalibrations) && record.externalCalibrations.length) ||
-            (Array.isArray(record.internalCalibrations) && record.internalCalibrations.length) ||
-            record.extSched || record.extCalib || record.extBy || record.intSched || record.intCalib || record.intBy || record.pr || record.po);
-    }
-
-    function mergeCalibrationData(localRecord, remoteRecord) {
-        const local = localRecord && typeof localRecord === "object" ? localRecord : {};
-        const remote = remoteRecord && typeof remoteRecord === "object" ? remoteRecord : {};
-        const localCycles = typeof normalizeSharedCalibrationCycles === "function" ? normalizeSharedCalibrationCycles(local) : [];
-        const remoteCycles = typeof normalizeSharedCalibrationCycles === "function" ? normalizeSharedCalibrationCycles(remote) : [];
-        let mergedCycles = [];
-        if (typeof mergeSharedCalibrationCycles === "function") mergedCycles = mergeSharedCalibrationCycles(remoteCycles, localCycles);
-        else mergedCycles = remoteCycles.length ? remoteCycles : localCycles;
-        const result = { ...local, ...remote };
-        if (mergedCycles.length) {
-            result.calibrationCycles = mergedCycles;
-            if (typeof flattenSharedCalibrationCycles === "function") {
-                result.externalCalibrations = flattenSharedCalibrationCycles(mergedCycles, "external");
-                result.internalCalibrations = flattenSharedCalibrationCycles(mergedCycles, "internal");
-            }
-            if (typeof latestCalibrationCycle === "function") {
-                const ext = latestCalibrationCycle(result.externalCalibrations || []), int = latestCalibrationCycle(result.internalCalibrations || []);
-                result.extSched = ext.sched || remote.extSched || local.extSched || "";
-                result.extCalib = ext.calib || remote.extCalib || local.extCalib || "";
-                result.extBy = ext.by || remote.extBy || local.extBy || "";
-                result.intSched = int.sched || remote.intSched || local.intSched || "";
-                result.intCalib = int.calib || remote.intCalib || local.intCalib || "";
-                result.intBy = int.by || remote.intBy || local.intBy || "";
-            }
-        } else if (hasCalibrationData(local)) {
-            ["calibrationCycles","externalCalibrations","internalCalibrations","calibrationHistory","extSched","extCalib","extBy","intSched","intCalib","intBy","pr","po"].forEach(key => {
-                if (local[key] !== undefined && local[key] !== null && local[key] !== "") result[key] = local[key];
-            });
-        }
-        ["id","plant","type","code"].forEach(key => {
-            if ((result[key] === undefined || result[key] === null || result[key] === "") && local[key] !== undefined) result[key] = local[key];
-        });
-        return result;
-    }
-
-    function mergeEquipmentCloudRows(localRows, remoteRows) {
-        const localMap = new Map((Array.isArray(localRows) ? localRows : []).filter(Boolean).map(x => [String(x.id), x]));
-        const remote = Array.isArray(remoteRows) ? remoteRows : [];
-        const result = remote.map(row => { const local = localMap.get(String(row?.id)); return local ? mergeCalibrationData(local, row) : row; });
-        const remoteIds = new Set(remote.map(x => String(x?.id)));
-        localMap.forEach((row,id) => { if (!remoteIds.has(id) && row) result.push(row); });
-        return result;
-    }
-
     async function pullDataset(dataset) {
         const cfg = DATASETS[dataset];
-        const pulledSets = [];
-        for (const appId of cloudAppIds()) {
-            try {
-                const { data, error } = await client.from(cfg.table)
-                    .select("record_id,data,updated_at")
-                    .eq("app_id", appId);
-                if (!error && Array.isArray(data)) {
-                    pulledSets.push(data.map(row => row.data).filter(Boolean));
-                }
-            } catch (_) {}
-        }
-        const remoteRows = mergeUniqueRows(pulledSets);
+
+        // Keep the browser copy available while reading Supabase. The previous
+        // version deleted the local dataset before the cloud read completed.
+        // If Supabase returned an empty result, that left the whole dashboard
+        // with zero equipment/projects/downtime records.
         const localRows = readArray(cfg.key);
 
-        // NEVER erase an existing browser copy just because the normalized
-        // cloud query returned zero rows. This is critical during migration:
-        // older PASDASHBOARD versions may still have the real calibration
-        // cards/cycles in localStorage while the new normalized table is empty
-        // (or temporarily unreadable because of RLS).
-        //
-        // If cloud rows exist, merge them with the local copy so calibration
-        // fields are preserved. If cloud rows are empty, keep the local copy
-        // intact and let the legacy app_state recovery run afterward.
-        let rows;
-        if (remoteRows.length) {
-            rows = dataset === "equipment"
-                ? mergeEquipmentCloudRows(localRows, remoteRows)
-                : remoteRows;
-        } else {
-            rows = localRows;
+        const { data, error } = await client
+            .from(cfg.table)
+            .select("record_id,data,updated_at")
+            .eq("app_id", window.CLOUD_CONFIG.appId);
+
+        if (error) throw error;
+
+        const remoteRows = (data || []).map(row => row.data).filter(Boolean);
+        let rows = remoteRows.length ? remoteRows : localRows;
+
+        // Do not discard calibration information that already exists in this browser
+        // when an older/partial cloud equipment row does not contain those fields.
+        // Other cloud fields remain authoritative.
+        if (dataset === "equipment" && remoteRows.length && localRows.length) {
+            const localById = new Map(localRows.map(x => [String(x?.id), x]));
+            rows = remoteRows.map(remote => {
+                const local = localById.get(String(remote?.id));
+                if (!local) return remote;
+                const merged = { ...remote };
+                ["calibrationCycles","calibrationHistory","extSched","extCalib","extBy","intSched","intCalib","intBy","pr","po"].forEach(key => {
+                    const remoteValue = remote?.[key];
+                    const localValue = local?.[key];
+                    const remoteEmpty = remoteValue === undefined || remoteValue === null || remoteValue === "" || (Array.isArray(remoteValue) && remoteValue.length === 0);
+                    const localHasValue = localValue !== undefined && localValue !== null && localValue !== "" && (!Array.isArray(localValue) || localValue.length > 0);
+                    if (remoteEmpty && localHasValue) merged[key] = localValue;
+                });
+                return merged;
+            });
         }
 
+        // Keep both localStorage and the live application arrays synchronized.
+        // Executive Summary, Calibration Tracker, Uptime/Downtime and Projects
+        // render from these in-memory arrays.
         writeArray(cfg.key, rows);
+        if (dataset === "equipment" && typeof equipmentList !== "undefined") {
+            equipmentList = rows;
+        } else if (dataset === "downtime" && typeof downtimeLogs !== "undefined") {
+            downtimeLogs = rows;
+        } else if (dataset === "projects" && typeof projectsList !== "undefined") {
+            projectsList = rows;
+        }
+
         lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
         return rows;
     }
 
-    async function pullLegacyAppState() {
-        // Migration bridge for the original single-row app_state database.
-        // Older installations used REV1_OKAY_DASHBOARD; newer ones use
-        // PASDASHBOARD. Try both without modifying/deleting the old row.
-        for (const appId of cloudAppIds()) {
-            try {
-                const { data, error } = await client
-                    .from("app_state")
-                    .select("payload, updated_at")
-                    .eq("app_id", appId)
-                    .maybeSingle();
-                if (error || !data?.payload) continue;
-
-                const payload = data.payload;
-                const getPayloadArray = key => {
-                    try {
-                        const raw = payload?.[key];
-                        if (Array.isArray(raw)) return raw;
-                        if (typeof raw === "string") {
-                            const parsed = JSON.parse(raw);
-                            return Array.isArray(parsed) ? parsed : [];
-                        }
-                    } catch (_) {}
-                    return [];
-                };
-                return {
-                    appId,
-                    equipment: getPayloadArray("suite_equipment_data"),
-                    downtime: getPayloadArray("suite_downtime_data"),
-                    projects: getPayloadArray("suite_projects_data"),
-                    categories: {
-                        equipment: getPayloadArray("suite_equipment_categories"),
-                        downtime: getPayloadArray("suite_downtime_categories"),
-                        uptime_equipment: getPayloadArray("suite_uptime_equipment_categories"),
-                        line: getPayloadArray("suite_line_categories")
-                    }
-                };
-            } catch (_) {}
-        }
-        return null;
-    }
-
-    async function migrateLegacyIfNeeded(normalizedRows) {
-        const legacy = await pullLegacyAppState();
-        if (!legacy) return false;
-
-        let migrated = false;
-        const datasets = [
-            ["equipment", legacy.equipment],
-            ["downtime", legacy.downtime],
-            ["projects", legacy.projects]
-        ];
-
-        for (const [dataset, rows] of datasets) {
-            const cfg = DATASETS[dataset];
-            const current = Array.isArray(normalizedRows?.[dataset]) ? normalizedRows[dataset] : [];
-            // Only use legacy data when the normalized table has no records.
-            // This prevents an old snapshot from replacing newer cloud data.
-            if (!current.length && rows.length) {
-                writeArray(cfg.key, rows);
-                lastSynced[dataset] = JSON.parse(JSON.stringify(rows));
-                try { await replaceDataset(dataset, rows); } catch (e) { console.warn("Legacy migration save:", dataset, e); }
-                migrated = true;
-            }
-        }
-
-        for (const [type, key] of Object.entries(CATEGORIES)) {
-            const rows = legacy.categories?.[type] || [];
-            if (rows.length && !readArray(key).length) {
-                writeArray(key, rows);
-                lastSynced.categories[type] = JSON.parse(JSON.stringify(rows));
-                migrated = true;
-            }
-        }
-
-        return migrated;
-    }
-
     async function pullCategories() {
+        const { data, error } = await client
+            .from("category_records")
+            .select("category_type,value")
+            .eq("app_id", window.CLOUD_CONFIG.appId)
+            .order("sort_order", { ascending: true });
+
+        if (error) throw error;
+
         const grouped = {};
-        for (const appId of cloudAppIds()) {
-            try {
-                const { data, error } = await client
-                    .from("category_records")
-                    .select("category_type,value,sort_order")
-                    .eq("app_id", appId)
-                    .order("sort_order", { ascending: true });
-                if (error) continue;
-                (data || []).forEach(row => {
-                    if (!grouped[row.category_type]) grouped[row.category_type] = [];
-                    if (!grouped[row.category_type].includes(row.value)) grouped[row.category_type].push(row.value);
-                });
-            } catch (_) {}
-        }
+        (data || []).forEach(row => {
+            if (!grouped[row.category_type]) grouped[row.category_type] = [];
+            grouped[row.category_type].push(row.value);
+        });
+
         Object.entries(CATEGORIES).forEach(([type, key]) => {
             if (Object.prototype.hasOwnProperty.call(grouped, type)) {
                 writeArray(key, grouped[type]);
@@ -609,33 +474,14 @@ window.CloudSync = (() => {
 
         try {
             syncing = true;
-            const pulled = await Promise.all([
+            await Promise.all([
                 pullDataset("equipment"),
                 pullDataset("downtime"),
                 pullDataset("projects"),
                 pullCategories()
             ]);
-
-            // IMPORTANT DATA-RECOVERY BRIDGE:
-            // Older PASDASHBOARD versions stored all browser data, including
-            // calibration cards/cycles, in public.app_state.payload. The new
-            // normalized tables do not automatically migrate that old row.
-            // If a normalized dataset is empty, recover it from app_state and
-            // immediately copy it into the new normalized table.
-            await migrateLegacyIfNeeded({
-                equipment: pulled[0] || [],
-                downtime: pulled[1] || [],
-                projects: pulled[2] || []
-            });
-
             ready = true;
-            const recovered = (readArray(DATASETS.equipment.key).length ||
-                               readArray(DATASETS.downtime.key).length ||
-                               readArray(DATASETS.projects.key).length);
-            const eqCount = readArray(DATASETS.equipment.key).length;
-            const dtCount = readArray(DATASETS.downtime.key).length;
-            const prCount = readArray(DATASETS.projects.key).length;
-            status((eqCount || dtCount || prCount) ? `Cloud data loaded (${eqCount} equipment, ${dtCount} downtime, ${prCount} projects)` : "Cloud data loaded (no records found)", true);
+            status("Cloud data loaded", true);
             return { ok: true };
         } catch (error) {
             lastError = error?.message || String(error);
@@ -883,10 +729,11 @@ window.CloudSync = (() => {
     async function start() {
         if (!init()) return { ok: false, configured: false };
 
-        // Do NOT clear equipment/calibration data before the cloud pull.
-        // equipment_records contains calibration cycles and legacy calibration
-        // fields. pullDataset("equipment") merges them before writing the result.
-        Object.values(CATEGORIES).forEach(key => localStorage.removeItem(key));
+        // Do not delete the browser datasets before the cloud read. The browser
+        // copy is retained as a safe fallback when a cloud table returns no
+        // rows, and pullDataset() synchronizes the live application arrays.
+        // This prevents a temporary/empty cloud response from clearing the
+        // Executive Summary, Calibration Tracker, Uptime/Downtime and Projects.
 
         // IMPORTANT: install the watcher only AFTER the cloud pull. Otherwise
         // the pull itself can trigger a save of stale/partial browser data.
@@ -1332,7 +1179,7 @@ window.addEventListener("cloudsync:status", (event) => {
 
                     <div class="bg-slate-800/90 border border-slate-700/60 p-3 rounded-xl space-y-2 overflow-visible flex flex-col justify-between">
                         <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-chart-bar text-amber-400"></i> <span id="summary-pareto-title">Downtime Pareto by Equipment Code</span>
+                            <i class="fa-solid fa-chart-bar text-amber-400"></i> <span id="summary-pareto-title">Downtime Pareto by Line Category</span>
                         </h4>
                         <div class="chart-box-container summary-pareto-chart-box">
                             <canvas id="chart-summary-pareto"></canvas>
@@ -1409,7 +1256,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                         <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                             <tr>
                                                 <th class="py-1.5 px-2">Line Category</th>
-                                                <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">Equipment</th>
+                                                <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">Equipment Code</th>
                                                 <th id="summary-top5-primary-failure-head" class="py-2.5 px-3">Failure Category</th>
                                                 <th id="summary-top5-primary-time-head" class="py-2.5 px-3 text-center">Downtime</th>
                                             </tr>
@@ -1759,7 +1606,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                 <tr id="uptime-top-equipment-head-row">
                                     <th class="py-2.5 px-3">Line Category</th>
-                                    <th id="uptime-top-primary-head" class="py-2.5 px-3">Equipment</th>
+                                    <th id="uptime-top-primary-head" class="py-2.5 px-3">Equipment Code</th>
                                     <th id="uptime-top-primary-category-head" class="py-2.5 px-3">Failure Category</th>
                                     <th id="uptime-top-primary-time-head" class="py-2.5 px-3 text-center">Downtime</th>
                                 </tr>
@@ -1781,7 +1628,7 @@ window.addEventListener("cloudsync:status", (event) => {
                         <table class="w-full text-left text-xs text-slate-300">
                             <thead class="bg-slate-900/90 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-700/60">
                                 <tr>
-                                    <th class="py-3 px-4">Plant & Code / Equip / Line</th>
+                                    <th class="py-3 px-4">Equipment Code / Equipment / Line</th>
                                     <th class="py-3 px-3">Category / Indication</th>
                                     <th class="py-3 px-3">Start Time</th>
                                     <th class="py-3 px-3">End Time</th>
@@ -3598,7 +3445,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 const map = {};
                 (logs || []).forEach(dt => {
                     const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const equipment = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
                     const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
                     const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
                     if (!map[line]) map[line] = { line, duration: 0, equipment: {}, categories: {} };
@@ -3702,12 +3549,10 @@ window.addEventListener("cloudsync:status", (event) => {
                         const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
                         entries.forEach(entry => {
                             if (!matchesDate(entry)) return;
-                            // CALIBRATION CARD RULE:
-                            // Every calibration occurrence created inside a card applies
-                            // to EVERY equipment code in that card.  The entry's codes
-                            // are only legacy/display metadata and must never reduce the
-                            // counting population. Example: 3 codes x 3 occurrences = 9.
-                            const applicableCodes = groupCodes;
+                            const assigned = Array.isArray(entry?.codes) ? entry.codes.map(x=>String(x||'').trim()).filter(Boolean) : [];
+                            const applicableCodes = assigned.length
+                                ? assigned.filter(c=>groupCodeSet.has(c.toLowerCase()))
+                                : groupCodes;
                             const codeCount = applicableCodes.length;
                             if (!codeCount) return;
                             const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
@@ -3732,7 +3577,12 @@ window.addEventListener("cloudsync:status", (event) => {
             };
             const primaryCalib=calcCalib(filteredEq, primaryType, primaryValue), compareCalib=isCompare?calcCalib(comparisonEq, compareType, compareValue):null;
             const calibChartIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
-            const calibChartPrimary = calibChartIgnoreFilter ? calcCalib(equipmentList, primaryType, primaryValue) : primaryCalib;
+            const calibChartPlantRecords = currentPlant === "ALL"
+                ? equipmentList
+                : equipmentList.filter(eq => normalizePlant(eq.plant) === normalizePlant(currentPlant));
+            const calibChartPrimary = calibChartIgnoreFilter
+                ? calcCalib(calibChartPlantRecords, 'all', '')
+                : primaryCalib;
             const calibChartCompare = (!calibChartIgnoreFilter && isCompare) ? compareCalib : null;
             window._summaryCompareCalib = calibChartCompare?.compliance || 0;
             const primaryDown=calcDowntime(filteredDt), compareDown=isCompare?calcDowntime(comparisonDt):null;
@@ -3772,60 +3622,15 @@ window.addEventListener("cloudsync:status", (event) => {
             setCompare('summary-calib-compare', isCompare ? `${primaryDisplay || 'Date 1'}: ${primaryCalib.compliance}% &nbsp;|&nbsp; ${compareDisplay || 'Date 2'}: ${compareCalib.compliance}%` : '', isCompare);
             setCompare('summary-projects-compare', isCompare ? `${primaryDisplay || 'Date 1'}: ${filteredPr.length} &nbsp;|&nbsp; ${compareDisplay || 'Date 2'}: ${comparisonPr.length}` : '', isCompare);
 
-            // Executive Summary Pareto: total downtime by Equipment Code.
-            // This is intentionally isolated to the Executive Summary; the original
-            // Uptime/Downtime module and the rest of this file remain unchanged.
-            const buildSummaryParetoByCode = logs => {
-                const map = {};
-                (logs || []).forEach(dt => {
-                    const code = getDowntimeEquipmentCode(dt) || String(dt.equipment || 'Unclassified Equipment').trim();
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
-                    const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
-                    if (!map[code]) map[code] = { code, equipment, line, duration: 0, categories: {} };
-                    map[code].duration += dur;
-                    map[code].categories[category] = (map[code].categories[category] || 0) + dur;
-                });
-                return Object.values(map).map(x => {
-                    const cat = Object.entries(x.categories).sort((a,b) => b[1] - a[1]);
-                    return { ...x, category: cat[0]?.[0] || 'Unclassified' };
-                }).sort((a,b) => b.duration - a.duration);
-            };
-
-            const alignSummaryParetoByCode = (primaryItems, compareItems) => {
-                const pMap = new Map((primaryItems || []).map(x => [String(x.code || '').trim(), x]));
-                const cMap = new Map((compareItems || []).map(x => [String(x.code || '').trim(), x]));
-                const codes = [...new Set([...pMap.keys(), ...cMap.keys()])].filter(Boolean);
-                codes.sort((a,b) => Math.max(Number(pMap.get(b)?.duration || 0), Number(cMap.get(b)?.duration || 0)) - Math.max(Number(pMap.get(a)?.duration || 0), Number(cMap.get(a)?.duration || 0)));
-                return codes.map(code => {
-                    const p = pMap.get(code);
-                    const c = cMap.get(code);
-                    return {
-                        code,
-                        equipment: p?.equipment || c?.equipment || '—',
-                        line: p?.line || c?.line || '—',
-                        duration: Number(p?.duration || 0),
-                        category: p?.category || c?.category || '—',
-                        compareDuration: Number(c?.duration || 0),
-                        compareEquipment: c?.equipment || p?.equipment || '—',
-                        compareLine: c?.line || p?.line || '—',
-                        compareCategory: c?.category || p?.category || '—'
-                    };
-                });
-            };
-
-            const sortedLinePareto = buildSummaryParetoByCode(filteredDt);
-            const sortedComparePareto = isCompare ? buildSummaryParetoByCode(comparisonDt) : [];
-            const alignedPareto = isCompare ? alignSummaryParetoByCode(sortedLinePareto, sortedComparePareto) : sortedLinePareto;
-            const paretoPrimary = alignedPareto.map(x => ({ rank: 0, label: x.code, line: x.line, duration: x.duration, equipment: x.code, category: x.category }));
-            const paretoCompare = isCompare ? alignedPareto.map(x => ({ rank: 0, label: x.code, line: x.compareLine, duration: x.compareDuration, equipment: x.code, category: x.compareCategory })) : [];
+            // Pareto = total downtime by Line Category. Repeated records for the same line are added together.
+            const sortedLinePareto = buildPareto(filteredDt);
+            const sortedComparePareto = isCompare ? buildPareto(comparisonDt) : [];
             const paretoComparison = {
                 mode: isCompare ? compareType : 'single',
                 primaryLabel: primaryDisplay || 'Selected Period',
                 compareLabel: compareValue || '',
-                primary: paretoPrimary,
-                compare: paretoCompare
+                primary: makeParetoBuckets(sortedLinePareto),
+                compare: isCompare ? makeParetoBuckets(sortedComparePareto) : []
             };
             const compareNote = document.getElementById('summary-compare-note');
             if (compareNote) {
@@ -3845,7 +3650,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 const map = {};
                 (logs || []).forEach(dt => {
                     const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const equipment = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
                     const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
                     const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
                     if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
@@ -3887,12 +3692,12 @@ window.addEventListener("cloudsync:status", (event) => {
                         <th colspan="3" class="py-1.5 px-2 text-center text-blue-300 border-l border-slate-700/60">${escapeHtml(top5CLabel)}</th>`;
                     const subRow = document.createElement('tr');
                     subRow.className = 'summary-top5-compare-subhead bg-slate-900/70 text-slate-500 text-[9px] uppercase';
-                    subRow.innerHTML = `<th class="py-1 px-2"></th><th class="py-1 px-2 border-l border-slate-700/60">Equipment</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th><th class="py-1 px-2 border-l border-slate-700/60">Equipment</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th>`;
+                    subRow.innerHTML = `<th class="py-1 px-2"></th><th class="py-1 px-2 border-l border-slate-700/60">Equipment Code</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th><th class="py-1 px-2 border-l border-slate-700/60">Equipment Code</th><th class="py-1 px-2">Failure Category</th><th class="py-1 px-2 text-center">Downtime</th>`;
                     thead.appendChild(subRow);
                 } else {
                     top5HeadRow.innerHTML = `
                         <th class="py-1.5 px-2">Line Category</th>
-                        <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Equipment</th>
+                        <th id="summary-top5-primary-equipment-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Equipment Code</th>
                         <th id="summary-top5-primary-failure-head" class="py-2.5 px-3">${escapeHtml(top5PLabel)} — Failure Category</th>
                         <th id="summary-top5-primary-time-head" class="py-2.5 px-3 text-center">${escapeHtml(top5PLabel)} — Downtime</th>`;
                 }
@@ -3948,13 +3753,16 @@ window.addEventListener("cloudsync:status", (event) => {
             });
 
             // Supporting details use the SAME occurrence x equipment-code workload logic as the main KPI.
+            const calibSupportingIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
             allSummaryPlants.forEach(plant => {
-                const plantRecords = filteredEq.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
-                const w = calcCalib(plantRecords, primaryType, primaryValue);
+                const plantRecords = (calibSupportingIgnoreFilter ? equipmentList : filteredEq)
+                    .filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
+                const w = calcCalib(plantRecords, calibSupportingIgnoreFilter ? 'all' : primaryType, calibSupportingIgnoreFilter ? '' : primaryValue);
                 calibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
             });
 
-            filteredPr.forEach(pr => {
+            const projectSupportingIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
+            (projectSupportingIgnoreFilter ? projectsList : filteredPr).forEach(pr => {
                 const plant = normalizePlant(pr.plant);
                 if (!projectByPlant[plant]) return;
                 const status = String(pr.status || "Planning").trim();
@@ -3963,13 +3771,15 @@ window.addEventListener("cloudsync:status", (event) => {
 
             const compareCalibByPlant = {};
             allSummaryPlants.forEach(p => compareCalibByPlant[p] = {done:0, scheduled:0});
-            allSummaryPlants.forEach(plant => {
-                const plantRecords = comparisonEq.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
-                const w = calcCalib(plantRecords, compareType, compareValue);
-                compareCalibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
-            });
+            if (isCompare && !calibSupportingIgnoreFilter) {
+                allSummaryPlants.forEach(plant => {
+                    const plantRecords = comparisonEq.filter(eq => normalizePlant(eq.plant) === normalizePlant(plant));
+                    const w = calcCalib(plantRecords, compareType, compareValue);
+                    compareCalibByPlant[plant] = { done: w.done, scheduled: w.scheduled };
+                });
+            }
             const calibSupp = document.getElementById("summary-per-plant-calib");
-            calibSupp.innerHTML = isCompare ? `
+            calibSupp.innerHTML = (isCompare && !calibSupportingIgnoreFilter) ? `
                 <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryDisplay || 'Date 1')} vs ${escapeHtml(compareDisplay || 'Date 2')}</div>
                 <div class="grid grid-cols-5 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1">
                     <span>Plant</span><span>Period</span><span class="text-center">Done</span><span class="text-center">Scheduled</span><span class="text-center">Percent</span>
@@ -3987,7 +3797,10 @@ window.addEventListener("cloudsync:status", (event) => {
                 Completed: list.filter(pr => String(pr.status || "").trim() === "Completed").length
             });
             const projectChartIgnoreFilter = !!document.getElementById('summary-projects-ignore-filter')?.checked;
-            const projectOverallPrimary = projectChartIgnoreFilter ? projectOverall(projectsList) : projectOverall(filteredPr);
+            const projectChartPlantRecords = currentPlant === "ALL"
+                ? projectsList
+                : projectsList.filter(pr => normalizePlant(pr.plant) === normalizePlant(currentPlant));
+            const projectOverallPrimary = projectChartIgnoreFilter ? projectOverall(projectChartPlantRecords) : projectOverall(filteredPr);
             const projectOverallCompare = (!projectChartIgnoreFilter && isCompare) ? projectOverall(comparisonPr) : null;
 
             const projSupp = document.getElementById("summary-per-plant-projects");
@@ -3996,8 +3809,10 @@ window.addEventListener("cloudsync:status", (event) => {
                 : `<div class="mt-2 text-[10px] text-slate-500 italic">Project page access is not enabled for this account.</div>`;
             const compareProjectByPlant = {};
             allSummaryPlants.forEach(p => compareProjectByPlant[p] = {"In Progress":0, Planning:0, "On Hold":0, Completed:0});
-            comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
-            projSupp.innerHTML = isCompare ? `
+            if (isCompare && !projectSupportingIgnoreFilter) {
+                comparisonPr.forEach(pr => { const plant=normalizePlant(pr.plant); if(!compareProjectByPlant[plant]) return; const st=String(pr.status||'Planning').trim(); if(Object.prototype.hasOwnProperty.call(compareProjectByPlant[plant],st)) compareProjectByPlant[plant][st]++; });
+            }
+            projSupp.innerHTML = (isCompare && !projectSupportingIgnoreFilter) ? `
                 <div class="text-[9px] text-slate-500 mb-1">Comparison: ${escapeHtml(primaryDisplay || 'Date 1')} vs ${escapeHtml(compareDisplay || 'Date 2')}</div>
                 <div class="grid grid-cols-6 gap-2 text-[8px] font-semibold text-slate-500 uppercase border-b border-slate-700/50 pb-1"><span>Plant</span><span>Period</span><span class="text-center">In Progress</span><span class="text-center">Planning</span><span class="text-center">On Hold</span><span class="text-center">Completed</span></div>
                 ${summaryPlants.map(p=>{const a=projectByPlant[p]||{},b=compareProjectByPlant[p]||{};return `<div class="border-b border-slate-700/30 py-1.5 last:border-0"><div class="grid grid-cols-6 gap-2 items-center text-[10px]"><span class="font-semibold text-white">${escapeHtml(p)}</span><span class="text-amber-300 font-semibold">${escapeHtml(primaryDisplay || 'Date 1')}</span><strong class="text-center text-blue-400">${a['In Progress']||0}</strong><strong class="text-center text-amber-400">${a.Planning||0}</strong><strong class="text-center text-red-400">${a['On Hold']||0}</strong><strong class="text-center text-emerald-400">${a.Completed||0}</strong></div><div class="grid grid-cols-6 gap-2 items-center text-[10px] mt-1"><span></span><span class="text-blue-300 font-semibold">${escapeHtml(compareDisplay || 'Date 2')}</span><strong class="text-center text-blue-300">${b['In Progress']||0}</strong><strong class="text-center text-amber-300">${b.Planning||0}</strong><strong class="text-center text-red-300">${b['On Hold']||0}</strong><strong class="text-center text-emerald-300">${b.Completed||0}</strong></div></div>`;}).join('')}
@@ -4069,13 +3884,104 @@ window.addEventListener("cloudsync:status", (event) => {
             chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8,left:4,right:4}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{};const b=c[i]||{};return isCompare?`${a.line||'Line'} — ${a.equipment||'—'}  |  vs ${b.line||'Line'} — ${b.equipment||'—'}`:`${a.line||'Line'} — ${a.equipment||'—'}`},label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,afterBody:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{},b=c[i]||{};return [`Primary failure: ${a.category||'—'}`,isCompare?`Comparison failure: ${b.category||'—'}`:''];}}}},scales:{x:{ticks:{color:'#cbd5e1',font:{size:9},maxRotation:0,minRotation:0,autoSkip:false},grid:{display:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             }
             requestAnimationFrame(()=>{ if(chartSummaryPareto){ chartSummaryPareto.resize(); chartSummaryPareto.update('none'); } });
-            const title=document.getElementById('summary-pareto-title'); if(title) title.textContent=isCompare?`Downtime Pareto — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto — ${paretoComparison.primaryLabel}`;
+            const title=document.getElementById('summary-pareto-title'); if(title) title.textContent=isCompare?`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel} vs ${paretoComparison.compareLabel}`:`Downtime Pareto by Equipment Code — ${paretoComparison.primaryLabel}`;
         }
 
-        // --- MODULE 1: CALIBRATION TRACKER ---
+        // --- GLOBAL CALIBRATION CALCULATION HELPERS ---
+// These helpers are shared by the Calibration Tracker and Executive Summary.
+// Keep them outside renderSummaryModule so the Tracker can call them safely.
+function collectGroupCalibrationCycles(group) {
+    const merged = [];
+    const byCycleKey = new Map();
+    (group || []).forEach(record => {
+        const cycles = normalizeSharedCalibrationCycles(record);
+        cycles.forEach((cycle, cycleIndex) => {
+            const cycleKey = String(cycle.id || `cycle-${cycleIndex + 1}`);
+            let target = byCycleKey.get(cycleKey);
+            if (!target) {
+                target = { id: cycle.id || cycleKey, pr: cycle.pr || '', po: cycle.po || '', codes: [], external: [], internal: [] };
+                byCycleKey.set(cycleKey, target);
+                merged.push(target);
+            }
+            target.codes = [...new Set([...(target.codes || []), ...(Array.isArray(cycle.codes) ? cycle.codes : []), ...(record.code ? [record.code] : [])].map(v=>String(v||'').trim()).filter(Boolean))];
+            target.pr = target.pr || cycle.pr || '';
+            target.po = target.po || cycle.po || '';
+            ['external','internal'].forEach(type => {
+                const targetEntries = target[type];
+                (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
+                    const normalized = normalizeCalibrationCycle(entry);
+                    const entryId = String(normalized.id || '');
+                    const existing = entryId ? targetEntries.findIndex(x=>String(x.id||'')===entryId) : -1;
+                    if (existing >= 0) {
+                        targetEntries[existing] = { ...targetEntries[existing], ...normalized, codes:[...new Set([...(targetEntries[existing].codes||[]), ...(normalized.codes||[]), ...(record.code ? [record.code] : [])])] };
+                    } else {
+                        targetEntries.push({ ...normalized, id: entryId || `${cycleKey}-${type}-${entryIndex}-${normalized.sched||normalized.calib||''}`, codes:[...new Set([...(normalized.codes||[]), ...(record.code ? [record.code] : [])])] });
+                    }
+                });
+            });
+        });
+    });
+    return merged;
+}
+
+function calcCalib(list, dateType='all', dateValue='') {
+    let done=0, overdueDone=0, overdue=0, pending=0, stsok=0, na=0;
+    const groups = new Map();
+    (list || []).forEach(eq => {
+        const plant = normalizePlant(eq.plant);
+        const type = String(eq.type || '').trim().toLowerCase();
+        const key = `${plant}||${type}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(eq);
+    });
+    const matchesDate = (entry) => {
+        if (dateType === 'all' || !dateValue) return true;
+        const a = entry?.sched || entry?.dateSched || '';
+        const b = entry?.calib || entry?.dateCalib || '';
+        const match = value => {
+            if (!value) return false;
+            if (dateType === 'year') return String(value).slice(0,4) === String(dateValue);
+            if (dateType === 'month') return String(value).slice(0,7) === String(dateValue);
+            return true;
+        };
+        return match(a) || match(b);
+    };
+    groups.forEach(group => {
+        const groupCodes = [...new Set(group.map(x=>String(x.code||'').trim()).filter(Boolean))];
+        const groupCodeSet = new Set(groupCodes.map(x=>x.toLowerCase()));
+        const cycles = collectGroupCalibrationCycles(group);
+        cycles.forEach(cycle => ['external','internal'].forEach(type => {
+            const entries = Array.isArray(cycle[type]) ? cycle[type] : [];
+            entries.forEach(entry => {
+                if (!matchesDate(entry)) return;
+                const assigned = Array.isArray(entry?.codes) ? entry.codes.map(x=>String(x||'').trim()).filter(Boolean) : [];
+                const applicableCodes = assigned.length ? assigned.filter(c=>groupCodeSet.has(c.toLowerCase())) : groupCodes;
+                const codeCount = applicableCodes.length;
+                if (!codeCount) return;
+                const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
+                if (st === 'DONE') done += codeCount;
+                else if (st === 'OVERDUE, DONE') { done += codeCount; overdueDone += codeCount; }
+                else if (st === 'OVERDUE') overdue += codeCount;
+                else if (st === 'PENDING') pending += codeCount;
+                else if (st === 'STSOK') stsok += codeCount;
+                else na += codeCount;
+            });
+        }));
+    });
+    const scheduled = done + overdue + pending + stsok;
+    return {done, overdueDone, scheduled, toCalibrate: overdue + pending + stsok, overdue, pending, stsok, na, compliance:scheduled?Math.round(done/scheduled*100):0};
+}
+
+// --- MODULE 1: CALIBRATION TRACKER ---
         function renderCalibModule() {
-            renderCalibGauges();
-            renderCalibTable();
+            try { renderCalibGauges(); } catch (err) {
+                console.error("Calibration gauges render error:", err);
+            }
+            try { renderCalibTable(); } catch (err) {
+                console.error("Calibration Tracker render error:", err);
+                const cards = document.getElementById("calib-table-body");
+                if (cards) cards.innerHTML = `<div class="text-center py-10 text-red-400 border border-red-500/20 rounded-2xl bg-red-500/5">Calibration Tracker could not render. Check browser console.</div>`;
+            }
         }
 
         function renderCalibGauges() {
@@ -4147,77 +4053,7 @@ window.addEventListener("cloudsync:status", (event) => {
             return [normalizePlant(eq.plant), String(eq.type || '').trim().toLowerCase()].join("||");
         }
 
-        // CALIBRATION TRACKER WORKLOAD CALCULATOR
-        // This must be global because renderCalibTable() is outside
-        // renderSummaryModule(). The summary has its own local calculator;
-        // the previous version accidentally called that local function here,
-        // causing the calibration page to stop rendering after the gauges.
-        function calcCalibForTracker(list, dateType='all', dateValue='') {
-            let done=0, overdueDone=0, overdue=0, pending=0, stsok=0, na=0;
-            const groups = new Map();
-            (list || []).forEach(eq => {
-                const plant = normalizePlant(eq.plant);
-                const type = String(eq.type || '').trim().toLowerCase();
-                const key = `${plant}||${type}`;
-                if (!groups.has(key)) groups.set(key, []);
-                groups.get(key).push(eq);
-            });
-            const matchesDate = (entry) => {
-                if (dateType === 'all' || !dateValue) return true;
-                const a = entry?.sched || entry?.dateSched || '';
-                const b = entry?.calib || entry?.dateCalib || '';
-                return matchesSummaryDate(a, dateType, dateValue) || matchesSummaryDate(b, dateType, dateValue);
-            };
-            groups.forEach(group => {
-                const groupCodes = [...new Set(group.map(x => String(x.code || '').trim()).filter(Boolean))];
-                const cycles = [];
-                const byCycleKey = new Map();
-                (group || []).forEach(record => {
-                    normalizeSharedCalibrationCycles(record).forEach((cycle, cycleIndex) => {
-                        const cycleKey = String(cycle.id || `cycle-${cycleIndex + 1}`);
-                        let target = byCycleKey.get(cycleKey);
-                        if (!target) {
-                            target = {id: cycle.id || cycleKey, pr: cycle.pr || '', po: cycle.po || '', codes: [], external: [], internal: []};
-                            byCycleKey.set(cycleKey, target);
-                            cycles.push(target);
-                        }
-                        target.codes = [...new Set([...(target.codes || []), ...(cycle.codes || []), ...(record.code ? [record.code] : [])].map(v=>String(v||'').trim()).filter(Boolean))];
-                        ['external','internal'].forEach(type => {
-                            (Array.isArray(cycle[type]) ? cycle[type] : []).forEach((entry, entryIndex) => {
-                                const n = normalizeCalibrationCycle(entry);
-                                const id = String(n.id || `${cycleKey}-${type}-${entryIndex}-${n.sched||n.calib||''}`);
-                                const existing = target[type].findIndex(x => String(x.id || '') === id);
-                                const value = {...n, id, codes:[...new Set([...(n.codes||[]), ...(record.code ? [record.code] : [])])]};
-                                if (existing >= 0) target[type][existing] = {...target[type][existing], ...value};
-                                else target[type].push(value);
-                            });
-                        });
-                    });
-                });
-                cycles.forEach(cycle => ['external','internal'].forEach(type => {
-                    (Array.isArray(cycle[type]) ? cycle[type] : []).forEach(entry => {
-                        if (!matchesDate(entry)) return;
-                        const codeCount = groupCodes.length;
-                        if (!codeCount) return;
-                        const st = getSubCalibStatus(entry?.sched || entry?.dateSched || '', entry?.calib || entry?.dateCalib || '');
-                        if (st === 'DONE') done += codeCount;
-                        else if (st === 'OVERDUE, DONE') { done += codeCount; overdueDone += codeCount; }
-                        else if (st === 'OVERDUE') overdue += codeCount;
-                        else if (st === 'PENDING') pending += codeCount;
-                        else if (st === 'STSOK') stsok += codeCount;
-                        else na += codeCount;
-                    });
-                }));
-            });
-            const scheduled = done + overdueDone + overdue + pending + stsok;
-            return {done, overdueDone, overdue, pending, stsok, na, scheduled, toCalibrate: pending + stsok + overdue};
-        }
-
         function renderCalibTable() {
-            // Collapse legacy duplicate rows before rendering. This does not change
-            // the visual style; it only guarantees one underlying record per
-            // Plant + Equipment Code while retaining all calibration occurrences.
-            dedupeEquipmentCodes();
             const search = document.getElementById("calib-search").value.toLowerCase();
             const statusFilter = document.getElementById("calib-filter-status").value;
 
@@ -4238,7 +4074,7 @@ window.addEventListener("cloudsync:status", (event) => {
             // KPI COUNTS = EQUIPMENT CODE x CALIBRATION OCCURRENCE.
             // Example: 3 codes and 3 occurrences = 9 total; 2 DONE occurrences
             // = 6 DONE and 1 PENDING occurrence = 3 PENDING.
-            const workload = calcCalibForTracker(filtered, 'all', '');
+            const workload = calcCalib(filtered, 'all', '');
             const tTotal = workload.scheduled;
             const tDone = workload.done;
             const tOverdue = workload.overdue;
@@ -4262,9 +4098,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 const cycles=collectGroupCalibrationCycles(group);
                 cycles.forEach(cycle=>['external','internal'].forEach(type=>{
                     (Array.isArray(cycle[type])?cycle[type]:[]).forEach(entry=>{
-                        // Every occurrence belongs to every code in this instrument card.
-                        // Do not restrict the breakdown using legacy entry.codes metadata.
-                        const count=codes.length;
+                        const assigned=Array.isArray(entry?.codes)?entry.codes.map(x=>String(x||'').trim()).filter(Boolean):[];
+                        const count=(assigned.length?assigned.filter(c=>codeSet.has(c.toLowerCase())):codes).length;
                         if(!count)return;
                         const st=getSubCalibStatus(entry?.sched||entry?.dateSched||'',entry?.calib||entry?.dateCalib||'');
                         const target=type==='external'?ext:int;
@@ -4343,10 +4178,14 @@ window.addEventListener("cloudsync:status", (event) => {
                             const key = `${cycleId}||${type}||${entryId}`;
                             occurrenceMap.set(key, {
                                 cycleId, cycle: cycleIndex + 1, type, entry, entryIndex,
-                                // Occurrence is shared by the complete card/code set.
-                                recordIds: group.map(r => r.id),
-                                // A calibration occurrence applies to every code in the card.
-                                codes: instrumentCodes
+                                recordIds: group.filter(r => {
+                                    const rc = String(r.code || '').trim().toLowerCase();
+                                    const assigned = Array.isArray(entry.codes) ? entry.codes.map(x => String(x || '').trim().toLowerCase()) : [];
+                                    return !assigned.length || assigned.includes(rc);
+                                }).map(r => r.id),
+                                codes: Array.isArray(entry.codes) && entry.codes.length
+                                    ? entry.codes.filter(c => group.some(r => String(r.code || '').trim().toLowerCase() === String(c).trim().toLowerCase()))
+                                    : instrumentCodes
                             });
                         });
                     });
@@ -4384,8 +4223,6 @@ window.addEventListener("cloudsync:status", (event) => {
                                 const codes = Array.isArray(e.codes) && e.codes.length ? e.codes : (item.codes.length ? item.codes : instrumentCodes);
                                 const typeLabel = item.type === 'external' ? 'EXTERNAL CALIBRATION' : 'INTERNAL CALIBRATION';
                                 const typeCls = item.type === 'external' ? 'text-blue-300' : 'text-purple-300';
-                                const editFn = `openCalibrationOccurrenceEditor(${JSON.stringify(ids)},${JSON.stringify(item.cycleId)},${JSON.stringify(item.type)},${JSON.stringify(e.id || '')})`;
-                                const deleteFn = `deleteCalibrationOccurrence(${JSON.stringify(ids)},${JSON.stringify(item.cycleId)},${JSON.stringify(item.type)},${JSON.stringify(e.id || '')})`;
                                 return `<div class="rounded-lg border border-slate-700/60 bg-slate-900/45 p-2.5">
                                     <div class="flex flex-wrap items-start justify-between gap-2">
                                         <div class="min-w-0">
@@ -4394,10 +4231,6 @@ window.addEventListener("cloudsync:status", (event) => {
                                                 ${badge(status)}
                                             </div>
                                             <div class="text-[10px] text-slate-300 mt-1"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ') || '-'}</strong></div>
-                                        </div>
-                                        <div class="flex gap-1.5 shrink-0">
-                                            <button type="button" onclick='${editFn}' class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-white">Edit</button>
-                                            <button type="button" onclick='${deleteFn}' class="px-2 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[9px] font-bold text-red-300">Delete</button>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[9px]">
@@ -5230,8 +5063,7 @@ window.addEventListener("cloudsync:status", (event) => {
                             const status = calibrationOccurrenceStatus(r);
                             const ids = r.recordIds.map(x => String(x));
                             const codes = r.codes.length ? r.codes : instrumentCodes;
-                            const editId = ids[0] || '';
-                            return `<div class="rounded-lg border border-slate-700/60 bg-slate-900/45 p-2.5">
+                                        return `<div class="rounded-lg border border-slate-700/60 bg-slate-900/45 p-2.5">
                                 <div class="flex flex-wrap items-start justify-between gap-2">
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
@@ -5239,10 +5071,6 @@ window.addEventListener("cloudsync:status", (event) => {
                                             <span class="px-1.5 py-0.5 rounded border text-[8px] font-black ${statusClass(status)}">${escapeHtml(status)}</span>
                                         </div>
                                         <div class="text-[10px] text-slate-300 mt-1"><span class="text-slate-500">Equipment Codes:</span> <strong>${codes.map(escapeHtml).join(', ') || '-'}</strong></div>
-                                    </div>
-                                    <div class="flex gap-1.5 shrink-0">
-                                        <button type="button" onclick='openCalibrationOccurrenceEditor(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${JSON.stringify(r.entryId)})' class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] font-bold text-white">Edit</button>
-                                        <button type="button" onclick='deleteCalibrationOccurrence(${JSON.stringify(ids)},${JSON.stringify(r.cycleId)},${JSON.stringify(r.type)},${JSON.stringify(r.entryId)})' class="px-2 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-[9px] font-bold text-red-300">Delete</button>
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[9px]">
@@ -5393,7 +5221,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 const map = {};
                 (logs || []).forEach(dt => {
                     const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
-                    const equipment = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
+                    const equipment = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
                     const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
                     const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
                     if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
@@ -5433,17 +5261,17 @@ window.addEventListener("cloudsync:status", (event) => {
                     subRow.className = 'uptime-top-compare-subhead bg-slate-900/70 text-slate-500 text-[9px] uppercase';
                     subRow.innerHTML = `
                         <th class="py-1 px-2"></th>
-                        <th class="py-1 px-2 border-l border-slate-700/60">Equipment</th>
+                        <th class="py-1 px-2 border-l border-slate-700/60">Equipment Code</th>
                         <th class="py-1 px-2">Failure Category</th>
                         <th class="py-1 px-2 text-center">Downtime</th>
-                        <th class="py-1 px-2 border-l border-slate-700/60">Equipment</th>
+                        <th class="py-1 px-2 border-l border-slate-700/60">Equipment Code</th>
                         <th class="py-1 px-2">Failure Category</th>
                         <th class="py-1 px-2 text-center">Downtime</th>`;
                     topHeadRow.parentElement.appendChild(subRow);
                 } else {
                     topHeadRow.innerHTML = `
                         <th class="py-2.5 px-3">Line Category</th>
-                        <th class="py-2.5 px-3">${escapeHtml(primaryValue || 'Selected Period')} — Equipment</th>
+                        <th class="py-2.5 px-3">${escapeHtml(primaryValue || 'Selected Period')} — Equipment Code</th>
                         <th class="py-2.5 px-3">${escapeHtml(primaryValue || 'Selected Period')} — Failure Category</th>
                         <th class="py-2.5 px-3 text-center">${escapeHtml(primaryValue || 'Selected Period')} — Downtime</th>`;
                 }
@@ -5504,7 +5332,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     tr.className = "hover:bg-slate-800/50 transition";
                     tr.innerHTML = `
                         <td class="py-3 px-4">
-                            <strong class="text-white">${escapeHtml(dt.code)} - ${escapeHtml(dt.equipment)}</strong>
+                            <strong class="text-white">Code: ${escapeHtml(dt.code)}</strong><span class="text-slate-300 ml-1">— ${escapeHtml(dt.equipment)}</span>
                             <p class="text-[10px] text-slate-400">${escapeHtml(dt.line)} (${escapeHtml(dt.plant)})</p>
                         </td>
                         <td class="py-3 px-3"><span class="bg-slate-900 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(dt.category)}</span></td>
@@ -5524,7 +5352,7 @@ window.addEventListener("cloudsync:status", (event) => {
             }
 
             // Shared Pareto representation: Top 3 lines + Other, with specific equipment and comparison period.
-            const buildUptimePareto=logs=>{const map={};(logs||[]).forEach(dt=>{const line=String(dt.line||'Unclassified Line').trim();const eq=String(dt.equipment||'Unclassified Equipment').trim();const cat=String(dt.category||'Unclassified').trim();const dur=Math.max(0,(new Date(dt.end)-new Date(dt.start))/3600000);if(!map[line])map[line]={line,duration:0,eq:{},cat:{}};map[line].duration+=dur;map[line].eq[eq]=(map[line].eq[eq]||0)+dur;map[line].cat[cat]=(map[line].cat[cat]||0)+dur;});return Object.values(map).map(x=>({line:x.line,duration:x.duration,equipment:Object.entries(x.eq).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—',category:Object.entries(x.cat).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'})).sort((a,b)=>b.duration-a.duration);};
+            const buildUptimePareto=logs=>{const map={};(logs||[]).forEach(dt=>{const line=String(dt.line||'Unclassified Line').trim();const eq=String(dt.code||'Unassigned Code').trim();const cat=String(dt.category||'Unclassified').trim();const dur=Math.max(0,(new Date(dt.end)-new Date(dt.start))/3600000);if(!map[line])map[line]={line,duration:0,eq:{},cat:{}};map[line].duration+=dur;map[line].eq[eq]=(map[line].eq[eq]||0)+dur;map[line].cat[cat]=(map[line].cat[cat]||0)+dur;});return Object.values(map).map(x=>({line:x.line,duration:x.duration,equipment:Object.entries(x.eq).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—',category:Object.entries(x.cat).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'})).sort((a,b)=>b.duration-a.duration);};
             const bucket=list=>{const a=(list||[]).slice(0,3).map(x=>({...x,label:x.line}));const r=(list||[]).slice(3);if(r.length){const em={};r.forEach(x=>em[x.equipment]=(em[x.equipment]||0)+x.duration);a.push({line:'Remaining Lines',duration:r.reduce((q,x)=>q+x.duration,0),equipment:Object.entries(em).sort((x,y)=>y[1]-x[1]).map(x=>x[0]).join(', ')||'Other Equipment',category:'Multiple',label:'Other'});}while(a.length<4)a.push({line:'No Data',duration:0,equipment:'—',category:'—',label:a.length===3?'Other':'No Data'});return a.slice(0,4);};
             const pp=bucket(buildUptimePareto(primaryLogs)), cc=bucket(buildUptimePareto(compareLogs));
             const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
@@ -5532,7 +5360,7 @@ window.addEventListener("cloudsync:status", (event) => {
             const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[]; let total=pd.reduce((a,b)=>a+b,0)+(isCompare?cd.reduce((a,b)=>a+b,0):0),run=0;const cpct=pp.map((x,i)=>{run+=pd[i]+(isCompare?cd[i]:0);return total?Number((run/total*100).toFixed(1)):0;});
             const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];ds.push({type:'line',label:'Cumulative %',data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:2,pointRadius:3,tension:.2,yAxisID:'y1'});
             chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:8}},plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].line} — ${pp[i].equipment} | vs ${cc[i].line} — ${cc[i].equipment}`:`${pp[i].line} — ${pp[i].equipment}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{font:{size:9},color:'#cbd5e1',autoSkip:false,maxRotation:0},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
-            const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto — ${primaryValue} vs ${compareValue}`:`Downtime Pareto — ${primaryValue||'All Time'}`;
+            const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto by Equipment Code — ${primaryValue} vs ${compareValue}`:`Downtime Pareto by Equipment Code — ${primaryValue||'All Time'}`;
         }
 
         function openDowntimeForm() {
