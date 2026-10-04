@@ -4083,7 +4083,7 @@ function renderSummaryModule() {
             } else {
                 p.sort((a,b)=>Number(b.duration||0)-Number(a.duration||0));
             }
-            labels=p.map((x,i)=>[x.code||'Uncoded',x.equipment||'',x.line||'']);
+            labels=p.map(x=>String(x.code||'Uncoded'));
             const primaryTotal=primary.reduce((a,b)=>a+b,0);
             const compareTotal=compare.reduce((a,b)=>a+b,0);
             let runPrimary=0, runCompare=0;
@@ -5777,7 +5777,7 @@ function calcCalib(list, dateType='all', dateValue='') {
             const alignedUP=isCompare?alignUptimePareto(rawPP,rawCC):{primary:rawPP,compare:[]};
             const pp=alignedUP.primary, cc=alignedUP.compare;
             const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
-            const labs=pp.map((x,i)=>[x.code||'Uncoded',x.equipment||'',x.line||'']);
+            const labs=pp.map(x=>String(x.code||'Uncoded'));
             const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[];
             const primaryTotal=pd.reduce((a,b)=>a+b,0), compareTotal=cd.reduce((a,b)=>a+b,0);
             let runPrimary=0, runCompare=0;
