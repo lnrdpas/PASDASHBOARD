@@ -1909,7 +1909,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 </div>
                 <button onclick="closeEquipModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
-            <form id="form-equipment" onsubmit="handleEquipSubmit(event)" class="space-y-4 text-xs">
+            <form id="form-equipment" novalidate onsubmit="handleEquipSubmit(event)" class="space-y-4 text-xs">
                 <input type="hidden" id="eq-id">
 
                 <div class="bg-blue-500/5 border border-blue-500/20 rounded-xl p-3 space-y-3">
@@ -4585,7 +4585,7 @@ function calcCalib(list, dateType='all', dateValue='') {
             row.className = "calib-code-row flex items-center gap-2";
             row.innerHTML = `
                 <span class="code-counter w-6 text-center text-[10px] font-bold text-blue-400"></span>
-                <input type="text" name="eq-code" required value="${escapeAttr(code)}" placeholder="Equipment Code (e.g. PI-56)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white outline-none text-[11px]">
+                <input type="text" name="eq-code" value="${escapeAttr(code)}" placeholder="Equipment Code (e.g. PI-56)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white outline-none text-[11px]">
                 <button type="button" onclick="removeCalibrationCodeRow(this)" class="text-red-400 hover:text-red-300 px-1.5" title="Remove code">
                     <i class="fa-solid fa-trash-can text-[10px]"></i>
                 </button>
@@ -4985,10 +4985,14 @@ function calcCalib(list, dateType='all', dateValue='') {
         }
 
         function handleEquipSubmit(e) {
-            e.preventDefault();
-            if (!isAdminUser()) return;
+            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            try {
+                if (!isAdminUser()) {
+                    alert("You do not have permission to edit calibration records.");
+                    return false;
+                }
 
-            const editId = String(document.getElementById("eq-id").value || '').trim();
+                const editId = String(document.getElementById("eq-id")?.value || '').trim();
             const shared = getSharedEquipmentData();
             const groups = collectCalibrationGroups();
             if (!groups.length) return alert("Please enter at least one calibration cycle or PR/PO group.");
@@ -5135,6 +5139,12 @@ function calcCalib(list, dateType='all', dateValue='') {
             renderCalibModule();
             renderSummaryModule();
             renderCalendarModule();
+            return false;
+            } catch (err) {
+                console.error("Calibration Save failed:", err);
+                alert("Calibration Save failed: " + (err?.message || err));
+                return false;
+            }
         }
 
         function editEquipment(id) {
