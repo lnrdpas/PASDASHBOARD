@@ -3460,7 +3460,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ') || 'Unclassified Line';
                     const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
                     if (!dur) return;
-                    const key = code.toUpperCase();
+                    const key = `${code.toUpperCase()}||${equipmentCategory.toUpperCase()}`;
                     if (!map[key]) map[key] = { code, equipmentCategory, duration: 0, occurrences: 0, troubles: {}, lines: new Set() };
                     map[key].duration += dur;
                     map[key].occurrences += 1;
@@ -5371,7 +5371,7 @@ function calcCalib(list, dateType='all', dateValue='') {
             }
 
             // Shared Pareto representation: Top 3 lines + Other, with specific equipment and comparison period.
-            const buildUptimePareto=logs=>{const map={};(logs||[]).forEach(dt=>{const code=String(dt.code||'Unassigned Code').trim().replace(/\s+/g,' ')||'Unassigned Code';const equipmentCategory=String(dt.equipment||dt.equipmentCategory||'Unclassified Equipment').trim().replace(/\s+/g,' ')||'Unclassified Equipment';const trouble=String(dt.category||dt.indication||'Unclassified Trouble').trim().replace(/\s+/g,' ')||'Unclassified Trouble';const line=String(dt.line||'Unclassified Line').trim().replace(/\s+/g,' ')||'Unclassified Line';const dur=Math.max(0,(new Date(dt.end)-new Date(dt.start))/3600000);if(!dur)return;const key=code.toUpperCase();if(!map[key])map[key]={code,equipmentCategory,duration:0,occurrences:0,troubles:{},lines:new Set()};map[key].duration+=dur;map[key].occurrences+=1;map[key].troubles[trouble]=(map[key].troubles[trouble]||0)+dur;map[key].lines.add(line);});return Object.values(map).map(x=>{const ts=Object.entries(x.troubles).sort((a,b)=>b[1]-a[1]);return {...x,equipment:x.code,category:x.equipmentCategory,trouble:ts[0]?.[0]||'Unclassified Trouble',troubleList:ts.map(([name,hours])=>({name,hours})),line:[...x.lines].join(', '),lineList:[...x.lines]};}).sort((a,b)=>b.duration-a.duration);};
+            const buildUptimePareto=logs=>{const map={};(logs||[]).forEach(dt=>{const code=String(dt.code||'Unassigned Code').trim().replace(/\s+/g,' ')||'Unassigned Code';const equipmentCategory=String(dt.equipment||dt.equipmentCategory||'Unclassified Equipment').trim().replace(/\s+/g,' ')||'Unclassified Equipment';const trouble=String(dt.category||dt.indication||'Unclassified Trouble').trim().replace(/\s+/g,' ')||'Unclassified Trouble';const line=String(dt.line||'Unclassified Line').trim().replace(/\s+/g,' ')||'Unclassified Line';const dur=Math.max(0,(new Date(dt.end)-new Date(dt.start))/3600000);if(!dur)return;const key=`${code.toUpperCase()}||${equipmentCategory.toUpperCase()}`;if(!map[key])map[key]={code,equipmentCategory,duration:0,occurrences:0,troubles:{},lines:new Set()};map[key].duration+=dur;map[key].occurrences+=1;map[key].troubles[trouble]=(map[key].troubles[trouble]||0)+dur;map[key].lines.add(line);});return Object.values(map).map(x=>{const ts=Object.entries(x.troubles).sort((a,b)=>b[1]-a[1]);return {...x,equipment:x.code,category:x.equipmentCategory,trouble:ts[0]?.[0]||'Unclassified Trouble',troubleList:ts.map(([name,hours])=>({name,hours})),line:[...x.lines].join(', '),lineList:[...x.lines]};}).sort((a,b)=>b.duration-a.duration);};
             const bucket=list=>(list||[]).map((x,i)=>({...x,label:x.code||x.equipment||'Unassigned Code',code:x.code||x.equipment||'Unassigned Code',equipment:x.code||x.equipment||'—',equipmentCategory:x.equipmentCategory||x.category||'—',category:x.equipmentCategory||x.category||'—',trouble:x.trouble||'Unclassified Trouble',troubleList:x.troubleList||[],occurrences:x.occurrences||0}));
             const pp=bucket(buildUptimePareto(primaryLogs)), cc=bucket(buildUptimePareto(compareLogs));
             const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
@@ -6022,7 +6022,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                 const equipmentCategory = String(dt.equipment || dt.equipmentCategory || 'Unclassified Equipment').trim().replace(/\s+/g, ' ') || 'Unclassified Equipment';
                 const trouble = String(dt.category || dt.indication || 'Unclassified Trouble').trim().replace(/\s+/g, ' ') || 'Unclassified Trouble';
                 const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ') || 'Unclassified Line';
-                const key = code.toUpperCase();
+                const key = `${code.toUpperCase()}||${equipmentCategory.toUpperCase()}`;
                 if (!map[key]) map[key] = { code, equipmentCategory, duration: 0, occurrences: 0, troubles: {}, codes: new Set(), lines: new Set() };
                 map[key].duration += duration;
                 map[key].occurrences += 1;
@@ -6052,9 +6052,9 @@ function calcCalib(list, dateType='all', dateValue='') {
             if (expandedParetoChart) expandedParetoChart.destroy();
 
             const byCode = new Map();
-            primary.forEach(x => byCode.set(x.code.toUpperCase(), { code:x.code, equipmentCategory:x.equipmentCategory, primary:x }));
+            primary.forEach(x => byCode.set(`${x.code.toUpperCase()}||${x.equipmentCategory.toUpperCase()}`, { code:x.code, equipmentCategory:x.equipmentCategory, primary:x }));
             compare.forEach(x => {
-                const key = x.code.toUpperCase();
+                const key = `${x.code.toUpperCase()}||${x.equipmentCategory.toUpperCase()}`;
                 if (!byCode.has(key)) byCode.set(key, { code:x.code, equipmentCategory:x.equipmentCategory });
                 byCode.get(key).compare = x;
                 if (!byCode.get(key).equipmentCategory) byCode.get(key).equipmentCategory = x.equipmentCategory;
