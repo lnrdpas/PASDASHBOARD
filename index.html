@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PASDASHBOARD - Plant Operations, Calibration & Process Automation System</title>
+    <meta name="pareto-front-fix" content="VERIFIED TOP-LAYER OVERLAY v2">
+        <title>PASDASHBOARD - Plant Operations, Calibration & Process Automation System</title>
     <!-- Tailwind CSS CDN -->
     
 <script>
@@ -864,7 +865,8 @@ window.addEventListener("cloudsync:status", (event) => {
             height: 100% !important;
             max-width: none !important;
             max-height: none !important;
-            z-index: 999 !important;
+            z-index: 2147483647 !important;
+            isolation: isolate !important;
             pointer-events: none !important;
         }
         .summary-kpi-compare { font-size: 10px; line-height: 1.35; min-height: 15px; margin-top: 3px; color: #67e8f9; font-weight: 700; }
@@ -4021,6 +4023,9 @@ window.addEventListener("cloudsync:status", (event) => {
             if (!chart || !canvas || !canvas.parentElement) return;
             const wrapper = canvas.parentElement;
             wrapper.style.position = 'relative';
+            wrapper.style.isolation = 'isolate';
+            canvas.style.position = 'relative';
+            canvas.style.zIndex = '0';
             let overlay = wrapper.querySelector('.pareto-overlay-canvas');
             if (!overlay) {
                 overlay = document.createElement('canvas');
@@ -4040,8 +4045,13 @@ window.addEventListener("cloudsync:status", (event) => {
                     overlay.width = Math.round(w*dpr);
                     overlay.height = Math.round(h*dpr);
                 }
+                const cr = canvas.getBoundingClientRect();
+                const wr = wrapper.getBoundingClientRect();
+                overlay.style.left = Math.round(cr.left - wr.left) + 'px';
+                overlay.style.top = Math.round(cr.top - wr.top) + 'px';
                 overlay.style.width = w + 'px';
                 overlay.style.height = h + 'px';
+                overlay.style.zIndex = '2147483647';
                 const ctx = overlay.getContext('2d');
                 ctx.setTransform(dpr,0,0,dpr,0,0);
                 ctx.clearRect(0,0,w,h);
@@ -4058,6 +4068,13 @@ window.addEventListener("cloudsync:status", (event) => {
                 ctx.save();
                 ctx.lineJoin = 'round';
                 ctx.lineCap = 'round';
+                ctx.beginPath();
+                points.forEach((pt,i)=> i ? ctx.lineTo(pt.x,pt.y) : ctx.moveTo(pt.x,pt.y));
+                // Double stroke: a dark/white separation halo followed by the cyan curve.
+                // Because this is a separate top-layer canvas, the curve physically covers the bars.
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 8;
+                ctx.stroke();
                 ctx.beginPath();
                 points.forEach((pt,i)=> i ? ctx.lineTo(pt.x,pt.y) : ctx.moveTo(pt.x,pt.y));
                 ctx.strokeStyle = '#22d3ee';
@@ -4116,6 +4133,15 @@ window.addEventListener("cloudsync:status", (event) => {
                 requestAnimationFrame(()=>chart.$drawParetoFrontOverlay());
             }
         }
+
+        // Keep the independent front layer synchronized after every Chart.js render/update.
+        const paretoFrontOverlaySyncPlugin = {
+            id: 'paretoFrontOverlaySync',
+            afterRender(chart) {
+                if (chart?.$drawParetoFrontOverlay) chart.$drawParetoFrontOverlay();
+            }
+        };
+        if (typeof Chart !== 'undefined') Chart.register(paretoFrontOverlaySyncPlugin);
 
         function openParetoTrouble(data, sourceTitle) {
             const modal = document.getElementById('modal-pareto-trouble');
