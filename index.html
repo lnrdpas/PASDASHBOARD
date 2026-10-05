@@ -3004,16 +3004,6 @@ window.addEventListener("cloudsync:status", (event) => {
             return String(dt?.code ?? dt?.equipmentCode ?? dt?.equipmentId ?? dt?.assetId ?? '').trim();
         }
 
-        // Reliability/availability identity is Equipment Code + Equipment Category.
-        // This keeps two records with the same code but different equipment categories
-        // as two separate equipment identities, matching the category availability table.
-        function getDowntimeEquipmentIdentity(dt) {
-            const code = getDowntimeEquipmentCode(dt);
-            if (!code) return '';
-            const category = String(dt?.equipment ?? dt?.equipmentCategory ?? '').trim();
-            return `${code.toLowerCase()}|||${category.toLowerCase()}`;
-        }
-
         function calculateCategoryAvailability(logs, inventoryLogs) {
             const source = Array.isArray(logs) ? logs : [];
             const inventory = Array.isArray(inventoryLogs) ? inventoryLogs : source;
@@ -3613,19 +3603,11 @@ window.addEventListener("cloudsync:status", (event) => {
                 return {done, overdueDone, scheduled, toCalibrate: overdue + pending + stsok, overdue, pending, stsok, na, compliance:scheduled?Math.round(done/scheduled*100):0};
             };
             const calcDowntime = list => {
-                let hrs=0;
-                (list||[]).forEach(dt=>{
-                    const d=(new Date(dt.end)-new Date(dt.start))/3600000;
-                    if(d>0) hrs+=d;
-                });
-                const equipmentIds=new Set((list||[]).map(getDowntimeEquipmentIdentity).filter(Boolean));
-                const availableHours=(equipmentIds.size||1)*720;
-                const failures=(list||[]).length;
-                const uptime=Math.max(0,Math.min(100,Number(((1-hrs/availableHours)*100).toFixed(1))));
-                const operatingHours=Math.max(0,availableHours-hrs);
-                const mtbf=failures>0?Number((operatingHours/failures).toFixed(1)):0;
-                const mttr=failures>0?Number(((hrs/failures)*60).toFixed(0)):0;
-                return {hrs,uptime,availableHours,failures,mtbf,mttr};
+                let hrs=0; (list||[]).forEach(dt=>{ const d=(new Date(dt.end)-new Date(dt.start))/3600000; if(d>0) hrs+=d; });
+                const codes=new Set((list||[]).map(getDowntimeEquipmentCode).filter(Boolean));
+                const avail=(codes.size||1)*720;
+                const uptime=Math.max(0,Math.min(100,Number(((1-hrs/avail)*100).toFixed(1))));
+                return {hrs,uptime};
             };
             const primaryCalib=calcCalib(filteredEq, primaryType, primaryValue), compareCalib=isCompare?calcCalib(comparisonEq, compareType, compareValue):null;
             const calibChartIgnoreFilter = !!document.getElementById('summary-calib-ignore-filter')?.checked;
@@ -3649,12 +3631,15 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("summary-availability-rate").innerText = `${primaryDown.uptime}%`;
             document.getElementById("summary-uptime-rate").innerText = `${primaryDown.uptime}%`;
             document.getElementById("summary-dt-hours").innerText = `${primaryDown.hrs.toFixed(1)} hrs`;
-            const mtbf = primaryDown.mtbf.toFixed(1);
-            const mttr = primaryDown.mttr;
+            const uniqueEq = new Set(filteredDt.map(getDowntimeEquipmentCode).filter(Boolean));
+            const availHrs = (uniqueEq.size || 1) * 720;
+            const totalDownHrs = filteredDt.reduce((a,dt)=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000; return a+(d>0?d:0);},0);
+            const mtbf = filteredDt.length > 0 ? ((availHrs-totalDownHrs)/filteredDt.length).toFixed(1) : "0";
+            const mttr = filteredDt.length > 0 ? Math.round((primaryDown.hrs / filteredDt.length) * 60) : 0;
             document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
             document.getElementById("summary-dt-mttr").innerText = `${mttr} mins`;
-            const compareMtbf = compareDown ? compareDown.mtbf.toFixed(1) : "0";
-            const compareMttr = compareDown ? compareDown.mttr : 0;
+            const compareMtbf = comparisonDt.length > 0 ? (720 / comparisonDt.length).toFixed(1) : "0";
+            const compareMttr = comparisonDt.length > 0 ? Math.round((compareDown.hrs / comparisonDt.length) * 60) : 0;
 
             const setCompare = (id, html, show) => { const el=document.getElementById(id); if(!el)return; el.innerHTML=html; el.classList.toggle('hidden',!show); };
             setCompare('summary-dt-hours-compare', isCompare ? `${compareDisplay || 'Date 2'}: ${compareDown.hrs.toFixed(1)} hrs` : '', isCompare);
@@ -3716,10 +3701,16 @@ window.addEventListener("cloudsync:status", (event) => {
                     if (!map[line].contributors[key]) map[line].contributors[key] = { line, equipment, equipmentCategory, category, duration: 0 };
                     map[line].contributors[key].duration += dur;
                 });
-                return Object.values(map).map(lineItem => {
-                    const top = Object.values(lineItem.contributors).sort((a,b)=>b.duration-a.duration)[0];
-                    return { ...top, lineTotal: lineItem.lineTotal };
-                }).filter(Boolean).sort((a,b)=>b.lineTotal-a.lineTotal);
+                // Return ALL contributors tied for the highest downtime within each line.
+                // A tie is kept separate by Equipment Code + Equipment Category.
+                return Object.values(map).flatMap(lineItem => {
+                    const contributors = Object.values(lineItem.contributors);
+                    if (!contributors.length) return [];
+                    const topDuration = Math.max(...contributors.map(x => Number(x.duration || 0)));
+                    return contributors
+                        .filter(x => Math.abs(Number(x.duration || 0) - topDuration) < 0.0001)
+                        .map(x => ({ ...x, lineTotal: lineItem.lineTotal }));
+                }).sort((a,b) => b.lineTotal - a.lineTotal || b.duration - a.duration);
             };
             const primaryTopByLine = buildTopEquipmentByLine(filteredDt);
             const compareTopByLine = isCompare ? buildTopEquipmentByLine(comparisonDt) : [];
@@ -3763,23 +3754,37 @@ window.addEventListener("cloudsync:status", (event) => {
             if (primaryTopByLine.length === 0 && (!isCompare || compareTopByLine.length === 0)) {
                 top5Body.innerHTML = `<tr><td colspan="${isCompare ? 7 : 4}" class="text-center py-4 text-slate-500 italic">No downtime records found for the selected period${isCompare ? 's' : ''}.</td></tr>`;
             } else if (isCompare) {
-                const pMap = new Map(primaryTopByLine.map(x => [x.line, x]));
-                const cMap = new Map(compareTopByLine.map(x => [x.line, x]));
-                const lines = [...new Set([...primaryTopByLine.map(x => x.line), ...compareTopByLine.map(x => x.line)])]
-                    .sort((a,b) => Number(cMap.get(b)?.lineTotal || 0) + Number(pMap.get(b)?.lineTotal || 0) - Number(cMap.get(a)?.lineTotal || 0) - Number(pMap.get(a)?.lineTotal || 0));
+                const groupByLine = rows => rows.reduce((m, x) => {
+                    if (!m.has(x.line)) m.set(x.line, []);
+                    m.get(x.line).push(x);
+                    return m;
+                }, new Map());
+                const pMap = groupByLine(primaryTopByLine);
+                const cMap = groupByLine(compareTopByLine);
+                const lines = [...new Set([...pMap.keys(), ...cMap.keys()])]
+                    .sort((a,b) => {
+                        const at = (pMap.get(a)?.[0]?.lineTotal || 0) + (cMap.get(a)?.[0]?.lineTotal || 0);
+                        const bt = (pMap.get(b)?.[0]?.lineTotal || 0) + (cMap.get(b)?.[0]?.lineTotal || 0);
+                        return bt - at;
+                    });
                 lines.forEach(line => {
-                    const a = pMap.get(line), b = cMap.get(line);
-                    const tr = document.createElement('tr');
-                    tr.className = 'hover:bg-slate-800/50 transition align-top';
-                    const cell = (item, kind) => {
-                        if (!item) return kind === 'time' ? '<td class="py-2 px-2 text-center text-slate-600 border-l border-slate-700/40">—</td>' : '<td class="py-2 px-2 text-slate-600">—</td>';
-                        if (kind === 'time') return `<td class="py-2 px-2 text-center ${kind==='time'?'text-red-400 font-bold':''}">${Number(item.duration || 0).toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration || 0).toFixed(1)} hrs</div></td>`;
-                        if (kind === 'category') return `<td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>`;
-                        return `<td class="py-2 px-2 text-slate-200"><strong>${escapeHtml(item.equipment || '—')}</strong><div class="text-[9px] text-slate-500">Equipment Category: ${escapeHtml(item.equipmentCategory || '—')}</div></td>`;
-                    };
-                    const bEquipment = b ? `<td class="py-2 px-2 text-slate-200 border-l border-slate-700/40"><strong>${escapeHtml(b.equipment || '—')}</strong><div class="text-[9px] text-slate-500">Equipment Category: ${escapeHtml(b.equipmentCategory || '—')}</div></td>` : `<td class="py-2 px-2 text-slate-600 border-l border-slate-700/40">—</td>`;
-                    tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${escapeHtml(line)}</td>${cell(a,'equipment')}${cell(a,'category')}${cell(a,'time')}${bEquipment}${cell(b,'category')}${cell(b,'time')}`;
-                    top5Body.appendChild(tr);
+                    const pItems = pMap.get(line) || [];
+                    const cItems = cMap.get(line) || [];
+                    const rowCount = Math.max(pItems.length, cItems.length, 1);
+                    for (let i = 0; i < rowCount; i++) {
+                        const a = pItems[i], b = cItems[i];
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-slate-800/50 transition align-top';
+                        const cell = (item, kind, comparison=false) => {
+                            const border = comparison ? ' border-l border-slate-700/40' : '';
+                            if (!item) return kind === 'time' ? `<td class="py-2 px-2 text-center text-slate-600${border}">—</td>` : `<td class="py-2 px-2 text-slate-600${border}">—</td>`;
+                            if (kind === 'time') return `<td class="py-2 px-2 text-center text-red-400 font-bold${border}">${Number(item.duration || 0).toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration || 0).toFixed(1)} hrs</div></td>`;
+                            if (kind === 'category') return `<td class="py-2 px-2${border}"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>`;
+                            return `<td class="py-2 px-2 text-slate-200${border}"><strong>${escapeHtml(item.equipment || '—')}</strong><div class="text-[9px] text-slate-500">Equipment Category: ${escapeHtml(item.equipmentCategory || '—')}</div></td>`;
+                        };
+                        tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${i === 0 ? escapeHtml(line) : ''}</td>${cell(a,'equipment')}${cell(a,'category')}${cell(a,'time')}${cell(b,'equipment',true)}${cell(b,'category',true)}${cell(b,'time',true)}`;
+                        top5Body.appendChild(tr);
+                    }
                 });
             } else {
                 primaryTopByLine.forEach(item => {
@@ -5416,7 +5421,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                     const diff = (new Date(dt.end) - new Date(dt.start)) / 3600000;
                     if (diff > 0) hrs += diff;
                 });
-                const equipmentIds = new Set((logs || []).map(getDowntimeEquipmentIdentity).filter(Boolean));
+                const equipmentIds = new Set((logs || []).map(getDowntimeEquipmentCode).filter(Boolean));
                 const availableHours = (equipmentIds.size || 1) * 720;
                 const failures = (logs || []).length;
                 const uptime = Math.max(0, Math.min(100, Number(((1 - (hrs / availableHours)) * 100).toFixed(1))));
@@ -5475,10 +5480,16 @@ function calcCalib(list, dateType='all', dateValue='') {
                     if (!map[line].contributors[key]) map[line].contributors[key] = { line, equipment, equipmentCategory, category, duration: 0 };
                     map[line].contributors[key].duration += dur;
                 });
-                return Object.values(map).map(lineItem => {
-                    const top = Object.values(lineItem.contributors).sort((a,b) => b.duration - a.duration)[0];
-                    return top ? { ...top, lineTotal: lineItem.lineTotal } : null;
-                }).filter(Boolean).sort((a,b) => b.lineTotal - a.lineTotal);
+                // Return ALL contributors tied for the highest downtime within each line.
+                // A tie is kept separate by Equipment Code + Equipment Category.
+                return Object.values(map).flatMap(lineItem => {
+                    const contributors = Object.values(lineItem.contributors);
+                    if (!contributors.length) return [];
+                    const topDuration = Math.max(...contributors.map(x => Number(x.duration || 0)));
+                    return contributors
+                        .filter(x => Math.abs(Number(x.duration || 0) - topDuration) < 0.0001)
+                        .map(x => ({ ...x, lineTotal: lineItem.lineTotal }));
+                }).sort((a,b) => b.lineTotal - a.lineTotal || b.duration - a.duration);
             };
 
             const topPrimary = buildHighestEquipmentByLine(primaryLogs);
@@ -5527,27 +5538,41 @@ function calcCalib(list, dateType='all', dateValue='') {
                 if (!topPrimary.length && (!isCompare || !topCompare.length)) {
                     topBody.innerHTML = `<tr><td colspan="${isCompare ? 7 : 4}" class="text-center py-6 text-slate-500 italic">No downtime records found for the selected Uptime/Downtime filter.</td></tr>`;
                 } else if (isCompare) {
-                    const pMap = new Map(topPrimary.map(x => [x.line, x]));
-                    const cMap = new Map(topCompare.map(x => [x.line, x]));
-                    const lines = [...new Set([...topPrimary.map(x => x.line), ...topCompare.map(x => x.line)])]
-                        .sort((a,b) => ((pMap.get(b)?.lineTotal || 0) + (cMap.get(b)?.lineTotal || 0)) - ((pMap.get(a)?.lineTotal || 0) + (cMap.get(a)?.lineTotal || 0)));
+                    const groupByLine = rows => rows.reduce((m, x) => {
+                        if (!m.has(x.line)) m.set(x.line, []);
+                        m.get(x.line).push(x);
+                        return m;
+                    }, new Map());
+                    const pMap = groupByLine(topPrimary);
+                    const cMap = groupByLine(topCompare);
+                    const lines = [...new Set([...pMap.keys(), ...cMap.keys()])]
+                        .sort((a,b) => {
+                            const at = (pMap.get(a)?.[0]?.lineTotal || 0) + (cMap.get(a)?.[0]?.lineTotal || 0);
+                            const bt = (pMap.get(b)?.[0]?.lineTotal || 0) + (cMap.get(b)?.[0]?.lineTotal || 0);
+                            return bt - at;
+                        });
 
                     lines.forEach(line => {
-                        const pItem = pMap.get(line);
-                        const cItem = cMap.get(line);
-                        const tr = document.createElement('tr');
-                        tr.className = 'hover:bg-slate-800/50 transition align-top';
-                        const equipmentCell = (item, comparison=false) => item
-                            ? `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''} text-slate-200">${escapeHtml(item.equipment || '—')}</td>`
-                            : `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''} text-slate-600">—</td>`;
-                        const categoryCell = item => item
-                            ? `<td class="py-2 px-2"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>`
-                            : `<td class="py-2 px-2 text-slate-600">—</td>`;
-                        const timeCell = (item, comparison=false) => item
-                            ? `<td class="py-2 px-2 text-center text-red-400 font-bold">${Number(item.duration || 0).toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration || 0).toFixed(1)} hrs</div></td>`
-                            : `<td class="py-2 px-2 text-center text-slate-600">—</td>`;
-                        tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${escapeHtml(line)}</td>${equipmentCell(pItem)}${categoryCell(pItem)}${timeCell(pItem)}${equipmentCell(cItem, true)}${categoryCell(cItem)}${timeCell(cItem, true)}`;
-                        topBody.appendChild(tr);
+                        const pItems = pMap.get(line) || [];
+                        const cItems = cMap.get(line) || [];
+                        const rowCount = Math.max(pItems.length, cItems.length, 1);
+                        for (let i = 0; i < rowCount; i++) {
+                            const pItem = pItems[i];
+                            const cItem = cItems[i];
+                            const tr = document.createElement('tr');
+                            tr.className = 'hover:bg-slate-800/50 transition align-top';
+                            const equipmentCell = (item, comparison=false) => item
+                                ? `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''} text-slate-200"><strong>${escapeHtml(item.equipment || '—')}</strong><div class="text-[9px] text-slate-500">Equipment Category: ${escapeHtml(item.equipmentCategory || '—')}</div></td>`
+                                : `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''} text-slate-600">—</td>`;
+                            const categoryCell = (item, comparison=false) => item
+                                ? `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''}"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] border border-slate-700">${escapeHtml(item.category || '—')}</span></td>`
+                                : `<td class="py-2 px-2 ${comparison ? 'border-l border-slate-700/40' : ''} text-slate-600">—</td>`;
+                            const timeCell = (item, comparison=false) => item
+                                ? `<td class="py-2 px-2 text-center text-red-400 font-bold ${comparison ? 'border-l border-slate-700/40' : ''}">${Number(item.duration || 0).toFixed(1)} hrs<div class="text-[9px] text-slate-500 font-normal mt-0.5">Line total: ${Number(item.lineTotal || item.duration || 0).toFixed(1)} hrs</div></td>`
+                                : `<td class="py-2 px-2 text-center text-slate-600 ${comparison ? 'border-l border-slate-700/40' : ''}">—</td>`;
+                            tr.innerHTML = `<td class="py-2 px-2 font-semibold text-white">${i === 0 ? escapeHtml(line) : ''}</td>${equipmentCell(pItem)}${categoryCell(pItem)}${timeCell(pItem)}${equipmentCell(cItem, true)}${categoryCell(cItem)}${timeCell(cItem, true)}`;
+                            topBody.appendChild(tr);
+                        }
                     });
                 } else {
                     topPrimary.forEach(item => {
