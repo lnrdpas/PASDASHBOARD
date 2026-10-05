@@ -4123,7 +4123,11 @@ window.addEventListener("cloudsync:status", (event) => {
         // Draw cumulative percentages directly on the Pareto line so values such as 50% and 100% are visible in front of the bars.
         const paretoCumulativeValueLabelsPlugin = {
             id: 'paretoCumulativeValueLabels',
-            afterDatasetsDraw(chart) {
+            // Draw AFTER the complete Chart.js render cycle so the cumulative
+            // line and its percentage labels are always physically in front
+            // of every Pareto bar in Executive Summary, Uptime/Downtime,
+            // and both expanded Pareto views.
+            afterDraw(chart) {
                 const datasetIndex = chart.data.datasets.findIndex(ds => ds && ds.type === 'line' && ds.label === 'Cumulative %');
                 if (datasetIndex < 0) return;
                 const meta = chart.getDatasetMeta(datasetIndex);
@@ -4134,11 +4138,8 @@ window.addEventListener("cloudsync:status", (event) => {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
 
-                // Always redraw the cumulative path AFTER all bar datasets.
-                // This guarantees the cyan line is physically in front of the
-                // red/blue bars in Executive Summary, Uptime/Downtime, and
-                // both expanded views. The Chart.js dataset itself is not
-                // duplicated; this is one visual redraw of the same line.
+                // The line is intentionally redrawn here (after all datasets)
+                // so it cannot be covered by any bar dataset.
                 const validPoints = meta.data.filter(point => point);
                 if (validPoints.length) {
                     ctx.beginPath();
