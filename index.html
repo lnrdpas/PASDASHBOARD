@@ -831,9 +831,9 @@ window.addEventListener("cloudsync:status", (event) => {
         .chart-box-container {
             position: relative;
             width: 100%;
-            height: 320px !important;
-            min-height: 320px !important;
-            max-height: 320px !important;
+            height: 260px !important;
+            min-height: 300px !important;
+            max-height: 300px !important;
             overflow: visible;
             display: flex;
             align-items: center;
@@ -842,29 +842,19 @@ window.addEventListener("cloudsync:status", (event) => {
 
         .chart-box-container canvas {
             width: 100% !important;
-            height: 300px !important;
+            height: 260px !important;
             max-width: 100% !important;
-            max-height: 300px !important;
+            max-height: 260px !important;
         }
         /* Executive Summary Pareto: larger chart area; no explanatory note below it. */
         .summary-pareto-chart-box {
-            height: 340px !important;
-            min-height: 340px !important;
-            max-height: 340px !important;
-        }
-        /* Executive Summary doughnuts: balanced size so the chart is centered without filling the card. */
-        .summary-doughnut-chart-box {
-            height: 280px !important;
-            min-height: 280px !important;
-            max-height: 280px !important;
-        }
-        .summary-doughnut-chart-box canvas {
-            height: 270px !important;
-            max-height: 270px !important;
+            height: 330px !important;
+            min-height: 330px !important;
+            max-height: 330px !important;
         }
         .summary-pareto-chart-box canvas {
-            height: 320px !important;
-            max-height: 320px !important;
+            height: 330px !important;
+            max-height: 330px !important;
         }
         .summary-kpi-compare { font-size: 10px; line-height: 1.35; min-height: 15px; margin-top: 3px; color: #67e8f9; font-weight: 700; }
         .summary-period-note { font-size: 10px; line-height: 1.35; color: #94a3b8; }
@@ -1167,7 +1157,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                 Ignore Filters
                             </label>
                         </div>
-                        <div class="chart-box-container summary-doughnut-chart-box">
+                        <div class="chart-box-container">
                             <canvas id="chart-summary-calib"></canvas>
                         </div>
                     </div>
@@ -1182,7 +1172,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                 Ignore Filters
                             </label>
                         </div>
-                        <div class="chart-box-container summary-doughnut-chart-box">
+                        <div class="chart-box-container">
                             <canvas id="chart-summary-projects"></canvas>
                         </div>
                     </div>
@@ -1603,7 +1593,7 @@ window.addEventListener("cloudsync:status", (event) => {
                                 <button type="button" id="uptime-pareto-expand-btn" onclick="openUptimeParetoTrouble()" class="px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-[9px] text-slate-200 font-bold whitespace-nowrap">↗ Expand / View All Trouble</button>
                             </div>
                         </div>
-                        <div class="chart-box-container flex-1 my-2 min-h-[350px]">
+                        <div class="chart-box-container flex-1 my-2 min-h-[390px]">
                             <canvas id="chart-downtime-pareto"></canvas>
                         </div>
                     </div>
@@ -2090,9 +2080,10 @@ window.addEventListener("cloudsync:status", (event) => {
                             <div id="pareto-trouble-graph-note" class="text-[9px] text-slate-400">Ranked highest to lowest by Equipment Code + Equipment Category / Indication</div>
                         </div>
                     </div>
-                    <div class="relative w-full h-[340px]">
+                    <div class="relative w-full h-[430px]">
                         <canvas id="pareto-trouble-graph"></canvas>
                     </div>
+                    <div id="pareto-trouble-indications" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2"></div>
                 </div>
                 <div id="pareto-trouble-content"></div>
             </div>
@@ -4034,7 +4025,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillStyle = '#f8fafc';
-                ctx.font = '800 16px Arial';
+                ctx.font = '800 18px Arial';
                 ctx.fillText(String(total), cx, cy - 5);
                 ctx.fillStyle = '#94a3b8';
                 ctx.font = '700 8px Arial';
@@ -4060,11 +4051,14 @@ window.addEventListener("cloudsync:status", (event) => {
             }
         };
         if (typeof Chart !== 'undefined') Chart.register(paretoEquipmentIndicationPlugin, summaryDoughnutLabelsPlugin);
+        if (typeof Chart !== 'undefined') Chart.register(paretoEquipmentIndicationPlugin);
+
         function openParetoTrouble(data, sourceTitle) {
             const modal = document.getElementById('modal-pareto-trouble');
             const content = document.getElementById('pareto-trouble-content');
             const title = document.getElementById('pareto-trouble-title');
             const canvas = document.getElementById('pareto-trouble-graph');
+            const indications = document.getElementById('pareto-trouble-indications');
             if (!modal || !content || !data || !canvas || typeof Chart === 'undefined') return;
             if (title) title.textContent = `${sourceTitle} — View All Trouble`;
 
@@ -4103,15 +4097,14 @@ window.addEventListener("cloudsync:status", (event) => {
                     {label:data.compareLabel || 'Period 2', data:compareDur, backgroundColor:'#3b82f6', borderRadius:5, maxBarThickness:34}
                   ]
                 : [{label:'Downtime (hrs)', data:primaryDur, backgroundColor:'#ef4444', borderRadius:5, maxBarThickness:34}];
-            datasets.push({type:'line', label:'Cumulative %', data:cumulative, borderColor:'#22d3ee', backgroundColor:'#22d3ee', borderWidth:3, pointRadius:4, pointHoverRadius:6, tension:0, spanGaps:false, yAxisID:'y1', order:99});
+            datasets.push({type:'line', label:'Cumulative %', data:cumulative, borderColor:'#22d3ee', backgroundColor:'#22d3ee', borderWidth:3, pointRadius:4, pointHoverRadius:6, tension:.2, yAxisID:'y1', order:99});
             paretoTroublePopupChart = new Chart(canvas.getContext('2d'), {
                 type:'bar',
                 data:{labels,datasets},
                 options:{
                     responsive:true, maintainAspectRatio:false,
-                    layout:{padding:{top:8,bottom:72,left:4,right:8}},
+                    layout:{padding:{top:10,bottom:105,left:4,right:8}},
                     plugins:{
-                        paretoCumulativeValueLabelsPlugin,
                         legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},
                         tooltip:{callbacks:{
                             title:items=>{
@@ -4142,6 +4135,13 @@ window.addEventListener("cloudsync:status", (event) => {
             paretoTroublePopupChart.$paretoEquipmentIndication = {primary, compareRows: compare, compare: data.isCompare, primaryIndex: 0, compareIndex: 1};
             paretoTroublePopupChart.update('none');
 
+            if (indications) {
+                indications.innerHTML = labels.map((_,i)=>{
+                    const a=primary[i], b=compare[i];
+                    const item = (x,label,cls) => x ? `<div class="border border-slate-700/60 rounded-lg px-2.5 py-2 bg-slate-900/70"><div class="text-[9px] ${cls} font-bold">${label || 'Equipment'}</div><div class="text-[10px] text-white font-semibold mt-0.5 break-words [overflow-wrap:anywhere]">${escapeHtml(x.code)} — ${escapeHtml(x.equipmentCategory)}</div><div class="text-[9px] text-slate-400 mt-0.5">${Number(x.duration||0).toFixed(1)} hrs · ${x.occurrences||0} occurrence${x.occurrences===1?'':'s'} · ${escapeHtml((x.lines||[]).join(', ')||'—')}</div></div>` : '';
+                    return data.isCompare ? item(a,'T1','text-amber-300') + item(b,'T2','text-blue-300') : item(a,'','text-cyan-300');
+                }).join('');
+            }
             const note=document.getElementById('pareto-trouble-graph-note');
             if(note) note.textContent=data.isCompare ? 'T1 and T2 are independently ranked Highest → Lowest. Each Data position keeps its own Equipment Code + Equipment Category / Indication.' : 'All equipment identities are ranked Highest → Lowest. Identity = Equipment Code + Equipment Category / Indication.';
             content.innerHTML = renderParetoTroublePeriod(data.primaryLabel || 'Period 1', primary) +
@@ -4184,8 +4184,28 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (!meta || !meta.data) return;
                 const ctx = chart.ctx;
                 ctx.save();
-                // Chart.js owns the cumulative line and points. This plugin draws labels only,
-                // preventing any second line/point rendering over the real cumulative dataset.
+                // Redraw the cumulative line AFTER every bar dataset so the line is physically in front of the bars.
+                ctx.beginPath();
+                meta.data.forEach((point, i) => {
+                    if (!point) return;
+                    const x = point.x, y = point.y;
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                });
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 3;
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                ctx.stroke();
+                meta.data.forEach(point => {
+                    if (!point) return;
+                    ctx.beginPath();
+                    ctx.fillStyle = '#22d3ee';
+                    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#0f172a';
+                    ctx.stroke();
+                });
                 ctx.font = 'bold 10px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -4213,8 +4233,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 ctx.restore();
             }
         };
-
-        if (typeof Chart !== 'undefined') Chart.register(paretoCumulativeValueLabelsPlugin);
 
 
         function renderSummaryCharts(cDone, cRemaining, projectOverallPrimary, projectOverallCompare, sortedLinePareto, selectedPlant, paretoComparison, projectChartIgnoreFilter=false, calibChartIgnoreFilter=true, calibChartCompare=null) {
@@ -4265,11 +4283,11 @@ window.addEventListener("cloudsync:status", (event) => {
             const ds=[];
             if(isCompare){ds.push({label:paretoComparison.primaryLabel,data:primary,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:28});ds.push({label:paretoComparison.compareLabel,data:compare,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:28});}
             else ds.push({label:'Downtime (hrs)',data:primary,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30});
-            ds.push({type:'line',label:'Cumulative %',data:cum,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:0,spanGaps:false,yAxisID:'y1',order:99});
+            ds.push({type:'line',label:'Cumulative %',data:cum,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:.2,yAxisID:'y1',order:99});
             if(!p.length && !c.length){
                 chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels:['No downtime data'],datasets:[{label:'Downtime (hrs)',data:[0],backgroundColor:'#475569',borderRadius:5,maxBarThickness:30}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{ticks:{color:'#94a3b8'}},y:{beginAtZero:true,ticks:{color:'#94a3b8'}}}}});
             } else {
-            chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels,datasets:ds},plugins:[paretoCumulativeValueLabelsPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:82,left:4,right:4}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{};const b=c[i]||{};return isCompare?`${a.equipment||'—'} — ${a.equipmentCategory||'—'}  |  vs ${b.equipment||'—'} — ${b.equipmentCategory||'—'}`:`${a.equipment||'—'} — ${a.equipmentCategory||'—'}`},label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,afterBody:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{},b=c[i]||{};return [`Primary failure: ${a.category||'—'}`,isCompare?`Comparison failure: ${b.category||'—'}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+            chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels,datasets:ds},plugins:[paretoCumulativeValueLabelsPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:155,left:4,right:4}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{};const b=c[i]||{};return isCompare?`${a.equipment||'—'} — ${a.equipmentCategory||'—'}  |  vs ${b.equipment||'—'} — ${b.equipmentCategory||'—'}`:`${a.equipment||'—'} — ${a.equipmentCategory||'—'}`},label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,afterBody:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{},b=c[i]||{};return [`Primary failure: ${a.category||'—'}`,isCompare?`Comparison failure: ${b.category||'—'}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             chartSummaryPareto.$paretoEquipmentIndication = {primary:p, compareRows:c, compare:isCompare, primaryIndex:0, compareIndex:1};
             chartSummaryPareto.update('none');
 
@@ -5834,8 +5852,8 @@ function calcCalib(list, dateType='all', dateValue='') {
             };
             const labs=pp.map(()=> '');
             const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[]; let total=pd.reduce((a,b)=>a+b,0)+(isCompare?cd.reduce((a,b)=>a+b,0):0),run=0;const cpct=pp.map((x,i)=>{run+=pd[i]+(isCompare?cd[i]:0);return total?Math.min(100,Number((run/total*100).toFixed(1))):0;});
-            const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];ds.push({type:'line',label:'Cumulative %',data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:0,spanGaps:false,yAxisID:'y1',order:99});
-            chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},plugins:[paretoCumulativeValueLabelsPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:78}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].equipment} — ${pp[i].equipmentCategory} | vs ${cc[i]?.equipment||'—'} — ${cc[i]?.equipmentCategory||'—'}`:`${pp[i].equipment} — ${pp[i].equipmentCategory}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+            const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];ds.push({type:'line',label:'Cumulative %',data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:.2,yAxisID:'y1',order:99});
+            chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},plugins:[paretoCumulativeValueLabelsPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:105}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].equipment} — ${pp[i].equipmentCategory} | vs ${cc[i]?.equipment||'—'} — ${cc[i]?.equipmentCategory||'—'}`:`${pp[i].equipment} — ${pp[i].equipmentCategory}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             chartDowntimePareto.$paretoEquipmentIndication = {primary:pp, compareRows:cc, compare:isCompare, primaryIndex:0, compareIndex:1};
             chartDowntimePareto.update('none');
 
