@@ -856,6 +856,17 @@ window.addEventListener("cloudsync:status", (event) => {
             height: 330px !important;
             max-height: 330px !important;
         }
+        /* Pareto cumulative line is a dedicated canvas layer so it ALWAYS renders above bars. */
+        .pareto-overlay-canvas {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            max-width: none !important;
+            max-height: none !important;
+            z-index: 999 !important;
+            pointer-events: none !important;
+        }
         .summary-kpi-compare { font-size: 10px; line-height: 1.35; min-height: 15px; margin-top: 3px; color: #67e8f9; font-weight: 700; }
         .summary-period-note { font-size: 10px; line-height: 1.35; color: #94a3b8; }
         .pareto-info-note { font-size: 10px; line-height: 1.4; color: #94a3b8; }
@@ -4002,6 +4013,110 @@ window.addEventListener("cloudsync:status", (event) => {
         };
         if (typeof Chart !== 'undefined') Chart.register(paretoEquipmentIndicationPlugin);
 
+        // FINAL PARETO Z-ORDER FIX: the cumulative curve is drawn on a separate
+        // transparent canvas placed above the Chart.js canvas. This removes all
+        // Chart.js dataset/plugin ordering ambiguity and guarantees the cyan line
+        // visually crosses in front of every Pareto bar.
+        function attachParetoFrontOverlay(chart, canvas) {
+            if (!chart || !canvas || !canvas.parentElement) return;
+            const wrapper = canvas.parentElement;
+            wrapper.style.position = 'relative';
+            let overlay = wrapper.querySelector('.pareto-overlay-canvas');
+            if (!overlay) {
+                overlay = document.createElement('canvas');
+                overlay.className = 'pareto-overlay-canvas';
+                overlay.setAttribute('aria-hidden', 'true');
+                wrapper.appendChild(overlay);
+            }
+            chart.$paretoFrontOverlay = overlay;
+
+            const draw = () => {
+                if (!chart || !chart.canvas || !overlay || !chart.chartArea) return;
+                const rect = canvas.getBoundingClientRect();
+                const w = Math.max(1, Math.round(rect.width));
+                const h = Math.max(1, Math.round(rect.height));
+                const dpr = window.devicePixelRatio || 1;
+                if (overlay.width !== Math.round(w*dpr) || overlay.height !== Math.round(h*dpr)) {
+                    overlay.width = Math.round(w*dpr);
+                    overlay.height = Math.round(h*dpr);
+                }
+                overlay.style.width = w + 'px';
+                overlay.style.height = h + 'px';
+                const ctx = overlay.getContext('2d');
+                ctx.setTransform(dpr,0,0,dpr,0,0);
+                ctx.clearRect(0,0,w,h);
+
+                const datasetIndex = chart.data.datasets.findIndex(ds => ds && ds.type === 'line' && ds.label === 'Cumulative %');
+                if (datasetIndex < 0) return;
+                const meta = chart.getDatasetMeta(datasetIndex);
+                if (!meta || !meta.data || !meta.data.length) return;
+
+                const points = meta.data.filter(Boolean).map(point => ({x:point.x,y:point.y}));
+                if (!points.length) return;
+
+                // Draw outside the bar canvas, therefore bars can NEVER cover this curve.
+                ctx.save();
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                points.forEach((pt,i)=> i ? ctx.lineTo(pt.x,pt.y) : ctx.moveTo(pt.x,pt.y));
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 4;
+                ctx.shadowColor = 'rgba(0,0,0,.9)';
+                ctx.shadowBlur = 3;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                points.forEach((pt,i)=>{
+                    const raw = Number(chart.data.datasets[datasetIndex].data?.[i] ?? 0);
+                    ctx.beginPath();
+                    ctx.arc(pt.x,pt.y,4.5,0,Math.PI*2);
+                    ctx.fillStyle = '#22d3ee';
+                    ctx.fill();
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeStyle = '#0f172a';
+                    ctx.stroke();
+                    ctx.font = 'bold 10px Arial, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    const label = `${raw.toFixed(1)}%`;
+                    const tw = ctx.measureText(label).width;
+                    ctx.fillStyle = 'rgba(15,23,42,.9)';
+                    ctx.fillRect(pt.x - tw/2 - 3, pt.y - 17, tw + 6, 14);
+                    ctx.fillStyle = '#67e8f9';
+                    ctx.fillText(label, pt.x, pt.y - 5);
+                });
+                ctx.restore();
+            };
+
+            chart.$drawParetoFrontOverlay = draw;
+            draw();
+            requestAnimationFrame(draw);
+            setTimeout(draw, 50);
+            setTimeout(draw, 150);
+            if (!chart.$paretoOverlayResizeBound) {
+                chart.$paretoOverlayResizeBound = () => requestAnimationFrame(draw);
+                window.addEventListener('resize', chart.$paretoOverlayResizeBound);
+            }
+        }
+
+        function removeParetoFrontOverlay(chart) {
+            if (!chart) return;
+            if (chart.$paretoOverlayResizeBound) {
+                window.removeEventListener('resize', chart.$paretoOverlayResizeBound);
+                chart.$paretoOverlayResizeBound = null;
+            }
+            if (chart.$paretoFrontOverlay) chart.$paretoFrontOverlay.remove();
+            chart.$paretoFrontOverlay = null;
+            chart.$drawParetoFrontOverlay = null;
+        }
+
+        function redrawParetoFrontOverlay(chart) {
+            if (chart?.$drawParetoFrontOverlay) {
+                requestAnimationFrame(()=>chart.$drawParetoFrontOverlay());
+            }
+        }
+
         function openParetoTrouble(data, sourceTitle) {
             const modal = document.getElementById('modal-pareto-trouble');
             const content = document.getElementById('pareto-trouble-content');
@@ -4039,14 +4154,14 @@ window.addEventListener("cloudsync:status", (event) => {
                 return total ? Math.min(100, Number((running / total * 100).toFixed(1))) : 0;
             });
 
-            if (paretoTroublePopupChart) paretoTroublePopupChart.destroy();
+            if (paretoTroublePopupChart) { removeParetoFrontOverlay(paretoTroublePopupChart); paretoTroublePopupChart.destroy(); }
             const datasets = data.isCompare
                 ? [
                     {label:data.primaryLabel || 'Period 1', data:primaryDur, backgroundColor:'#f59e0b', borderRadius:5, maxBarThickness:34},
                     {label:data.compareLabel || 'Period 2', data:compareDur, backgroundColor:'#3b82f6', borderRadius:5, maxBarThickness:34}
                   ]
                 : [{label:'Downtime (hrs)', data:primaryDur, backgroundColor:'#ef4444', borderRadius:5, maxBarThickness:34}];
-            datasets.push({type:'line', label:'Cumulative %', data:cumulative, borderColor:'#22d3ee', backgroundColor:'#22d3ee', borderWidth:3, pointRadius:4, pointHoverRadius:6, tension:.2, yAxisID:'y1', order:-10});
+            datasets.push({type:'line', label:'Cumulative %', data:cumulative, borderColor:'rgba(34,211,238,0)', backgroundColor:'rgba(34,211,238,0)', borderWidth:0, pointRadius:0, pointHoverRadius:0, tension:.2, yAxisID:'y1', order:-10});
             paretoTroublePopupChart = new Chart(canvas.getContext('2d'), {
                 type:'bar',
                 data:{labels,datasets},
@@ -4084,6 +4199,8 @@ window.addEventListener("cloudsync:status", (event) => {
 
             paretoTroublePopupChart.$paretoEquipmentIndication = {primary, compareRows: compare, compare: data.isCompare, primaryIndex: 0, compareIndex: 1};
             paretoTroublePopupChart.update('none');
+            attachParetoFrontOverlay(paretoTroublePopupChart, canvas);
+            redrawParetoFrontOverlay(paretoTroublePopupChart);
 
             // Expanded View All Trouble intentionally keeps only the graph and
             // detailed table; the equipment indication cards are removed.
@@ -4318,7 +4435,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 data:{labels:projectPieLabels,datasets:[{data:projectPieValues,backgroundColor:projectPieColors,borderColor:'#1e293b',borderWidth:2,hoverOffset:4}]},
                 options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:6,font:{size:8},color:'#cbd5e1'}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} (${((Number(ctx.raw||0)/Math.max(1,ctx.dataset.data.reduce((a,b)=>a+Number(b||0),0)))*100).toFixed(1).replace(/\\.0$/,'')}%)`}}}}
             });
-            if(chartSummaryPareto) chartSummaryPareto.destroy();
+            if(chartSummaryPareto) { removeParetoFrontOverlay(chartSummaryPareto); chartSummaryPareto.destroy(); }
             const p=paretoComparison.primary||[], c=paretoComparison.compare||[];
             const labels=p.map(()=> '');
             const primary=p.map(x=>Number((x.duration||0).toFixed(1))); const compare=isCompare?c.map(x=>Number((x.duration||0).toFixed(1))):[];
@@ -4334,6 +4451,8 @@ window.addEventListener("cloudsync:status", (event) => {
             chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels,datasets:ds},plugins:[],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:105,left:4,right:4}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{};const b=c[i]||{};return isCompare?`${a.equipment||'—'} — ${a.equipmentCategory||'—'}  |  vs ${b.equipment||'—'} — ${b.equipmentCategory||'—'}`:`${a.equipment||'—'} — ${a.equipmentCategory||'—'}`},label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,afterBody:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{},b=c[i]||{};return [`Primary failure: ${a.category||'—'}`,isCompare?`Comparison failure: ${b.category||'—'}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             chartSummaryPareto.$paretoEquipmentIndication = {primary:p, compareRows:c, compare:isCompare, primaryIndex:0, compareIndex:1};
             chartSummaryPareto.update('none');
+            attachParetoFrontOverlay(chartSummaryPareto, paretoCanvas);
+            redrawParetoFrontOverlay(chartSummaryPareto);
 
             }
             requestAnimationFrame(()=>{ if(chartSummaryPareto){ chartSummaryPareto.resize(); chartSummaryPareto.update('none'); } });
@@ -5875,7 +5994,7 @@ function calcCalib(list, dateType='all', dateValue='') {
             };
             const bucket=(list,expanded=false)=>{const a=expanded?(list||[]).slice():(list||[]).slice(0,4);while(!expanded&&a.length<4)a.push({line:'No Data',duration:0,equipment:'—',equipmentCategory:'—',category:'—'});return a;};
             const pp=bucket(buildUptimePareto(primaryLogs),uptimeParetoExpanded), cc=bucket(buildUptimePareto(compareLogs),uptimeParetoExpanded);
-            const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto)chartDowntimePareto.destroy();
+            const canvas=document.getElementById('chart-downtime-pareto'); if(chartDowntimePareto){ removeParetoFrontOverlay(chartDowntimePareto); chartDowntimePareto.destroy(); }
             // Use the actual Equipment Code + Equipment Category/Indication on the x-axis.
             // Wrap long names into short lines so the indication never overlaps another bar.
             const wrapParetoLabel = (value, maxChars=13) => {
@@ -5900,6 +6019,8 @@ function calcCalib(list, dateType='all', dateValue='') {
             chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},plugins:[],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:105}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].equipment} — ${pp[i].equipmentCategory} | vs ${cc[i]?.equipment||'—'} — ${cc[i]?.equipmentCategory||'—'}`:`${pp[i].equipment} — ${pp[i].equipmentCategory}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             chartDowntimePareto.$paretoEquipmentIndication = {primary:pp, compareRows:cc, compare:isCompare, primaryIndex:0, compareIndex:1};
             chartDowntimePareto.update('none');
+            attachParetoFrontOverlay(chartDowntimePareto, canvas);
+            redrawParetoFrontOverlay(chartDowntimePareto);
 
             const expBtn=document.getElementById('uptime-pareto-expand-btn'); if(expBtn) expBtn.textContent=uptimeParetoExpanded?'↙ Show Top 4':'↗ Expand All'; const dtLabel=document.getElementById('dt-chart-plant-label'); if(dtLabel)dtLabel.textContent=isCompare?`${primaryValue} vs ${compareValue}`:`${primaryValue||'All Time'} — ${currentPlant==='ALL'?'All Plants':currentPlant}`; const dtTitle=document.getElementById('dt-pareto-title'); if(dtTitle)dtTitle.textContent=isCompare?`Downtime Pareto by Equipment Code — ${primaryValue} vs ${compareValue}`:`Downtime Pareto by Equipment Code — ${primaryValue||'All Time'}`;
         }
