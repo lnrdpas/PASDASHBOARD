@@ -4123,10 +4123,9 @@ window.addEventListener("cloudsync:status", (event) => {
         // Draw cumulative percentages directly on the Pareto line so values such as 50% and 100% are visible in front of the bars.
         const paretoCumulativeValueLabelsPlugin = {
             id: 'paretoCumulativeValueLabels',
-            // Draw AFTER the complete Chart.js render cycle so the cumulative
-            // line and its percentage labels are always physically in front
-            // of every Pareto bar in Executive Summary, Uptime/Downtime,
-            // and both expanded Pareto views.
+            // FINAL OVERLAY: this plugin is intentionally the LAST local plugin
+            // in every Pareto chart. It redraws the cumulative curve after all
+            // datasets and all other Pareto plugins have finished painting.
             afterDraw(chart) {
                 const datasetIndex = chart.data.datasets.findIndex(ds => ds && ds.type === 'line' && ds.label === 'Cumulative %');
                 if (datasetIndex < 0) return;
@@ -4200,7 +4199,8 @@ window.addEventListener("cloudsync:status", (event) => {
         // Register AFTER the equipment indication plugin so this overlay is the
         // final drawing layer on the canvas. This guarantees the cumulative
         // line is physically in front of every Pareto bar in every view.
-        if (typeof Chart !== 'undefined') Chart.register(paretoCumulativeValueLabelsPlugin);
+        // Intentionally NOT globally registered. It is attached as the LAST local plugin
+        // on each Pareto chart so its afterDraw hook runs after every other chart plugin.
 
 
         // Executive Summary chart labels: show COUNT + PERCENT directly on
