@@ -4050,7 +4050,7 @@ window.addEventListener("cloudsync:status", (event) => {
             paretoTroublePopupChart = new Chart(canvas.getContext('2d'), {
                 type:'bar',
                 data:{labels,datasets},
-                plugins:[paretoCumulativeValueLabelsPlugin, paretoEquipmentIndicationPlugin],
+                plugins:[],
                 options:{
                     responsive:true, maintainAspectRatio:false,
                     layout:{padding:{top:28,bottom:105,left:4,right:8}},
@@ -4197,6 +4197,11 @@ window.addEventListener("cloudsync:status", (event) => {
             }
         };
 
+        // Register AFTER the equipment indication plugin so this overlay is the
+        // final drawing layer on the canvas. This guarantees the cumulative
+        // line is physically in front of every Pareto bar in every view.
+        if (typeof Chart !== 'undefined') Chart.register(paretoCumulativeValueLabelsPlugin);
+
 
         // Executive Summary chart labels: show COUNT + PERCENT directly on
         // Calibration Status Breakdown and Project Status & Progress.
@@ -4322,11 +4327,11 @@ window.addEventListener("cloudsync:status", (event) => {
             const ds=[];
             if(isCompare){ds.push({label:paretoComparison.primaryLabel,data:primary,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:28});ds.push({label:paretoComparison.compareLabel,data:compare,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:28});}
             else ds.push({label:'Downtime (hrs)',data:primary,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30});
-            ds.push({type:'line',label:'Cumulative %',data:cum,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:.2,yAxisID:'y1',order:-10});
+            ds.push({type:'line',label:'Cumulative %',data:cum,borderColor:'rgba(34,211,238,0)',backgroundColor:'rgba(34,211,238,0)',borderWidth:0,pointRadius:0,pointHoverRadius:0,tension:.2,yAxisID:'y1',order:-10});
             if(!p.length && !c.length){
                 chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels:['No downtime data'],datasets:[{label:'Downtime (hrs)',data:[0],backgroundColor:'#475569',borderRadius:5,maxBarThickness:30}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{ticks:{color:'#94a3b8'}},y:{beginAtZero:true,ticks:{color:'#94a3b8'}}}}});
             } else {
-            chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels,datasets:ds},plugins:[paretoCumulativeValueLabelsPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:105,left:4,right:4}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{};const b=c[i]||{};return isCompare?`${a.equipment||'—'} — ${a.equipmentCategory||'—'}  |  vs ${b.equipment||'—'} — ${b.equipmentCategory||'—'}`:`${a.equipment||'—'} — ${a.equipmentCategory||'—'}`},label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,afterBody:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{},b=c[i]||{};return [`Primary failure: ${a.category||'—'}`,isCompare?`Comparison failure: ${b.category||'—'}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+            chartSummaryPareto=new Chart(paretoCanvas.getContext('2d'),{type:'bar',data:{labels,datasets:ds},plugins:[],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:105,left:4,right:4}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{};const b=c[i]||{};return isCompare?`${a.equipment||'—'} — ${a.equipmentCategory||'—'}  |  vs ${b.equipment||'—'} — ${b.equipmentCategory||'—'}`:`${a.equipment||'—'} — ${a.equipmentCategory||'—'}`},label:ctx=>ctx.dataset.type==='line'?`Cumulative: ${Number(ctx.raw||0).toFixed(1)}%`:`${ctx.dataset.label}: ${Number(ctx.raw||0).toFixed(1)} hrs`,afterBody:items=>{const i=items[0]?.dataIndex??0;const a=p[i]||{},b=c[i]||{};return [`Primary failure: ${a.category||'—'}`,isCompare?`Comparison failure: ${b.category||'—'}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{color:'#94a3b8',font:{size:9}},grid:{color:'rgba(51,65,85,.35)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{color:'#22d3ee',font:{size:9},callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             chartSummaryPareto.$paretoEquipmentIndication = {primary:p, compareRows:c, compare:isCompare, primaryIndex:0, compareIndex:1};
             chartSummaryPareto.update('none');
 
@@ -5891,8 +5896,8 @@ function calcCalib(list, dateType='all', dateValue='') {
             };
             const labs=pp.map(()=> '');
             const pd=pp.map(x=>Number(x.duration.toFixed(1))), cd=isCompare?cc.map(x=>Number(x.duration.toFixed(1))):[]; let total=pd.reduce((a,b)=>a+b,0)+(isCompare?cd.reduce((a,b)=>a+b,0):0),run=0;const cpct=pp.map((x,i)=>{run+=pd[i]+(isCompare?cd[i]:0);return total?Math.min(100,Number((run/total*100).toFixed(1))):0;});
-            const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];ds.push({type:'line',label:'Cumulative %',data:cpct,borderColor:'#22d3ee',backgroundColor:'#22d3ee',borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:.2,yAxisID:'y1',order:-10});
-            chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},plugins:[paretoCumulativeValueLabelsPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:105}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].equipment} — ${pp[i].equipmentCategory} | vs ${cc[i]?.equipment||'—'} — ${cc[i]?.equipmentCategory||'—'}`:`${pp[i].equipment} — ${pp[i].equipmentCategory}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
+            const ds=isCompare?[{label:primaryValue,data:pd,backgroundColor:'#f59e0b',borderRadius:5,maxBarThickness:30},{label:compareValue,data:cd,backgroundColor:'#3b82f6',borderRadius:5,maxBarThickness:30}]:[{label:'Downtime (hrs)',data:pd,backgroundColor:'#ef4444',borderRadius:5,maxBarThickness:30}];ds.push({type:'line',label:'Cumulative %',data:cpct,borderColor:'rgba(34,211,238,0)',backgroundColor:'rgba(34,211,238,0)',borderWidth:0,pointRadius:0,pointHoverRadius:0,tension:.2,yAxisID:'y1',order:-10});
+            chartDowntimePareto=new Chart(canvas.getContext('2d'),{type:'bar',data:{labels:labs,datasets:ds},plugins:[],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:10,bottom:105}},plugins:{legend:{position:'top',labels:{boxWidth:11,padding:8,font:{size:10},color:'#cbd5e1'}},tooltip:{callbacks:{title:it=>{const i=it[0]?.dataIndex||0;return isCompare?`${pp[i].equipment} — ${pp[i].equipmentCategory} | vs ${cc[i]?.equipment||'—'} — ${cc[i]?.equipmentCategory||'—'}`:`${pp[i].equipment} — ${pp[i].equipmentCategory}`},label:c=>c.dataset.type==='line'?`Cumulative: ${Number(c.raw||0).toFixed(1)}%`:`${c.dataset.label}: ${Number(c.raw||0).toFixed(1)} hrs`,afterBody:it=>{const i=it[0]?.dataIndex||0;return [`Primary failure: ${pp[i].category}`,isCompare?`Comparison failure: ${cc[i].category}`:''];}}}},scales:{x:{ticks:{display:false},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8'},grid:{color:'rgba(51,65,85,.4)'}},y1:{beginAtZero:true,min:0,max:100,position:'right',ticks:{font:{size:9},color:'#22d3ee',callback:v=>v+'%'},grid:{drawOnChartArea:false}}}}});
             chartDowntimePareto.$paretoEquipmentIndication = {primary:pp, compareRows:cc, compare:isCompare, primaryIndex:0, compareIndex:1};
             chartDowntimePareto.update('none');
 
