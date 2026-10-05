@@ -4050,6 +4050,7 @@ window.addEventListener("cloudsync:status", (event) => {
             paretoTroublePopupChart = new Chart(canvas.getContext('2d'), {
                 type:'bar',
                 data:{labels,datasets},
+                plugins:[paretoCumulativeValueLabelsPlugin, paretoEquipmentIndicationPlugin],
                 options:{
                     responsive:true, maintainAspectRatio:false,
                     layout:{padding:{top:28,bottom:105,left:4,right:8}},
@@ -4133,28 +4134,6 @@ window.addEventListener("cloudsync:status", (event) => {
                 if (!meta || !meta.data) return;
                 const ctx = chart.ctx;
                 ctx.save();
-                // Redraw the cumulative line AFTER every bar dataset so the line is physically in front of the bars.
-                ctx.beginPath();
-                meta.data.forEach((point, i) => {
-                    if (!point) return;
-                    const x = point.x, y = point.y;
-                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                });
-                ctx.strokeStyle = '#22d3ee';
-                ctx.lineWidth = 3;
-                ctx.lineJoin = 'round';
-                ctx.lineCap = 'round';
-                ctx.stroke();
-                meta.data.forEach(point => {
-                    if (!point) return;
-                    ctx.beginPath();
-                    ctx.fillStyle = '#22d3ee';
-                    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.lineWidth = 2;
-                    ctx.strokeStyle = '#0f172a';
-                    ctx.stroke();
-                });
                 ctx.font = '700 10px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
