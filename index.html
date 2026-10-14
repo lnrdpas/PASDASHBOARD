@@ -1860,8 +1860,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     </div>
                     <div><label class="block text-slate-300 font-semibold mb-1">Calibrated By</label><input id="cal-edit-by" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none" placeholder="Vendor / Technician"></div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div><label class="block text-slate-300 font-semibold mb-1">Next Due</label><input id="cal-edit-next-due" type="date" readonly class="w-full bg-slate-900/70 border border-slate-700 rounded-xl px-3 py-2 text-slate-400 outline-none" title="Automatically calculated as one year after Calibration Date"></div>
-                        <div class="flex items-end"><span class="text-[9px] text-slate-500 pb-2">Next Due is automatically calculated from the Calibration Date.</span></div>
+                        
                     </div>
                 </div>
                 <div class="pt-2 flex justify-end gap-2">
@@ -3438,6 +3437,15 @@ window.addEventListener("cloudsync:status", (event) => {
             return String(value);
         }
 
+        // One shared downtime-hours calculation used by both dashboards and ranking tables.
+        // Duration is calculated from the recorded start/end timestamps, not occurrence count.
+        function downtimeHours(record) {
+            const start = new Date(record?.start).getTime();
+            const end = new Date(record?.end).getTime();
+            if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+            return (end - start) / 3600000;
+        }
+
         // --- MODULE 0: SUMMARY ---
         function renderSummaryModule() {
             const fType = document.getElementById("summary-filter-type").value;
@@ -3498,7 +3506,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     const equipment = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
                     const equipmentCategory = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
                     const failureCategory = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / (1000 * 60 * 60));
+                    const dur = downtimeHours(dt);
                     const key = equipment.toLowerCase() + '|||' + equipmentCategory.toLowerCase();
                     if (!map.has(key)) map.set(key, { line, lines: new Set(), duration: 0, equipment, equipmentCategory, failureCategories: new Map() });
                     const item = map.get(key);
@@ -3616,7 +3624,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 return {done, overdueDone, scheduled, toCalibrate: overdue + pending + stsok, overdue, pending, stsok, na, compliance:scheduled?Math.round(done/scheduled*100):0};
             };
             const calcDowntime = list => {
-                let hrs=0; (list||[]).forEach(dt=>{ const d=(new Date(dt.end)-new Date(dt.start))/3600000; if(d>0) hrs+=d; });
+                let hrs=0; (list||[]).forEach(dt=>{ const d=downtimeHours(dt); if(d>0) hrs+=d; });
                 const codes=new Set((list||[]).map(getDowntimeEquipmentCode).filter(Boolean));
                 const avail=(codes.size||1)*720;
                 const uptime=Math.max(0,Math.min(100,Number(((1-hrs/avail)*100).toFixed(1))));
@@ -3646,7 +3654,7 @@ window.addEventListener("cloudsync:status", (event) => {
             document.getElementById("summary-dt-hours").innerText = `${primaryDown.hrs.toFixed(1)} hrs`;
             const uniqueEq = new Set(filteredDt.map(getDowntimeEquipmentCode).filter(Boolean));
             const availHrs = (uniqueEq.size || 1) * 720;
-            const totalDownHrs = filteredDt.reduce((a,dt)=>{const d=(new Date(dt.end)-new Date(dt.start))/3600000; return a+(d>0?d:0);},0);
+            const totalDownHrs = filteredDt.reduce((a,dt)=>{const d=downtimeHours(dt); return a+d;},0);
             const mtbf = filteredDt.length > 0 ? ((availHrs-totalDownHrs)/filteredDt.length).toFixed(1) : "0";
             const mttr = filteredDt.length > 0 ? Math.round((primaryDown.hrs / filteredDt.length) * 60) : 0;
             document.getElementById("summary-dt-mtbf").innerText = `${mtbf} hrs`;
@@ -3707,7 +3715,7 @@ window.addEventListener("cloudsync:status", (event) => {
                     const equipment = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
                     const equipmentCategory = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
                     const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+                    const dur = downtimeHours(dt);
                     if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
                     map[line].lineTotal += dur;
                     const key = `${equipment}|||${equipmentCategory}`;
@@ -3922,7 +3930,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 const equipmentCategory = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
                 const line = String(dt.line || 'Unclassified Line').trim().replace(/\s+/g, ' ');
                 const failureCategory = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                const duration = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+                const duration = downtimeHours(dt);
                 const key = code.toLowerCase() + '|||' + equipmentCategory.toLowerCase();
                 if (!map.has(key)) map.set(key, { code, equipmentCategory, duration: 0, occurrences: 0, lines: new Set(), failures: new Map() });
                 const row = map.get(key);
@@ -4025,7 +4033,7 @@ window.addEventListener("cloudsync:status", (event) => {
             wrapper.style.position = 'relative';
             wrapper.style.isolation = 'isolate';
             canvas.style.position = 'relative';
-            canvas.style.zIndex = '0';
+            canvas.style.zIndex = '1';
             let overlay = wrapper.querySelector('.pareto-overlay-canvas');
             if (!overlay) {
                 overlay = document.createElement('canvas');
@@ -4052,6 +4060,7 @@ window.addEventListener("cloudsync:status", (event) => {
                 overlay.style.width = w + 'px';
                 overlay.style.height = h + 'px';
                 overlay.style.zIndex = '2147483647';
+                overlay.style.pointerEvents = 'none';
                 const ctx = overlay.getContext('2d');
                 ctx.setTransform(dpr,0,0,dpr,0,0);
                 ctx.clearRect(0,0,w,h);
@@ -4836,7 +4845,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                                         <div><span class="text-slate-500 block">Schedule</span><span class="text-slate-200">${escapeHtml(e.sched || e.dateSched || '-')}</span></div>
                                         <div><span class="text-slate-500 block">Calibration</span><span class="text-slate-200">${escapeHtml(e.calib || e.dateCalib || '-')}</span></div>
                                         <div><span class="text-slate-500 block">Calibrated By</span><span class="text-slate-200">${escapeHtml(e.by || '-')}</span></div>
-                                        <div><span class="text-slate-500 block">Next Due</span><span class="text-slate-200">${escapeHtml(nextDueForInline(e.calib || e.dateCalib || ''))}</span></div>
                                         <div><span class="text-slate-500 block">PR</span><span class="text-slate-200">${escapeHtml(e.pr || e.prNo || '-')}</span></div>
                                         <div><span class="text-slate-500 block">PO</span><span class="text-slate-200">${escapeHtml(e.po || e.poNo || '-')}</span></div>
                                     </div>
@@ -5507,7 +5515,7 @@ function calcCalib(list, dateType='all', dateValue='') {
             document.getElementById('cal-edit-sched').value = entry.sched || '';
             document.getElementById('cal-edit-calib').value = entry.calib || '';
             document.getElementById('cal-edit-by').value = entry.by || '';
-            document.getElementById('cal-edit-next-due').value = calculateCalibrationNextDue(entry.calib);
+
             document.getElementById('cal-edit-kind').textContent = `${type.toUpperCase()} CALIBRATION`;
             document.getElementById('cal-edit-kind').className = `text-[9px] font-black uppercase tracking-wider ${type === 'external' ? 'text-blue-300' : 'text-purple-300'}`;
             document.getElementById('cal-edit-cycle').textContent = `Cycle ${cycles.findIndex(c => String(c.id) === String(cycleId)) + 1}`;
@@ -5687,7 +5695,6 @@ function calcCalib(list, dateType='all', dateValue='') {
                                     <div><span class="text-slate-500 block">Schedule</span><span class="text-slate-200">${escapeHtml(r.sched || '-')}</span></div>
                                     <div><span class="text-slate-500 block">Calibration</span><span class="text-slate-200">${escapeHtml(r.calib || '-')}</span></div>
                                     <div><span class="text-slate-500 block">Calibrated By</span><span class="text-slate-200">${escapeHtml(r.by || '-')}</span></div>
-                                    <div><span class="text-slate-500 block">Next Due</span><span class="text-slate-200">${escapeHtml(nextDueFor(r.calib))}</span></div>
                                     <div><span class="text-slate-500 block">PR</span><span class="text-slate-200">${escapeHtml(r.pr || '-')}</span></div>
                                     <div><span class="text-slate-500 block">PO</span><span class="text-slate-200">${escapeHtml(r.po || '-')}</span></div>
                                 </div>
@@ -5779,7 +5786,7 @@ function calcCalib(list, dateType='all', dateValue='') {
             const calcReliabilityMetrics = logs => {
                 let hrs = 0;
                 (logs || []).forEach(dt => {
-                    const diff = (new Date(dt.end) - new Date(dt.start)) / 3600000;
+                    const diff = downtimeHours(dt);
                     if (diff > 0) hrs += diff;
                 });
                 const equipmentIds = new Set((logs || []).map(getDowntimeEquipmentCode).filter(Boolean));
@@ -5834,7 +5841,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                     const equipment = String(dt.code || 'Unassigned Code').trim().replace(/\s+/g, ' ');
                     const equipmentCategory = String(dt.equipment || 'Unclassified Equipment').trim().replace(/\s+/g, ' ');
                     const category = String(dt.category || 'Unclassified').trim().replace(/\s+/g, ' ');
-                    const dur = Math.max(0, (new Date(dt.end) - new Date(dt.start)) / 3600000);
+                    const dur = downtimeHours(dt);
                     if (!map[line]) map[line] = { line, lineTotal: 0, contributors: {} };
                     map[line].lineTotal += dur;
                     const key = equipment + '||' + equipmentCategory;
