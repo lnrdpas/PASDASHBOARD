@@ -5492,13 +5492,27 @@ function calcCalib(list, dateType='all', dateValue='') {
                 const db = [...(b.external || []), ...(b.internal || [])].map(e=>e.sched || e.calib || '').filter(Boolean).sort()[0] || '';
                 return da.localeCompare(db);
             });
-            addCalibrationGroup({
-                pr: recordsToEdit.find(record => record.pr)?.pr || '',
-                po: recordsToEdit.find(record => record.po)?.po || '',
-                calibrationCycles: uniqueCycles,
-                codes: allCodes
-            });
-            if (!uniqueCycles.length) addCalibrationGroup({codes:allCodes});
+            // Render each distinct saved cycle as its own visible Date Group.
+            // Previously all cycles were passed to one addCalibrationGroup call,
+            // which made different dates appear inside the first group and caused
+            // newly added dates to look like they had been combined.
+            if (uniqueCycles.length) {
+                uniqueCycles.forEach(cycle => {
+                    const cycleCodes = [...new Set((cycle.codes || []).map(v => String(v || '').trim()).filter(Boolean))];
+                    addCalibrationGroup({
+                        pr: cycle.pr || recordsToEdit.find(record => record.pr)?.pr || '',
+                        po: cycle.po || recordsToEdit.find(record => record.po)?.po || '',
+                        calibrationCycles: [{...cycle, codes: cycleCodes}],
+                        codes: cycleCodes.length ? cycleCodes : allCodes
+                    });
+                });
+                // Preserve codes that have no cycle data yet in a separate empty group.
+                const codesWithCycles = new Set(uniqueCycles.flatMap(cycle => cycle.codes || []).map(v => String(v || '').trim().toLowerCase()));
+                const codesWithoutCycles = allCodes.filter(code => !codesWithCycles.has(String(code).trim().toLowerCase()));
+                if (codesWithoutCycles.length) addCalibrationGroup({codes: codesWithoutCycles});
+            } else {
+                addCalibrationGroup({codes:allCodes});
+            }
             document.getElementById("modal-equipment").classList.remove("hidden");
         }
 
