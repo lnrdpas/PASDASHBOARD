@@ -5230,35 +5230,76 @@ function calcCalib(list, dateType='all', dateValue='') {
 
         function mergeSharedCalibrationCycles(existing, incoming) {
             const result = normalizeSharedCalibrationCycles({calibrationCycles: existing});
-            (incoming || []).forEach((incomingCycle, idx) => {
+
+            /*
+             * CALIBRATION GROUPING RULE:
+             * Instrument / Equipment Class + Plant + Equipment Code is the parent record.
+             * Every NEW Date Group is a NEW calibration cycle.
+             * An existing cycle is updated ONLY when the same persistent cycle ID is used.
+             * Never fall back to the array index, because that makes a newly added date
+             * overwrite/merge into the original date.
+             */
+            (incoming || []).forEach((incomingCycle) => {
                 const cycle = incomingCycle || {};
-                let target = result.find(c => c.id && cycle.id && c.id === cycle.id);
-                if (!target) target = result[idx];
+                const incomingId = String(cycle.id || '').trim();
+
+                // Exact ID = edit existing cycle. No matching ID = add a new cycle.
+                let target = incomingId
+                    ? result.find(c => String(c.id || '') === incomingId)
+                    : null;
+
                 if (!target) {
-                    target = {id: cycle.id || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)), pr:'', po:'', codes:[], external:[], internal:[]};
+                    target = {
+                        id: incomingId || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
+                        pr: '',
+                        po: '',
+                        codes: [],
+                        external: [],
+                        internal: []
+                    };
                     result.push(target);
                 }
+
                 target.pr = cycle.pr || target.pr || '';
                 target.po = cycle.po || target.po || '';
-                target.codes = [...new Set([...(target.codes || []), ...(Array.isArray(cycle.codes) ? cycle.codes : [])].map(v => String(v || '').trim()).filter(Boolean))];
+                target.codes = [...new Set([
+                    ...(target.codes || []),
+                    ...(Array.isArray(cycle.codes) ? cycle.codes : [])
+                ].map(v => String(v || '').trim()).filter(Boolean))];
+
                 ['external','internal'].forEach(type => {
-                    const existingEntries = Array.isArray(target[type]) ? target[type].map(normalizeCalibrationCycleEntry) : [];
-                    const incomingEntries = Array.isArray(cycle[type]) ? cycle[type].map(normalizeCalibrationCycleEntry) : [];
+                    const existingEntries = Array.isArray(target[type])
+                        ? target[type].map(normalizeCalibrationCycleEntry)
+                        : [];
+                    const incomingEntries = Array.isArray(cycle[type])
+                        ? cycle[type].map(normalizeCalibrationCycleEntry)
+                        : [];
+
                     incomingEntries.forEach(entry => {
                         if (!entry.sched && !entry.calib && !entry.by && !entry.pr && !entry.po) return;
-                        // Every calibration occurrence is an independent record. Never
-                        // deduplicate by dates/PR/PO because two real occurrences may
-                        // legitimately have identical values. Only an existing entry
-                        // with the exact same persistent entry id is considered the same.
-                        const entryId = String(entry.id || '');
-                        const existingIndex = entryId ? existingEntries.findIndex(x => String(x.id || '') === entryId) : -1;
-                        if (existingIndex >= 0) existingEntries[existingIndex] = entry;
-                        else existingEntries.push(entry); // NEW DATE = NEW OCCURRENCE; never replace another occurrence.
+
+                        // Same persistent entry ID = edit existing occurrence.
+                        // Different ID = retain it as a separate occurrence/date.
+                        const entryId = String(entry.id || '').trim();
+                        const existingIndex = entryId
+                            ? existingEntries.findIndex(x => String(x.id || '') === entryId)
+                            : -1;
+
+                        if (existingIndex >= 0) {
+                            existingEntries[existingIndex] = entry;
+                        } else {
+                            existingEntries.push(entry);
+                        }
                     });
+
                     target[type] = existingEntries;
                 });
             });
-            return result.filter(c => c.codes?.length && ((c.external?.length || 0) + (c.internal?.length || 0) > 0));
+
+            return result.filter(c =>
+                c.codes?.length &&
+                ((c.external?.length || 0) + (c.internal?.length || 0) > 0)
+            );
         }
 
         function flattenSharedCalibrationCycles(cycles, type) {
