@@ -5197,15 +5197,17 @@ function calcCalib(list, dateType='all', dateValue='') {
 
         function collectCalibrationGroups() {
             return [...document.querySelectorAll("#calibration-groups-container .calibration-group")].map(group => {
-                const calibrationCycles = [...group.querySelectorAll(':scope > .bg-slate-950\\/40 .shared-cycles-list .shared-calibration-cycle')].map(row => ({
+                // Each visible calibration group is a distinct date group. Its equipment
+                // codes must travel with every cycle in that group when saved.
+                const codes = [...new Set([...group.querySelectorAll('.calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean))];
+                const calibrationCycles = [...group.querySelectorAll('.shared-cycles-list .shared-calibration-cycle')].map(row => ({
                     id: row.dataset.cycleId || ('cy_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8)),
                     pr: '',
                     po: '',
-                    codes: [...row.querySelectorAll(':scope > .bg-slate-950\\/40 .calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean),
+                    codes: codes.slice(),
                     external: collectCalibrationEntries(row, 'external'),
                     internal: collectCalibrationEntries(row, 'internal')
                 })).filter(c => c.external.length || c.internal.length || c.pr || c.po);
-                const codes = [...new Set([...group.querySelectorAll('.calibration-code-list input[name="eq-code"]')].map(i => i.value.trim()).filter(Boolean))];
                 return {
                     pr: calibrationCycles.flatMap(c => [...(c.external || []), ...(c.internal || [])]).find(e => e.pr)?.pr || '',
                     po: calibrationCycles.flatMap(c => [...(c.external || []), ...(c.internal || [])]).find(e => e.po)?.po || '',
@@ -5305,9 +5307,9 @@ function calcCalib(list, dateType='all', dateValue='') {
             if (!codes.length) return alert("Please enter at least one equipment code.");
             if (!groups.length) return alert("Please enter at least one calibration cycle or PR/PO group.");
 
-            const workingIds = editId ? editId.split(",").map(v => Number(v)).filter(Boolean) : [];
-            // Edit mode contains exactly the record(s) explicitly selected by eq-id.
-            // Instrument / Equipment Class must never expand this set.
+            const workingIds = editId ? editId.split(",").map(v => String(v).trim()).filter(Boolean) : [];
+            // IDs remain strings because edit mode can contain several comma-separated
+            // record IDs. Converting that whole list to Number silently emptied the set.
             const selectedExisting = new Set(workingIds);
 
             groups.forEach(group => {
@@ -5315,7 +5317,7 @@ function calcCalib(list, dateType='all', dateValue='') {
                     const cleanCode = String(code || '').trim();
                     if (!cleanCode) return;
                     let record = null;
-                    if (editId) record = equipmentList.find(item => selectedExisting.has(item.id) && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
+                    if (editId) record = equipmentList.find(item => selectedExisting.has(String(item.id)) && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
                     if (!record) record = equipmentList.find(item => normalizePlant(item.plant) === normalizePlant(shared.plant) && String(item.type || '').trim() === String(shared.type || '').trim() && String(item.code || '').trim().toLowerCase() === cleanCode.toLowerCase());
 
                     if (!record) {
@@ -5328,17 +5330,22 @@ function calcCalib(list, dateType='all', dateValue='') {
                     if (group.po) record.po = group.po;
 
                     const beforeCycles = normalizeSharedCalibrationCycles(record);
-                    const incomingCyclesForCode = (group.calibrationCycles || []).map(c => {
-                        const cycleCodes = Array.isArray(c.codes) ? c.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
-                        const selectedCycleCodes = cycleCodes.length ? cycleCodes : group.codes;
-                        const codeMatches = selectedCycleCodes.map(v => v.toLowerCase()).includes(cleanCode.toLowerCase());
-                        if (!codeMatches) return null;
-                        const filterEntries = entries => (Array.isArray(entries) ? entries : []).filter(entry => {
-                            const entryCodes = Array.isArray(entry.codes) ? entry.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
-                            return !entryCodes.length || entryCodes.map(v => v.toLowerCase()).includes(cleanCode.toLowerCase());
-                        }).map(entry => ({...entry, codes:[cleanCode]}));
-                        return {...c, codes:[cleanCode], external:filterEntries(c.external), internal:filterEntries(c.internal)};
-                    }).filter(c => c && (c.external.length || c.internal.length || c.pr || c.po));
+                    // IMPORTANT: a code can appear in multiple date groups. Gather its
+                    // cycles from ALL submitted groups before saving, otherwise each
+                    // later group overwrites the cycles saved by the previous group.
+                    const incomingCyclesForCode = groups.flatMap(submittedGroup =>
+                        (submittedGroup.calibrationCycles || []).map(c => {
+                            const cycleCodes = Array.isArray(c.codes) ? c.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
+                            const selectedCycleCodes = cycleCodes.length ? cycleCodes : submittedGroup.codes;
+                            const codeMatches = selectedCycleCodes.map(v => v.toLowerCase()).includes(cleanCode.toLowerCase());
+                            if (!codeMatches) return null;
+                            const filterEntries = entries => (Array.isArray(entries) ? entries : []).filter(entry => {
+                                const entryCodes = Array.isArray(entry.codes) ? entry.codes.map(v => String(v || '').trim()).filter(Boolean) : [];
+                                return !entryCodes.length || entryCodes.map(v => v.toLowerCase()).includes(cleanCode.toLowerCase());
+                            }).map(entry => ({...entry, codes:[cleanCode]}));
+                            return {...c, codes:[cleanCode], external:filterEntries(c.external), internal:filterEntries(c.internal)};
+                        })
+                    ).filter(c => c && (c.external.length || c.internal.length || c.pr || c.po));
                     // IMPORTANT: cycles belong to this equipment record and only to the codes assigned to that cycle.
                     // EDIT MODE: the submitted form is the source of truth.
                     // Do NOT merge old cycles/occurrences back, otherwise a cleared
@@ -5399,7 +5406,7 @@ function calcCalib(list, dateType='all', dateValue='') {
             if (editId && selectedExisting.size) {
                 const submittedCodes = new Set(codes);
                 equipmentList = equipmentList.filter(item => {
-                    if (!selectedExisting.has(item.id)) return true;
+                    if (!selectedExisting.has(String(item.id))) return true;
                     const existingCode = String(item.code || '').trim().toLowerCase();
                     return submittedCodes.has(existingCode);
                 });
