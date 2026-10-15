@@ -5415,36 +5415,42 @@ function calcCalib(list, dateType='all', dateValue='') {
 
         function editEquipment(id) {
             if (!isAdminUser()) return;
-            const selected = equipmentList.find(item => item.id === id);
+            const selected = equipmentList.find(item => String(item.id) === String(id));
             if (!selected) return;
 
-            // IMPORTANT:
-            // Instrument / Equipment Class is only a visual grouping.
-            // Editing one equipment code must NEVER load or overwrite the
-            // calibration cycles of other equipment codes in the same class.
-            // The previous logic used every record in the class as edit targets,
-            // which caused a date/cycle from one code to be copied/combined
-            // with the other codes when Save was pressed.
-            document.getElementById("eq-id").value = String(selected.id);
-            document.getElementById("modal-equip-title").innerText = "Edit Calibration Entry";
+            // Edit the complete visual class together, but preserve a separate
+            // Date Group and calibration-cycle list for every equipment code.
+            // This lets the editor show all related codes without sharing dates.
+            const classRecords = equipmentList.filter(item =>
+                normalizePlant(item.plant) === normalizePlant(selected.plant) &&
+                String(item.type || '').trim().toLowerCase() === String(selected.type || '').trim().toLowerCase()
+            );
+            const recordsToEdit = classRecords.length ? classRecords : [selected];
+            document.getElementById("eq-id").value = recordsToEdit.map(item => String(item.id)).join(',');
+            document.getElementById("modal-equip-title").innerText = "Edit Calibration Entries — All Equipment Codes";
             clearEquipmentSharedFields();
-
             document.getElementById("eq-shared-plant").value = selected.plant || "Plant 1";
             document.getElementById("eq-shared-type").value = selected.type || "";
 
             const container = document.getElementById("calibration-groups-container");
             container.innerHTML = "";
-
-            // Load ONLY the selected equipment record.
-            // Other records with the same Instrument / Equipment Class
-            // remain completely untouched.
-            addCalibrationGroup({
-                pr: selected.pr || "",
-                po: selected.po || "",
-                calibrationCycles: normalizeSharedCalibrationCycles(selected),
-                codes: [selected.code || ""]
+            recordsToEdit.forEach(record => {
+                // Force every cycle and entry to belong only to this code.
+                // Do not merge cycles between records even when class/type match.
+                const cycles = normalizeSharedCalibrationCycles(record).map(cycle => ({
+                    ...cycle,
+                    codes: [record.code || ''],
+                    external: (cycle.external || []).map(entry => ({...entry, codes:[record.code || '']})),
+                    internal: (cycle.internal || []).map(entry => ({...entry, codes:[record.code || '']}))
+                }));
+                addCalibrationGroup({
+                    pr: record.pr || "",
+                    po: record.po || "",
+                    calibrationCycles: cycles,
+                    codes: [record.code || ""]
+                });
             });
-
+            if (!recordsToEdit.length) addCalibrationGroup();
             document.getElementById("modal-equipment").classList.remove("hidden");
         }
 
