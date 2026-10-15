@@ -5418,9 +5418,9 @@ function calcCalib(list, dateType='all', dateValue='') {
             const selected = equipmentList.find(item => String(item.id) === String(id));
             if (!selected) return;
 
-            // Edit the complete visual class together, but preserve a separate
-            // Date Group and calibration-cycle list for every equipment code.
-            // This lets the editor show all related codes without sharing dates.
+            // Edit the full instrument type together. Codes that share a date group
+            // are shown in the same group, while cycles with different dates remain
+            // separate and editable.
             const classRecords = equipmentList.filter(item =>
                 normalizePlant(item.plant) === normalizePlant(selected.plant) &&
                 String(item.type || '').trim().toLowerCase() === String(selected.type || '').trim().toLowerCase()
@@ -5434,23 +5434,64 @@ function calcCalib(list, dateType='all', dateValue='') {
 
             const container = document.getElementById("calibration-groups-container");
             container.innerHTML = "";
+            const allCodes = [...new Set(recordsToEdit.map(record => String(record.code || '').trim()).filter(Boolean))];
+            const dateGroups = new Map();
             recordsToEdit.forEach(record => {
-                // Force every cycle and entry to belong only to this code.
-                // Do not merge cycles between records even when class/type match.
-                const cycles = normalizeSharedCalibrationCycles(record).map(cycle => ({
-                    ...cycle,
-                    codes: [record.code || ''],
-                    external: (cycle.external || []).map(entry => ({...entry, codes:[record.code || '']})),
-                    internal: (cycle.internal || []).map(entry => ({...entry, codes:[record.code || '']}))
-                }));
-                addCalibrationGroup({
-                    pr: record.pr || "",
-                    po: record.po || "",
-                    calibrationCycles: cycles,
-                    codes: [record.code || ""]
+                normalizeSharedCalibrationCycles(record).forEach((cycle, cycleIndex) => {
+                    const external = (cycle.external || []).map(entry => ({...entry, codes:[...new Set([...(entry.codes || []), record.code].filter(Boolean))]}));
+                    const internal = (cycle.internal || []).map(entry => ({...entry, codes:[...new Set([...(entry.codes || []), record.code].filter(Boolean))]}));
+                    // Same persistent cycle ID is the strongest match. For older data
+                    // that has separate IDs per code, group cycles with the same date
+                    // signature so all codes appear together under that date group.
+                    const dates = [...new Set([...external, ...internal].flatMap(entry => [String(entry.sched || '').trim(), String(entry.calib || '').trim()]).filter(Boolean))].sort();
+                    const dateSignature = dates.length ? dates.join('|') : '';
+                    const cycleKey = cycle.id ? `id:${cycle.id}` : (dateSignature ? `date:${dateSignature}|pr:${cycle.pr || ''}|po:${cycle.po || ''}` : `record:${record.id}:${cycleIndex}`);
+                    let target = dateGroups.get(cycleKey);
+                    if (!target && dateSignature) {
+                        // Merge same-date cycles even if legacy records generated different IDs.
+                        const sameDateKey = [...dateGroups.keys()].find(key => key.startsWith('date:') && key === `date:${dateSignature}|pr:${cycle.pr || ''}|po:${cycle.po || ''}`);
+                        if (sameDateKey) target = dateGroups.get(sameDateKey);
+                    }
+                    if (!target) {
+                        target = {id: cycle.id || ('cy_edit_' + Math.random().toString(36).slice(2,10)), pr:cycle.pr || '', po:cycle.po || '', codes:[], external:[], internal:[], _dateSignature:dateSignature};
+                        dateGroups.set(cycleKey, target);
+                        if (dateSignature && cycle.id) {
+                            const aliasKey = `date:${dateSignature}|pr:${cycle.pr || ''}|po:${cycle.po || ''}`;
+                            if (!dateGroups.has(aliasKey)) dateGroups.set(aliasKey, target);
+                        }
+                    }
+                    target.codes = [...new Set([...(target.codes || []), record.code].map(v=>String(v || '').trim()).filter(Boolean))];
+                    target.pr = target.pr || cycle.pr || '';
+                    target.po = target.po || cycle.po || '';
+                    ['external','internal'].forEach(type => {
+                        (type === 'external' ? external : internal).forEach(entry => {
+                            const entryId = String(entry.id || '');
+                            const existingIndex = entryId ? target[type].findIndex(item => String(item.id || '') === entryId) : -1;
+                            if (existingIndex >= 0) {
+                                target[type][existingIndex] = {...target[type][existingIndex], ...entry, codes:[...new Set([...(target[type][existingIndex].codes || []), ...(entry.codes || [])])]};
+                            } else {
+                                target[type].push(entry);
+                            }
+                        });
+                    });
                 });
             });
-            if (!recordsToEdit.length) addCalibrationGroup();
+            // The date aliases above point to the same cycle object; render each cycle once.
+            const uniqueCycles = [...new Set(dateGroups.values())].map(cycle => {
+                const {_dateSignature, ...clean} = cycle;
+                return clean;
+            }).sort((a,b) => {
+                const da = [...(a.external || []), ...(a.internal || [])].map(e=>e.sched || e.calib || '').filter(Boolean).sort()[0] || '';
+                const db = [...(b.external || []), ...(b.internal || [])].map(e=>e.sched || e.calib || '').filter(Boolean).sort()[0] || '';
+                return da.localeCompare(db);
+            });
+            addCalibrationGroup({
+                pr: recordsToEdit.find(record => record.pr)?.pr || '',
+                po: recordsToEdit.find(record => record.po)?.po || '',
+                calibrationCycles: uniqueCycles,
+                codes: allCodes
+            });
+            if (!uniqueCycles.length) addCalibrationGroup({codes:allCodes});
             document.getElementById("modal-equipment").classList.remove("hidden");
         }
 
